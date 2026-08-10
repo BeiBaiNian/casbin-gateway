@@ -51,7 +51,7 @@ func healthCheck(site *Site, domain string) error {
 		return nil
 	}
 
-	pingResponse = fmt.Sprintf("CasWAF health check failed for domain %s, %s", domain, pingResponse)
+	pingResponse = fmt.Sprintf("Casbin Gateway health check failed for domain %s, %s", domain, pingResponse)
 	user, err := casdoorsdk.GetUser(site.Owner)
 	if err != nil {
 		return err
@@ -61,7 +61,7 @@ func healthCheck(site *Site, domain string) error {
 	}
 	for _, provider := range site.AlertProviders {
 		if strings.HasPrefix(provider, "Email/") {
-			err := casdoorsdk.SendEmailByProvider("CasWAF HealthCheck Check Alert", pingResponse, "CasWAF", provider[6:], user.Email)
+			err := casdoorsdk.SendEmailByProvider("Casbin Gateway HealthCheck Alert", pingResponse, "Casbin Gateway", provider[6:], user.Email)
 			if err != nil {
 				fmt.Println(err)
 			}

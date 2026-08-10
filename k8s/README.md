@@ -1,6 +1,6 @@
-# Kubernetes Deployment Guide for CasWAF
+# Kubernetes Deployment Guide for Casbin Gateway
 
-This guide provides instructions for deploying CasWAF on Kubernetes.
+This guide provides instructions for deploying Casbin Gateway on Kubernetes.
 
 ## Prerequisites
 
@@ -12,18 +12,18 @@ This guide provides instructions for deploying CasWAF on Kubernetes.
 ## Architecture
 
 The deployment consists of:
-- **CasWAF Application**: The main WAF application
-- **MySQL Database**: Stores CasWAF configuration and data
+- **Casbin Gateway Application**: The main WAF application
+- **MySQL Database**: Stores Casbin Gateway configuration and data
 - **Secrets**: Stores sensitive credentials (Casdoor client ID/secret, MySQL password)
-- **ConfigMap**: Contains CasWAF configuration template
-- **Services**: Exposes CasWAF and MySQL within the cluster
-- **Ingress** (optional): Exposes CasWAF externally
+- **ConfigMap**: Contains Casbin Gateway configuration template
+- **Services**: Exposes Casbin Gateway and MySQL within the cluster
+- **Ingress** (optional): Exposes Casbin Gateway externally
 
 ## Quick Start
 
 ### 1. Deploy Casdoor (if not already deployed)
 
-CasWAF requires Casdoor for authentication. If you don't have Casdoor deployed:
+Casbin Gateway requires Casdoor for authentication. If you don't have Casdoor deployed:
 
 ```bash
 # Follow Casdoor's Kubernetes deployment guide:
@@ -76,7 +76,7 @@ casdoorEndpoint: http://your-casdoor-service:port
 
 **Option A: Using the deployment script (Recommended)**
 
-The easiest way to deploy CasWAF:
+The easiest way to deploy Casbin Gateway:
 
 ```bash
 cd k8s
@@ -88,7 +88,7 @@ The script will:
 - Validate your configuration
 - Deploy MySQL and wait for it to be ready
 - Deploy secrets and configuration
-- Deploy CasWAF application
+- Deploy Casbin Gateway application
 - Optionally deploy Ingress
 - Show deployment status
 
@@ -107,7 +107,7 @@ kubectl apply -f k8s/secret.yaml
 # Deploy ConfigMap
 kubectl apply -f k8s/configmap.yaml
 
-# Deploy CasWAF
+# Deploy Casbin Gateway
 kubectl apply -f k8s/deployment.yaml
 
 # (Optional) Deploy Ingress
@@ -132,7 +132,7 @@ kubectl logs -f deployment/caswaf -n caswaf
 kubectl get svc -n caswaf
 ```
 
-### 7. Access CasWAF
+### 7. Access Casbin Gateway
 
 If using Ingress:
 ```bash
@@ -163,7 +163,7 @@ Key configuration parameters:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `httpport` | CasWAF HTTP port | `17000` |
+| `httpport` | Casbin Gateway HTTP port | `17000` |
 | `runmode` | Run mode (dev/prod) | `prod` |
 | `driverName` | Database driver | `mysql` |
 | `dataSourceName` | MySQL connection string | Uses secrets substitution |
@@ -182,7 +182,7 @@ Key configuration parameters:
 - Includes health checks (liveness and readiness probes)
 - Root password stored in Kubernetes Secret with obvious placeholder
 
-### CasWAF Deployment (`deployment.yaml`)
+### Casbin Gateway Deployment (`deployment.yaml`)
 
 Features:
 - Init containers:
@@ -238,7 +238,7 @@ kubectl get svc -n caswaf caswaf-mysql
 
 **Solution**:
 ```bash
-# Test MySQL connection from CasWAF pod
+# Test MySQL connection from Casbin Gateway pod
 kubectl exec -it deployment/caswaf -n caswaf -- sh
 # Then inside the pod:
 # nc -zv caswaf-mysql 3306
@@ -258,7 +258,7 @@ kubectl rollout restart deployment/caswaf -n caswaf
 ### Viewing Logs
 
 ```bash
-# CasWAF logs
+# Casbin Gateway logs
 kubectl logs -f deployment/caswaf -n caswaf
 
 # MySQL logs
@@ -288,7 +288,7 @@ kubectl logs -f -n caswaf --all-containers=true
    ```
 
 4. **High Availability**:
-   - Increase replicas for CasWAF
+   - Increase replicas for Casbin Gateway
    - Use MySQL replication or managed service
    - Configure proper health checks
 
@@ -305,7 +305,7 @@ kubectl logs -f -n caswaf --all-containers=true
    - Network policies to restrict traffic
    - Regular security updates
 
-## Updating CasWAF
+## Updating Casbin Gateway
 
 ```bash
 # Update the image version in deployment.yaml, then:

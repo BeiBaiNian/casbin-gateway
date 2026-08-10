@@ -1,6 +1,6 @@
 #!/bin/bash
-# Quick deployment script for CasWAF on Kubernetes
-# This script helps you deploy CasWAF with proper configuration
+# Quick deployment script for Casbin Gateway on Kubernetes
+# This script helps you deploy Casbin Gateway with proper configuration
 # Usage: ./deploy.sh [--auto-ingress|--no-ingress]
 
 set -euo pipefail
@@ -31,8 +31,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo -e "${GREEN}CasWAF Kubernetes Deployment Script${NC}"
-echo "====================================="
+echo -e "${GREEN}Casbin Gateway Kubernetes Deployment Script${NC}"
+echo "==========================================="
 echo
 
 # Check if kubectl is installed
@@ -84,21 +84,21 @@ kubectl wait --for=condition=ready pod -l app=caswaf-mysql -n caswaf --timeout=3
 echo -e "${GREEN}✓ MySQL is ready${NC}"
 echo
 
-echo -e "${YELLOW}Step 3: Deploying CasWAF configuration...${NC}"
+echo -e "${YELLOW}Step 3: Deploying Casbin Gateway configuration...${NC}"
 kubectl apply -f secret.yaml
 kubectl apply -f configmap.yaml
 echo -e "${GREEN}✓ Configuration deployed${NC}"
 echo
 
-echo -e "${YELLOW}Step 4: Deploying CasWAF application...${NC}"
+echo -e "${YELLOW}Step 4: Deploying Casbin Gateway application...${NC}"
 kubectl apply -f deployment.yaml
 
-echo "Waiting for CasWAF to be ready..."
+echo "Waiting for Casbin Gateway to be ready..."
 kubectl wait --for=condition=ready pod -l app=caswaf -n caswaf --timeout=300s || {
-    echo -e "${RED}Warning: CasWAF took longer than expected to start${NC}"
+    echo -e "${RED}Warning: Casbin Gateway took longer than expected to start${NC}"
     echo "Check logs with: kubectl logs -n caswaf -l app=caswaf"
 }
-echo -e "${GREEN}✓ CasWAF is deployed${NC}"
+echo -e "${GREEN}✓ Casbin Gateway is deployed${NC}"
 echo
 
 # Handle Ingress deployment
@@ -127,7 +127,7 @@ if [ "$AUTO_INGRESS" = "yes" ]; then
 else
     echo -e "${YELLOW}Skipping Ingress deployment${NC}"
     echo
-    echo "You can access CasWAF using port-forward:"
+    echo "You can access Casbin Gateway using port-forward:"
     echo "  kubectl port-forward svc/caswaf 17000:17000 -n caswaf"
     echo "  Then access: http://localhost:17000"
 fi
@@ -138,7 +138,7 @@ echo "==================="
 kubectl get all -n caswaf
 
 echo
-echo -e "${GREEN}✓ CasWAF deployment completed successfully!${NC}"
+echo -e "${GREEN}✓ Casbin Gateway deployment completed successfully!${NC}"
 echo
 echo "Useful commands:"
 echo "  View pods:        kubectl get pods -n caswaf"

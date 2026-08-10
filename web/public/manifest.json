@@ -1,6 +1,6 @@
 {
-  "short_name": "CasWAF",
-  "name": "CasWAF",
+  "short_name": "Casbin Gateway",
+  "name": "Casbin Gateway",
   "icons": [
     {
       "src": "favicon.ico",
