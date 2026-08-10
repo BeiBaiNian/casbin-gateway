@@ -23,7 +23,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/casbin/caswaf/conf"
+	"github.com/apache/casbin-gateway/conf"
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"github.com/google/uuid"
 )

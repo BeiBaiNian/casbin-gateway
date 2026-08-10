@@ -17,17 +17,17 @@ package main
 import (
 	"fmt"
 
+	"github.com/apache/casbin-gateway/casdoor"
+	"github.com/apache/casbin-gateway/ip"
+	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/proxy"
+	"github.com/apache/casbin-gateway/routers"
+	"github.com/apache/casbin-gateway/run"
+	"github.com/apache/casbin-gateway/service"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
 	"github.com/beego/beego/plugins/cors"
 	_ "github.com/beego/beego/session/redis"
-	"github.com/casbin/caswaf/casdoor"
-	"github.com/casbin/caswaf/ip"
-	"github.com/casbin/caswaf/object"
-	"github.com/casbin/caswaf/proxy"
-	"github.com/casbin/caswaf/routers"
-	"github.com/casbin/caswaf/run"
-	"github.com/casbin/caswaf/service"
-	"github.com/casbin/caswaf/util"
 )
 
 func main() {

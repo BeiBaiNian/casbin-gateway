@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casbin/caswaf/run"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/run"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"

@@ -21,8 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/util"
 )
 
 func runCmd(dir, name string, args ...string) error {

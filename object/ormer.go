@@ -21,8 +21,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/apache/casbin-gateway/conf"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/conf"
 	_ "github.com/denisenkom/go-mssqldb" // db = mssql
 	_ "github.com/go-sql-driver/mysql"   // db = mysql
 	_ "github.com/lib/pq"                // db = postgres

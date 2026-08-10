@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/casbin/caswaf/conf"
-	"github.com/casbin/caswaf/object"
+	"github.com/apache/casbin-gateway/conf"
+	"github.com/apache/casbin-gateway/object"
 	"github.com/corazawaf/coraza/v3"
 	"github.com/corazawaf/coraza/v3/types"
 	"github.com/hsluoyz/modsecurity-go/seclang/parser"

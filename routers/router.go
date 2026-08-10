@@ -15,8 +15,8 @@
 package routers
 
 import (
+	"github.com/apache/casbin-gateway/controllers"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/controllers"
 )
 
 func init() {

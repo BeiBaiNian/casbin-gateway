@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/util"
 )
 
 func getI18nFilePath(language string) string {

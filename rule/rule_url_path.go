@@ -20,7 +20,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/casbin/caswaf/object"
+	"github.com/apache/casbin-gateway/object"
 )
 
 type UrlPathRule struct{}

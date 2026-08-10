@@ -18,8 +18,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/casbin/caswaf/object"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/util"
 )
 
 func (c *ApiController) GetMetricsOverTime() {

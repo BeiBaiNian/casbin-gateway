@@ -24,10 +24,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/rule"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/object"
-	"github.com/casbin/caswaf/rule"
-	"github.com/casbin/caswaf/util"
 )
 
 func forwardHandler(targetUrl string, writer http.ResponseWriter, request *http.Request) {

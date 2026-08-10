@@ -18,9 +18,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
 	"github.com/beego/beego/context"
-	"github.com/casbin/caswaf/util"
 )
 
 func TransparentStatic(ctx *context.Context) {

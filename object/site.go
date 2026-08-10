@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casbin/caswaf/run"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/run"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"github.com/xorm-io/core"
 )

@@ -15,8 +15,8 @@
 package routers
 
 import (
+	"github.com/apache/casbin-gateway/controllers"
 	"github.com/beego/beego/context"
-	"github.com/casbin/caswaf/controllers"
 )
 
 func responseError(ctx *context.Context, error string, data ...interface{}) {

@@ -25,8 +25,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apache/casbin-gateway/casdoor"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/casdoor"
 )
 
 func TestGitGetDiff(t *testing.T) {

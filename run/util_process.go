@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/util"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
 )

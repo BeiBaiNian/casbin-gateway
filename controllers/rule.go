@@ -20,9 +20,9 @@ import (
 	"net"
 	"strings"
 
+	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casbin/caswaf/object"
-	"github.com/casbin/caswaf/util"
 	"github.com/hsluoyz/modsecurity-go/seclang/parser"
 )
 

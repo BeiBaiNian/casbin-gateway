@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/util"
 )
 
 func (site *Site) populateCert() error {

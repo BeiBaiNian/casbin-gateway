@@ -18,8 +18,8 @@ import (
 	"crypto"
 	"fmt"
 
+	"github.com/apache/casbin-gateway/proxy"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/proxy"
 	"github.com/casbin/lego/v4/acme"
 	"github.com/casbin/lego/v4/certcrypto"
 	"github.com/casbin/lego/v4/lego"

@@ -21,9 +21,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apache/casbin-gateway/conf"
+	"github.com/apache/casbin-gateway/object"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/conf"
-	"github.com/casbin/caswaf/object"
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 )
 

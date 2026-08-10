@@ -7,8 +7,8 @@
   <a href="https://hub.docker.com/r/casbin/caswaf">
     <img alt="docker pull casbin/caswaf" src="https://img.shields.io/docker/pulls/casbin/caswaf.svg">
   </a>
-  <a href="https://github.com/casbin/caswaf/releases/latest">
-    <img alt="GitHub Release" src="https://img.shields.io/github/v/release/casbin/caswaf.svg">
+  <a href="https://github.com/apache/casbin-gateway/releases/latest">
+    <img alt="GitHub Release" src="https://img.shields.io/github/v/release/apache/casbin-gateway.svg">
   </a>
   <a href="https://hub.docker.com/r/casbin/caswaf">
     <img alt="Docker Image Version (latest semver)" src="https://img.shields.io/badge/Docker%20Hub-latest-brightgreen">
@@ -16,20 +16,20 @@
 </p>
 
 <p align="center">
-  <a href="https://goreportcard.com/report/github.com/casbin/caswaf">
-    <img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/casbin/caswaf?style=flat-square">
+  <a href="https://goreportcard.com/report/github.com/apache/casbin-gateway">
+    <img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/apache/casbin-gateway?style=flat-square">
   </a>
-  <a href="https://github.com/casbin/caswaf/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/casbin/caswaf?style=flat-square" alt="license">
+  <a href="https://github.com/apache/casbin-gateway/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/apache/casbin-gateway?style=flat-square" alt="license">
   </a>
-  <a href="https://github.com/casbin/caswaf/issues">
-    <img alt="GitHub issues" src="https://img.shields.io/github/issues/casbin/caswaf?style=flat-square">
+  <a href="https://github.com/apache/casbin-gateway/issues">
+    <img alt="GitHub issues" src="https://img.shields.io/github/issues/apache/casbin-gateway?style=flat-square">
   </a>
   <a href="#">
-    <img alt="GitHub stars" src="https://img.shields.io/github/stars/casbin/caswaf?style=flat-square">
+    <img alt="GitHub stars" src="https://img.shields.io/github/stars/apache/casbin-gateway?style=flat-square">
   </a>
-  <a href="https://github.com/casbin/caswaf/network">
-    <img alt="GitHub forks" src="https://img.shields.io/github/forks/casbin/caswaf?style=flat-square">
+  <a href="https://github.com/apache/casbin-gateway/network">
+    <img alt="GitHub forks" src="https://img.shields.io/github/forks/apache/casbin-gateway?style=flat-square">
   </a>
 </p>
 
@@ -46,10 +46,10 @@ https://caswaf.org
 
 CasWAF contains 2 parts:
 
-| Name     | Description                    | Language               | Source code                                      |
-|----------|--------------------------------|------------------------|--------------------------------------------------|
-| Frontend | Web frontend UI for CasWAF     | Javascript + React     | https://github.com/casbin/caswaf/tree/master/web |
-| Backend  | RESTful API backend for CAsWAF | Golang + Beego + MySQL | https://github.com/casbin/caswaf                 |
+| Name     | Description                    | Language               | Source code                                              |
+|----------|--------------------------------|------------------------|----------------------------------------------------------|
+| Frontend | Web frontend UI for CasWAF     | Javascript + React     | https://github.com/apache/casbin-gateway/tree/master/web |
+| Backend  | RESTful API backend for CAsWAF | Golang + Beego + MySQL | https://github.com/apache/casbin-gateway                 |
 
 ## Installation
 
@@ -67,19 +67,19 @@ CasWAF uses Casdoor to manage members. So you need to create an organization and
 
 ```shell
 go get github.com/casdoor/casdoor
-go get github.com/casbin/caswaf
+go get github.com/apache/casbin-gateway
 ```
 
 or
 
 ```shell
 git clone https://github.com/casdoor/casdoor
-git clone https://github.com/casbin/caswaf
+git clone https://github.com/apache/casbin-gateway
 ```
 
 #### Setup database
 
-CasWAF will store its users, nodes and topics information in a MySQL database named: `caswaf`, will create it if not existed. The DB connection string can be specified at: https://github.com/casbin/caswaf/blob/master/conf/app.conf
+CasWAF will store its users, nodes and topics information in a MySQL database named: `caswaf`, will create it if not existed. The DB connection string can be specified at: https://github.com/apache/casbin-gateway/blob/master/conf/app.conf
 
 ```ini
 dataSourceName = root:123@tcp(localhost:3306)/
@@ -112,4 +112,4 @@ For CasWAF, if you have any questions, you can open Issues, or you can also dire
 
 ## License
 
-[Apache-2.0](https://github.com/caswaf/caswaf/blob/master/LICENSE)
+[Apache-2.0](https://github.com/apache/casbin-gateway/blob/master/LICENSE)

@@ -18,7 +18,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/casbin/caswaf/object"
+	"github.com/apache/casbin-gateway/object"
 )
 
 func TestIpRateRule_checkRule(t *testing.T) {

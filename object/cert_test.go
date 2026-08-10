@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/casbin/caswaf/casdoor"
-	"github.com/casbin/caswaf/proxy"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/casdoor"
+	"github.com/apache/casbin-gateway/proxy"
+	"github.com/apache/casbin-gateway/util"
 )
 
 func TestGetCertExpireTime(t *testing.T) {

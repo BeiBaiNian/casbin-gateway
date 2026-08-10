@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casbin/caswaf/object"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/util"
 	"golang.org/x/time/rate"
 )
 

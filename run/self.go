@@ -18,8 +18,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/util"
 )
 
 func InitSelfStart() {

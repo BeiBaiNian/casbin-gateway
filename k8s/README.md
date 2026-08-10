@@ -361,7 +361,7 @@ spec:
 ## Support
 
 For issues and questions:
-- GitHub Issues: https://github.com/casbin/caswaf/issues
+- GitHub Issues: https://github.com/apache/casbin-gateway/issues
 - Documentation: https://caswaf.org
 - Casdoor Documentation: https://casdoor.org
 

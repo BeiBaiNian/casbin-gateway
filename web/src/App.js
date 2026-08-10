@@ -401,7 +401,7 @@ class App extends Component {
           textAlign: "center",
         }
       }>
-        Powered by <a target="_blank" href="https://github.com/casbin/caswaf" rel="noreferrer"><img style={{paddingBottom: "3px"}} height={"20px"} alt={"Casdoor"} src={`${Setting.StaticBaseUrl}/img/casbin_logo_1024x256.png`} /></a>
+        Powered by <a target="_blank" href="https://github.com/apache/casbin-gateway" rel="noreferrer"><img style={{paddingBottom: "3px"}} height={"20px"} alt={"Casdoor"} src={`${Setting.StaticBaseUrl}/img/casbin_logo_1024x256.png`} /></a>
       </Footer>
     );
   }

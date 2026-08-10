@@ -20,9 +20,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/casbin/caswaf/ip"
-	"github.com/casbin/caswaf/object"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/ip"
+	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/util"
 )
 
 type IpRule struct{}

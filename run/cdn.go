@@ -21,8 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/casbin/caswaf/storage"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/storage"
+	"github.com/apache/casbin-gateway/util"
 )
 
 func filterFiles(filenames []string, folder string, siteName string) []string {

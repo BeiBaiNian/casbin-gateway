@@ -20,7 +20,7 @@ package object
 import (
 	"testing"
 
-	"github.com/casbin/caswaf/casdoor"
+	"github.com/apache/casbin-gateway/casdoor"
 )
 
 func TestCheckNode(t *testing.T) {

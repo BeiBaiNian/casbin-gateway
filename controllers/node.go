@@ -17,9 +17,9 @@ package controllers
 import (
 	"encoding/json"
 
+	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casbin/caswaf/object"
-	"github.com/casbin/caswaf/util"
 )
 
 func (c *ApiController) GetGlobalNodes() {

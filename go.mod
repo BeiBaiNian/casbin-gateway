@@ -1,4 +1,4 @@
-module github.com/casbin/caswaf
+module github.com/apache/casbin-gateway
 
 go 1.16
 

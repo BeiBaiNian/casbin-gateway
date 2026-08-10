@@ -20,7 +20,7 @@ package certificate
 import (
 	"testing"
 
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/util"
 )
 
 func TestGenerateEccKey(t *testing.T) {

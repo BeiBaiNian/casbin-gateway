@@ -17,7 +17,7 @@ package controllers
 import (
 	_ "embed"
 
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 )
 

@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/casbin/caswaf/object"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/util"
 )
 
 type CompoundRule struct{}

@@ -20,9 +20,9 @@ package certificate
 import (
 	"testing"
 
+	"github.com/apache/casbin-gateway/proxy"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
-	"github.com/casbin/caswaf/proxy"
-	"github.com/casbin/caswaf/util"
 )
 
 func TestGetClient(t *testing.T) {

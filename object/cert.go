@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/casbin/caswaf/certificate"
-	"github.com/casbin/caswaf/util"
+	"github.com/apache/casbin-gateway/certificate"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/xorm-io/core"
 )
 
