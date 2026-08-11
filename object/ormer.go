@@ -203,4 +203,10 @@ func (a *Ormer) createTable() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Register Channel table for LLM gateway milestone 1.1.
+	err = a.Engine.Sync2(new(Channel))
+	if err != nil {
+		panic(err)
+	}
 }
