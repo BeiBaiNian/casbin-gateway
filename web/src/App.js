@@ -34,6 +34,7 @@ import ChannelListPage from "./ChannelListPage";
 import ChannelEditPage from "./ChannelEditPage";
 import TokenListPage from "./TokenListPage";
 import TokenEditPage from "./TokenEditPage";
+import LlmLogListPage from "./LlmLogListPage";
 import SigninPage from "./SigninPage";
 import RecordListPage from "./RecordListPage";
 import RecordEditPage from "./RecordEditPage";
@@ -97,6 +98,8 @@ class App extends Component {
       this.setState({selectedMenuKey: "/channels"});
     } else if (uri.includes("/tokens")) {
       this.setState({selectedMenuKey: "/tokens"});
+    } else if (uri.includes("/llm-logs")) {
+      this.setState({selectedMenuKey: "/llm-logs"});
     } else {
       this.setState({selectedMenuKey: "null"});
     }
@@ -343,6 +346,14 @@ class App extends Component {
         </Link>
       </Menu.Item>
     );
+    // Mount LLM Logs menu for LLM gateway milestone 1.4.
+    res.push(
+      <Menu.Item key="/llm-logs">
+        <Link to="/llm-logs">
+          {i18next.t("general:LLM Logs")}
+        </Link>
+      </Menu.Item>
+    );
     return res;
   }
 
@@ -413,6 +424,8 @@ class App extends Component {
           {/* Token routes for LLM gateway milestone 1.3. */}
           <Route exact path="/tokens" render={(props) => this.renderSigninIfNotSignedIn(<TokenListPage account={this.state.account} {...props} />)} />
           <Route exact path="/tokens/:owner/:tokenName" render={(props) => this.renderSigninIfNotSignedIn(<TokenEditPage account={this.state.account} {...props} />)} />
+          {/* LLM Log routes for LLM gateway milestone 1.4. */}
+          <Route exact path="/llm-logs" render={(props) => this.renderSigninIfNotSignedIn(<LlmLogListPage account={this.state.account} {...props} />)} />
           <Route exact path="/dashboard" render={(props) => this.renderSigninIfNotSignedIn(<DashboardPage account={this.state.account} {...props} />)} />
         </Switch>
       </div>

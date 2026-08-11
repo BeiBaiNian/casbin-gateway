@@ -216,4 +216,10 @@ func (a *Ormer) createTable() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Register LlmLog table for LLM gateway milestone 1.4.
+	err = a.Engine.Sync2(new(LlmLog))
+	if err != nil {
+		panic(err)
+	}
 }

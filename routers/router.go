@@ -93,4 +93,7 @@ func initAPI() {
 	beego.Router("/api/add-token", &controllers.ApiController{}, "POST:AddToken")
 	beego.Router("/api/update-token", &controllers.ApiController{}, "POST:UpdateToken")
 	beego.Router("/api/delete-token", &controllers.ApiController{}, "POST:DeleteToken")
+
+	// LLM Log routes for LLM gateway milestone 1.4.
+	beego.Router("/api/get-llm-logs", &controllers.ApiController{}, "GET:GetLlmLogs")
 }

@@ -61,6 +61,7 @@
     "Rules": "规则",
     "Channels": "渠道",
     "Tokens": "令牌",
+    "LLM Logs": "LLM调用日志",
     "New Token": "新建令牌",
     "Save": "保存",
     "Self": "自己",

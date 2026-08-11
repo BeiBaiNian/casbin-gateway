@@ -77,18 +77,33 @@ func (c *ApiController) ChatCompletions() {
 	if !ok {
 		return
 	}
-	_ = token // reserved for milestone 1.4 (usage tracking)
+
+	// 1.4 — LLM call logging.
+	logEntry := &object.LlmLog{
+		Owner:       token.Owner,
+		CreatedTime: time.Now().Format("2006-01-02 15:04:05"),
+		TokenName:   token.Owner + "/" + token.Name,
+		Model:       req.Model,
+		Status:      "fail",
+	}
+	defer func() {
+		object.AddLlmLog(logEntry)
+	}()
 
 	// 3.3.2 — Match channel globally (no owner filter; Judge Q1 → Plan A).
 	channel, err := object.GetChannelByModel(req.Model)
 	if err != nil {
+		logEntry.Channel = "unknown"
+		logEntry.ErrorMessage = err.Error()
 		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
 	}
+	logEntry.Channel = channel.Name
 
 	// 3.3.3 — SSRF safety: validate scheme and basic URL structure upfront.
 	u, err := url.Parse(channel.BaseUrl)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		logEntry.ErrorMessage = "upstream connection blocked by security policy"
 		c.writeOpenAIError(http.StatusBadGateway, "server_error", "upstream connection blocked by security policy")
 		return
 	}
@@ -97,6 +112,7 @@ func (c *ApiController) ChatCompletions() {
 	upstreamURL := strings.TrimRight(channel.BaseUrl, "/") + "/v1/chat/completions"
 	upstreamReq, err := http.NewRequestWithContext(c.Ctx.Request.Context(), "POST", upstreamURL, bytes.NewReader(rawBody))
 	if err != nil {
+		logEntry.ErrorMessage = "upstream connection failed"
 		c.writeOpenAIError(http.StatusBadGateway, "server_error", "upstream connection failed")
 		return
 	}
@@ -148,8 +164,10 @@ func (c *ApiController) ChatCompletions() {
 	upstreamResp, err := client.Do(upstreamReq)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
+			logEntry.ErrorMessage = "upstream timeout"
 			c.writeOpenAIError(http.StatusGatewayTimeout, "server_error", "upstream timeout")
 		} else {
+			logEntry.ErrorMessage = "upstream connection failed"
 			c.writeOpenAIError(http.StatusBadGateway, "server_error", "upstream connection failed")
 		}
 		return
@@ -157,6 +175,7 @@ func (c *ApiController) ChatCompletions() {
 	defer upstreamResp.Body.Close()
 
 	// 3.3.6 / 3.3.7 — Stream SSE or copy non-stream response as pass-through.
+	logEntry.Status = "success"
 	if req.Stream {
 		c.proxySSE(upstreamResp)
 	} else {
