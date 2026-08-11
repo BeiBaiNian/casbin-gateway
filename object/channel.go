@@ -171,7 +171,7 @@ func DeleteChannel(channel *Channel) (bool, error) {
 	return n != 0, err
 }
 
-func isAllowedPort(port int) bool {
+func IsAllowedPort(port int) bool {
 	return port == 80 || port == 443 || (port >= 8000 && port <= 9999)
 }
 
@@ -220,7 +220,7 @@ func TestChannelConnectivity(channel *Channel, apiKeyOverride string) (bool, int
 			}
 
 			p, e := strconv.Atoi(port)
-			if e != nil || !isAllowedPort(p) {
+			if e != nil || !IsAllowedPort(p) {
 				return nil, fmt.Errorf("connection blocked by security policy")
 			}
 
@@ -257,4 +257,24 @@ func TestChannelConnectivity(channel *Channel, apiKeyOverride string) (bool, int
 
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, resp.StatusCode, resp.Status
+}
+
+// GetChannelByModel returns the highest-priority enabled channel that supports
+// the given model name. It queries all channels globally (no owner filter)
+// because /v1/chat/completions is an unauthenticated public endpoint.
+// Corresponds to PM section 3.4.
+func GetChannelByModel(model string) (*Channel, error) {
+	channels := []*Channel{}
+	err := ormer.Engine.Where("status = ?", "enabled").Asc("priority").Find(&channels)
+	if err != nil {
+		return nil, err
+	}
+	for _, ch := range channels {
+		for _, m := range ch.Models {
+			if m == model {
+				return ch, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("no available channel for model: %s", model)
 }
