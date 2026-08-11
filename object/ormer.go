@@ -60,6 +60,7 @@ func InitConfig() {
 
 	InitAdapter()
 	CreateTables()
+	MigrateChannelApiKeys()
 }
 
 func InitAdapter() {
@@ -206,6 +207,12 @@ func (a *Ormer) createTable() {
 
 	// Register Channel table for LLM gateway milestone 1.1.
 	err = a.Engine.Sync2(new(Channel))
+	if err != nil {
+		panic(err)
+	}
+
+	// Register Token table for LLM gateway milestone 1.3.
+	err = a.Engine.Sync2(new(Token))
 	if err != nil {
 		panic(err)
 	}

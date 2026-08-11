@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -77,14 +78,13 @@ type Channel struct {
 	DisplayName string `xorm:"varchar(100)" json:"displayName"`
 	Type        string `xorm:"varchar(100)" json:"type"`
 	BaseUrl     string `xorm:"varchar(255)" json:"baseUrl"`
-	// TODO(1.3): ApiKey is stored as plaintext; AES encryption will be added in milestone 1.3.
+	// ApiKey is stored AES-256-GCM encrypted (see object/aes.go).
 	ApiKey string `xorm:"varchar(500)" json:"apiKey"`
 	// Models is JSON-serialized by xorm, so it needs a text column rather than
 	// a varchar: the serialized form is longer than the joined model names.
-	Models []string `xorm:"mediumtext" json:"models"`
-	// TODO(1.2): Priority routing strategy will be defined in milestone 1.2.
-	Priority int    `xorm:"int" json:"priority"`
-	Status   string `xorm:"varchar(100)" json:"status"`
+	Models   []string `xorm:"mediumtext" json:"models"`
+	Priority int      `xorm:"int" json:"priority"`
+	Status   string   `xorm:"varchar(100)" json:"status"`
 }
 
 func (channel *Channel) GetId() string {
@@ -213,8 +213,16 @@ func AddChannel(channel *Channel) (bool, error) {
 	}
 	channel.UpdatedTime = now
 
-	affected, err := ormer.Engine.Insert(channel)
-	return affected != 0, err
+	if channel.ApiKey != "" {
+		encrypted, err := EncryptApiKey(channel.ApiKey)
+		if err != nil {
+			return false, fmt.Errorf("failed to encrypt api key: %v", err)
+		}
+		channel.ApiKey = encrypted
+	}
+
+	n, err := ormer.Engine.Insert(channel)
+	return n != 0, err
 }
 
 func UpdateChannel(id string, channel *Channel) (bool, error) {
@@ -237,8 +245,14 @@ func UpdateChannel(id string, channel *Channel) (bool, error) {
 	// The browser only ever sees the mask, so getting it back means the user
 	// did not touch the field. Any other value (including "") is written, which
 	// is what makes clearing a key possible.
-	if channel.ApiKey == ApiKeyMask {
+	if channel.ApiKey == ApiKeyMask || channel.ApiKey == "" {
 		session = session.Omit("api_key")
+	} else {
+		encrypted, encErr := EncryptApiKey(channel.ApiKey)
+		if encErr != nil {
+			return false, fmt.Errorf("failed to encrypt api key: %v", encErr)
+		}
+		channel.ApiKey = encrypted
 	}
 
 	affected, err := session.AllCols().Update(channel)
@@ -283,7 +297,11 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 		return false, 0, err.Error()
 	}
 	if stored.Type == "openai" && stored.ApiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+stored.ApiKey)
+		apiKey := stored.ApiKey
+		if decrypted, decErr := DecryptApiKey(stored.ApiKey); decErr == nil {
+			apiKey = decrypted
+		}
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
 	client := &http.Client{
@@ -326,6 +344,10 @@ func GetChannelsByModel(model string) ([]*Channel, error) {
 	for _, channel := range channels {
 		for _, channelModel := range channel.Models {
 			if channelModel == model {
+				// Decrypt the API key so the proxy can forward it as-is.
+				if decrypted, decErr := DecryptApiKey(channel.ApiKey); decErr == nil {
+					channel.ApiKey = decrypted
+				}
 				matchedChannels = append(matchedChannels, channel)
 				break
 			}
@@ -336,4 +358,47 @@ func GetChannelsByModel(model string) ([]*Channel, error) {
 		return nil, fmt.Errorf("%w: %s", ErrNoChannelAvailable, model)
 	}
 	return matchedChannels, nil
+}
+
+// MigrateChannelApiKeys encrypts all existing plaintext API keys in the channels table.
+// It is idempotent — encrypted keys are left unchanged.
+func MigrateChannelApiKeys() {
+	channels := []*Channel{}
+	err := ormer.Engine.Find(&channels)
+	if err != nil {
+		log.Printf("MigrateChannelApiKeys: failed to query channels: %v", err)
+		return
+	}
+
+	for _, ch := range channels {
+		if ch.ApiKey == "" {
+			continue
+		}
+
+		// Try to decrypt — if it fails, the key is plaintext and needs encryption.
+		_, decErr := DecryptApiKey(ch.ApiKey)
+		if decErr == nil {
+			// Already encrypted, skip.
+			continue
+		}
+
+		encrypted, encErr := EncryptApiKey(ch.ApiKey)
+		if encErr != nil {
+			log.Printf("MigrateChannelApiKeys: failed to encrypt channel %s/%s: %v", ch.Owner, ch.Name, encErr)
+			continue
+		}
+
+		ch.ApiKey = encrypted
+		_, updateErr := ormer.Engine.ID(core.PK{ch.Owner, ch.Name}).Cols("api_key").Update(ch)
+		if updateErr != nil {
+			log.Printf("MigrateChannelApiKeys: failed to update channel %s/%s: %v", ch.Owner, ch.Name, updateErr)
+			continue
+		}
+
+		prefix := ch.ApiKey
+		if len(prefix) > 8 {
+			prefix = prefix[:4] + "..." + prefix[len(prefix)-4:]
+		}
+		log.Printf("migrated channel %s/%s key prefix: %s", ch.Owner, ch.Name, prefix)
+	}
 }
