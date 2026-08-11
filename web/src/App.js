@@ -32,6 +32,8 @@ import RuleListPage from "./RuleListPage";
 import RuleEditPage from "./RuleEditPage";
 import ChannelListPage from "./ChannelListPage";
 import ChannelEditPage from "./ChannelEditPage";
+import TokenListPage from "./TokenListPage";
+import TokenEditPage from "./TokenEditPage";
 import SigninPage from "./SigninPage";
 import RecordListPage from "./RecordListPage";
 import RecordEditPage from "./RecordEditPage";
@@ -93,6 +95,8 @@ class App extends Component {
       this.setState({selectedMenuKey: "/rules"});
     } else if (uri.includes("/channels")) {
       this.setState({selectedMenuKey: "/channels"});
+    } else if (uri.includes("/tokens")) {
+      this.setState({selectedMenuKey: "/tokens"});
     } else {
       this.setState({selectedMenuKey: "null"});
     }
@@ -331,6 +335,14 @@ class App extends Component {
         </Link>
       </Menu.Item>
     );
+    // Mount Token menu for LLM gateway milestone 1.3.
+    res.push(
+      <Menu.Item key="/tokens">
+        <Link to="/tokens">
+          {i18next.t("general:Tokens")}
+        </Link>
+      </Menu.Item>
+    );
     return res;
   }
 
@@ -398,6 +410,9 @@ class App extends Component {
           {/* Channel routes for LLM gateway milestone 1.1. */}
           <Route exact path="/channels" render={(props) => this.renderSigninIfNotSignedIn(<ChannelListPage account={this.state.account} {...props} />)} />
           <Route exact path="/channels/:owner/:channelName" render={(props) => this.renderSigninIfNotSignedIn(<ChannelEditPage account={this.state.account} {...props} />)} />
+          {/* Token routes for LLM gateway milestone 1.3. */}
+          <Route exact path="/tokens" render={(props) => this.renderSigninIfNotSignedIn(<TokenListPage account={this.state.account} {...props} />)} />
+          <Route exact path="/tokens/:owner/:tokenName" render={(props) => this.renderSigninIfNotSignedIn(<TokenEditPage account={this.state.account} {...props} />)} />
           <Route exact path="/dashboard" render={(props) => this.renderSigninIfNotSignedIn(<DashboardPage account={this.state.account} {...props} />)} />
         </Switch>
       </div>

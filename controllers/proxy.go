@@ -30,6 +30,7 @@ import (
 
 	"github.com/apache/casbin-gateway/object"
 	"github.com/apache/casbin-gateway/util"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // chatCompletionsRequest contains only the fields needed for routing.
@@ -70,6 +71,13 @@ func (c *ApiController) ChatCompletions() {
 		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", "model is required")
 		return
 	}
+
+	// 1.3 — Token authentication.
+	token, ok := c.authenticateToken(req.Model)
+	if !ok {
+		return
+	}
+	_ = token // reserved for milestone 1.4 (usage tracking)
 
 	// 3.3.2 — Match channel globally (no owner filter; Judge Q1 → Plan A).
 	channel, err := object.GetChannelByModel(req.Model)
@@ -216,4 +224,84 @@ func (c *ApiController) writeOpenAIError(statusCode int, errType, message string
 	c.Ctx.ResponseWriter.Header().Set("Content-Type", "application/json")
 	c.Ctx.ResponseWriter.WriteHeader(statusCode)
 	json.NewEncoder(c.Ctx.ResponseWriter).Encode(resp)
+}
+
+// authenticateToken validates a Bearer token from the Authorization header.
+// It checks the secret key hash, status, expiration, allowed models, and rate limit.
+// Returns (*Token, true) on success, or (nil, false) after writing an error response.
+func (c *ApiController) authenticateToken(model string) (*object.Token, bool) {
+	authHeader := c.Ctx.Request.Header.Get("Authorization")
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		c.writeOpenAIError(http.StatusUnauthorized, "authentication_error", "missing or invalid Authorization header")
+		return nil, false
+	}
+
+	providedKey := strings.TrimPrefix(authHeader, "Bearer ")
+	if providedKey == "" {
+		c.writeOpenAIError(http.StatusUnauthorized, "authentication_error", "empty token")
+		return nil, false
+	}
+
+	// Iterate all tokens and compare bcrypt hashes.
+	tokens, err := object.GetTokens("")
+	if err != nil {
+		c.writeOpenAIError(http.StatusInternalServerError, "server_error", "failed to verify token")
+		return nil, false
+	}
+
+	var matchedToken *object.Token
+	for _, t := range tokens {
+		if t.SecretKeyHash == "" {
+			continue
+		}
+		err := bcrypt.CompareHashAndPassword([]byte(t.SecretKeyHash), []byte(providedKey))
+		if err == nil {
+			matchedToken = t
+			break
+		}
+	}
+
+	if matchedToken == nil {
+		c.writeOpenAIError(http.StatusUnauthorized, "authentication_error", "invalid token")
+		return nil, false
+	}
+
+	if matchedToken.Status != "enabled" {
+		c.writeOpenAIError(http.StatusForbidden, "permission_error", "token is disabled")
+		return nil, false
+	}
+
+	if matchedToken.ExpireTime != "" {
+		expireTime, parseErr := time.Parse(time.RFC3339, matchedToken.ExpireTime)
+		if parseErr == nil && time.Now().After(expireTime) {
+			c.writeOpenAIError(http.StatusForbidden, "permission_error", "token has expired")
+			return nil, false
+		}
+	}
+
+	if len(matchedToken.AllowedModels) > 0 {
+		allowed := false
+		for _, m := range matchedToken.AllowedModels {
+			if m == model {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			c.writeOpenAIError(http.StatusForbidden, "permission_error", "model not allowed for this token")
+			return nil, false
+		}
+	}
+
+	allowed, err := object.CheckRateLimit(matchedToken.Owner, matchedToken.Name, matchedToken.RateLimit)
+	if err != nil {
+		c.writeOpenAIError(http.StatusInternalServerError, "server_error", "rate limit check failed")
+		return nil, false
+	}
+	if !allowed {
+		c.writeOpenAIError(http.StatusTooManyRequests, "rate_limit_error", "rate limit exceeded")
+		return nil, false
+	}
+
+	return matchedToken, true
 }
