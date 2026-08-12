@@ -75,4 +75,12 @@ func initAPI() {
 	beego.Router("/api/add-rule", &controllers.ApiController{}, "POST:AddRule")
 	beego.Router("/api/update-rule", &controllers.ApiController{}, "POST:UpdateRule")
 	beego.Router("/api/delete-rule", &controllers.ApiController{}, "POST:DeleteRule")
+
+	// Channel routes for LLM gateway milestone 1.1.
+	beego.Router("/api/get-channels", &controllers.ApiController{}, "GET:GetChannels")
+	beego.Router("/api/get-channel", &controllers.ApiController{}, "GET:GetChannel")
+	beego.Router("/api/add-channel", &controllers.ApiController{}, "POST:AddChannel")
+	beego.Router("/api/update-channel", &controllers.ApiController{}, "POST:UpdateChannel")
+	beego.Router("/api/delete-channel", &controllers.ApiController{}, "POST:DeleteChannel")
+	beego.Router("/api/test-channel", &controllers.ApiController{}, "POST:TestChannel")
 }
