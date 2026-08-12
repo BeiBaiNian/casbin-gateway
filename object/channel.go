@@ -27,6 +27,12 @@ import (
 	"github.com/xorm-io/core"
 )
 
+// ErrNoChannelAvailable is returned by GetChannelByModel when no enabled
+// channel matches the requested model name. It is a sentinel error so
+// callers can distinguish "no match" (client error, HTTP 400) from
+// database failures (server error, HTTP 502).
+var ErrNoChannelAvailable = errors.New("no available channel")
+
 // ApiKeyMask is what the API returns in place of a stored API key. Sending it
 // back in an update means "keep the existing key"; sending anything else
 // (including an empty string) overwrites the stored key.
@@ -290,4 +296,24 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, resp.StatusCode, resp.Status
+}
+
+// GetChannelByModel returns the highest-priority enabled channel that supports
+// the given model name. It queries all channels globally (no owner filter)
+// because /v1/chat/completions is an unauthenticated public endpoint.
+// Corresponds to PM section 3.4.
+func GetChannelByModel(model string) (*Channel, error) {
+	channels := []*Channel{}
+	err := ormer.Engine.Where("status = ?", "enabled").Asc("priority").Find(&channels)
+	if err != nil {
+		return nil, fmt.Errorf("channel query failed: %w", err)
+	}
+	for _, ch := range channels {
+		for _, m := range ch.Models {
+			if m == model {
+				return ch, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("%w: %s", ErrNoChannelAvailable, model)
 }
