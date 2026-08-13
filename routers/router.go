@@ -83,4 +83,7 @@ func initAPI() {
 	beego.Router("/api/update-channel", &controllers.ApiController{}, "POST:UpdateChannel")
 	beego.Router("/api/delete-channel", &controllers.ApiController{}, "POST:DeleteChannel")
 	beego.Router("/api/test-channel", &controllers.ApiController{}, "POST:TestChannel")
+
+	// OpenAI-compatible chat completions endpoint for LLM gateway milestone 1.2.
+	beego.Router("/v1/chat/completions", &controllers.ApiController{}, "POST:ChatCompletions")
 }

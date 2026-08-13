@@ -27,6 +27,12 @@ import (
 	"github.com/xorm-io/core"
 )
 
+// ErrNoChannelAvailable is returned by GetChannelsByModel when no enabled
+// channel matches the requested model name. It is a sentinel error so
+// callers can distinguish "no match" (client error, HTTP 400) from
+// database failures (server error, HTTP 502).
+var ErrNoChannelAvailable = errors.New("no available channel")
+
 // ApiKeyMask is what the API returns in place of a stored API key. Sending it
 // back in an update means "keep the existing key"; sending anything else
 // (including an empty string) overwrites the stored key.
@@ -40,7 +46,17 @@ const (
 var (
 	channelTypes    = []string{"openai", "claude", "gemini", "custom"}
 	channelStatuses = []string{"enabled", "disabled"}
+	// openAiCompatibleChannelTypes are the types whose upstream speaks the
+	// OpenAI HTTP API, which is the only wire format the gateway can talk so
+	// far. The claude and gemini types need their own request translation.
+	openAiCompatibleChannelTypes = []string{"openai", "custom"}
 )
+
+// IsChannelOpenAiCompatible reports whether the channel's upstream can be
+// reached with an OpenAI-formatted request.
+func IsChannelOpenAiCompatible(channel *Channel) bool {
+	return containsString(openAiCompatibleChannelTypes, channel.Type)
+}
 
 func containsString(values []string, value string) bool {
 	for _, v := range values {
@@ -246,7 +262,7 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 		return false, 0, "the channel does not exist"
 	}
 
-	if stored.Type == "claude" || stored.Type == "gemini" {
+	if !IsChannelOpenAiCompatible(stored) {
 		return false, 0, fmt.Sprintf("the %s channel type is not supported yet in this stage", stored.Type)
 	}
 
@@ -290,4 +306,34 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, resp.StatusCode, resp.Status
+}
+
+// GetChannelsByModel returns every enabled channel that supports the given
+// model name, ordered by priority (ascending, so the lowest value comes first)
+// so that the caller can fail over from one channel to the next. It queries all
+// channels globally (no owner filter) because /v1/chat/completions is an
+// unauthenticated public endpoint.
+func GetChannelsByModel(model string) ([]*Channel, error) {
+	channels := []*Channel{}
+	err := ormer.Engine.Where("status = ?", "enabled").Asc("priority").Find(&channels)
+	if err != nil {
+		return nil, fmt.Errorf("channel query failed: %w", err)
+	}
+
+	// The models are JSON-serialized into a single column, so the match cannot
+	// be pushed down into the query.
+	matchedChannels := []*Channel{}
+	for _, channel := range channels {
+		for _, channelModel := range channel.Models {
+			if channelModel == model {
+				matchedChannels = append(matchedChannels, channel)
+				break
+			}
+		}
+	}
+
+	if len(matchedChannels) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrNoChannelAvailable, model)
+	}
+	return matchedChannels, nil
 }
