@@ -77,14 +77,13 @@ type Channel struct {
 	DisplayName string `xorm:"varchar(100)" json:"displayName"`
 	Type        string `xorm:"varchar(100)" json:"type"`
 	BaseUrl     string `xorm:"varchar(255)" json:"baseUrl"`
-	// TODO(1.3): ApiKey is stored as plaintext; AES encryption will be added in milestone 1.3.
+	// ApiKey is stored as plaintext (project is locally deployed; encryption will be considered later).
 	ApiKey string `xorm:"varchar(500)" json:"apiKey"`
 	// Models is JSON-serialized by xorm, so it needs a text column rather than
 	// a varchar: the serialized form is longer than the joined model names.
-	Models []string `xorm:"mediumtext" json:"models"`
-	// TODO(1.2): Priority routing strategy will be defined in milestone 1.2.
-	Priority int    `xorm:"int" json:"priority"`
-	Status   string `xorm:"varchar(100)" json:"status"`
+	Models   []string `xorm:"mediumtext" json:"models"`
+	Priority int      `xorm:"int" json:"priority"`
+	Status   string   `xorm:"varchar(100)" json:"status"`
 }
 
 func (channel *Channel) GetId() string {
@@ -319,7 +318,6 @@ func GetChannelsByModel(model string) ([]*Channel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("channel query failed: %w", err)
 	}
-
 	// The models are JSON-serialized into a single column, so the match cannot
 	// be pushed down into the query.
 	matchedChannels := []*Channel{}

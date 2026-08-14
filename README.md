@@ -42,6 +42,16 @@
 
 https://caswaf.org
 
+## LLM API Gateway
+
+Casbin Gateway also works as a unified LLM API gateway: it forwards OpenAI-compatible chat completion requests to your configured upstream AI providers, protected by API tokens with model permissions, per-minute rate limits and optional expiration times.
+
+- **Channels**: upstream AI providers (OpenAI, or any OpenAI-compatible endpoint) with their base URL, API key and supported models.
+- **Tokens**: API access tokens (`sk-...`) issued in the console, with a model allowlist, a rate limit and an optional expiration time.
+- **Endpoint**: `POST /v1/chat/completions` authenticated with `Authorization: Bearer sk-...`.
+
+See [docs/llm-api-gateway.md](docs/llm-api-gateway.md) for the full guide: configuring a channel, issuing a token and calling the endpoint from curl or the OpenAI SDK.
+
 ## Architecture
 
 Casbin Gateway contains 2 parts:

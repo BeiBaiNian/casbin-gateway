@@ -96,7 +96,8 @@ var proxyClient = &http.Client{
 // response body as-is (pass-through), trying the channels in priority order
 // until one of them answers. Supports SSE streaming when stream=true in the
 // request body.
-// This endpoint does NOT require Casdoor authentication (auth deferred to milestone 1.3).
+// Requests are authenticated with a gateway API token (Authorization: Bearer
+// <secretKey>); see docs/llm-api-gateway.md. Casdoor authentication is not used.
 func (c *ApiController) ChatCompletions() {
 	rawBody := c.Ctx.Input.RequestBody
 
@@ -108,6 +109,11 @@ func (c *ApiController) ChatCompletions() {
 	}
 	if req.Model == "" {
 		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", "model is required")
+		return
+	}
+
+	// 1.3 — Token authentication.
+	if !c.authenticateToken(req.Model) {
 		return
 	}
 
@@ -215,6 +221,102 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte
 
 	c.relayResponse(upstreamResp, body, stream && isEventStream(upstreamResp))
 	return 0, "", true
+}
+
+// authenticateToken validates the Bearer token in the Authorization header.
+// It checks the token's existence (plaintext comparison), status, expiration,
+// model permission and rate limit, and reports whether the request passed.
+// (PM section 3.3, milestone 1.3)
+func (c *ApiController) authenticateToken(model string) bool {
+	authHeader := c.Ctx.Request.Header.Get("Authorization")
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		c.writeOpenAIError(http.StatusUnauthorized, "authentication_error", "missing or invalid Authorization header")
+		return false
+	}
+
+	providedKey := strings.TrimPrefix(authHeader, "Bearer ")
+	if providedKey == "" {
+		c.writeOpenAIError(http.StatusUnauthorized, "authentication_error", "empty token")
+		return false
+	}
+
+	// Iterate all tokens and compare secret keys in plaintext.
+	tokens, err := object.GetTokens("")
+	if err != nil {
+		c.writeOpenAIError(http.StatusInternalServerError, "server_error", "failed to verify token")
+		return false
+	}
+
+	var matchedToken *object.Token
+	for _, t := range tokens {
+		if t.SecretKey == "" {
+			continue
+		}
+		if t.SecretKey == providedKey {
+			matchedToken = t
+			break
+		}
+	}
+
+	if matchedToken == nil {
+		c.writeOpenAIError(http.StatusUnauthorized, "authentication_error", "invalid token")
+		return false
+	}
+
+	if statusCode, errType, message, ok := checkTokenAccess(matchedToken, model, time.Now()); !ok {
+		c.writeOpenAIError(statusCode, errType, message)
+		return false
+	}
+
+	allowed, err := object.CheckRateLimit(matchedToken.Owner, matchedToken.Name, matchedToken.RateLimit)
+	if err != nil {
+		c.writeOpenAIError(http.StatusInternalServerError, "server_error", "rate limit check failed")
+		return false
+	}
+	if !allowed {
+		c.writeOpenAIError(http.StatusTooManyRequests, "rate_limit_error", "rate limit exceeded")
+		return false
+	}
+
+	return true
+}
+
+// checkTokenAccess applies the access checks that do not need the database:
+// token status, expiration and model permission. It is a pure function so the
+// checks can be unit tested without a database. The returned values describe
+// the OpenAI error to write when the check fails.
+func checkTokenAccess(token *object.Token, model string, now time.Time) (statusCode int, errType, message string, ok bool) {
+	if token.Status != "enabled" {
+		return http.StatusForbidden, "permission_error", "token is disabled", false
+	}
+
+	if token.ExpireTime != "" {
+		expireTime, parseErr := time.Parse(time.RFC3339, token.ExpireTime)
+		if parseErr != nil {
+			// Fail closed: a malformed expiration time must not silently act
+			// as "never expires". Write-time validation keeps such values out
+			// of the database, this is the last line of defense.
+			return http.StatusForbidden, "permission_error", "invalid token expiration time", false
+		}
+		if now.After(expireTime) {
+			return http.StatusForbidden, "permission_error", "token has expired", false
+		}
+	}
+
+	if len(token.AllowedModels) > 0 {
+		allowed := false
+		for _, m := range token.AllowedModels {
+			if m == model {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return http.StatusForbidden, "permission_error", "model not allowed for this token", false
+		}
+	}
+
+	return 0, "", "", true
 }
 
 // relayResponse copies the upstream status code, headers and body to the client

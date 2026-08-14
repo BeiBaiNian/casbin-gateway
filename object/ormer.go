@@ -209,4 +209,10 @@ func (a *Ormer) createTable() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Register Token table for LLM gateway milestone 1.3.
+	err = a.Engine.Sync2(new(Token))
+	if err != nil {
+		panic(err)
+	}
 }

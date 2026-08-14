@@ -258,3 +258,46 @@ func TestForwardToChannel(t *testing.T) {
 		t.Errorf("Content-Type = %s, expected application/json", header)
 	}
 }
+
+func TestCheckTokenAccess(t *testing.T) {
+	now := time.Now()
+	validToken := func() *object.Token {
+		return &object.Token{Status: "enabled", AllowedModels: []string{"gpt-4"}}
+	}
+
+	cases := []struct {
+		desc          string
+		mutate        func(*object.Token)
+		model         string
+		wantOk        bool
+		wantStatus    int
+		wantErrType   string
+		wantMessageIn string
+	}{
+		{"enabled token with allowed model", func(t *object.Token) {}, "gpt-4", true, 0, "", ""},
+		{"no expire time means no expiration", func(t *object.Token) {}, "gpt-4", true, 0, "", ""},
+		{"unexpired token passes", func(t *object.Token) { t.ExpireTime = now.Add(time.Hour).Format(time.RFC3339) }, "gpt-4", true, 0, "", ""},
+		{"empty allowed models means no restriction", func(t *object.Token) { t.AllowedModels = []string{} }, "gpt-4", true, 0, "", ""},
+		{"disabled token rejected", func(t *object.Token) { t.Status = "disabled" }, "gpt-4", false, http.StatusForbidden, "permission_error", "disabled"},
+		{"expired token rejected", func(t *object.Token) { t.ExpireTime = now.Add(-time.Hour).Format(time.RFC3339) }, "gpt-4", false, http.StatusForbidden, "permission_error", "expired"},
+		// A malformed expiration time must fail closed, not silently act as
+		// "never expires".
+		{"malformed expire time rejected", func(t *object.Token) { t.ExpireTime = "not-a-time" }, "gpt-4", false, http.StatusForbidden, "permission_error", "invalid token expiration time"},
+		{"model not allowed rejected", func(t *object.Token) {}, "claude-3", false, http.StatusForbidden, "permission_error", "not allowed"},
+	}
+
+	for _, tc := range cases {
+		token := validToken()
+		tc.mutate(token)
+		statusCode, errType, message, ok := checkTokenAccess(token, tc.model, now)
+		if ok != tc.wantOk {
+			t.Errorf("%s: ok = %v, expected %v (message: %s)", tc.desc, ok, tc.wantOk, message)
+			continue
+		}
+		if !tc.wantOk {
+			if statusCode != tc.wantStatus || errType != tc.wantErrType || !strings.Contains(message, tc.wantMessageIn) {
+				t.Errorf("%s: got (%d, %s, %s), expected (%d, %s, contains %q)", tc.desc, statusCode, errType, message, tc.wantStatus, tc.wantErrType, tc.wantMessageIn)
+			}
+		}
+	}
+}
