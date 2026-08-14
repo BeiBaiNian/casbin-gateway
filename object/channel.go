@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apache/casbin-gateway/proxy"
 	"github.com/apache/casbin-gateway/util"
 	"github.com/xorm-io/core"
 )
@@ -44,12 +45,13 @@ const (
 )
 
 var (
-	channelTypes    = []string{"openai", "claude", "gemini", "custom"}
+	channelTypes    = []string{"openai", "claude", "gemini", "custom", "deepseek"}
 	channelStatuses = []string{"enabled", "disabled"}
 	// openAiCompatibleChannelTypes are the types whose upstream speaks the
-	// OpenAI HTTP API, which is the only wire format the gateway can talk so
-	// far. The claude and gemini types need their own request translation.
-	openAiCompatibleChannelTypes = []string{"openai", "custom"}
+	// OpenAI HTTP API, which is the only wire format the gateway can forward
+	// requests in so far. The claude and gemini types need their own request
+	// translation before they can be proxied.
+	openAiCompatibleChannelTypes = []string{"openai", "deepseek", "custom"}
 )
 
 // IsChannelOpenAiCompatible reports whether the channel's upstream can be
@@ -262,10 +264,6 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 		return false, 0, "the channel does not exist"
 	}
 
-	if !IsChannelOpenAiCompatible(stored) {
-		return false, 0, fmt.Sprintf("the %s channel type is not supported yet in this stage", stored.Type)
-	}
-
 	if stored.BaseUrl == "" {
 		return false, 0, "the base URL is empty"
 	}
@@ -273,39 +271,73 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 		return false, 0, err.Error()
 	}
 
-	probeUrl := strings.TrimRight(stored.BaseUrl, "/")
-	if stored.Type == "openai" {
-		probeUrl += "/v1/models"
+	// Each channel type probes its upstream through that vendor's own models
+	// endpoint, so every supported type can verify connectivity as long as its
+	// base URL and API key are configured.
+	var probeUrl string
+	switch stored.Type {
+	case "openai", "deepseek", "custom", "claude":
+		probeUrl = openAiCompatibleModelsUrl(stored.BaseUrl)
+	case "gemini":
+		probeUrl = strings.TrimRight(stored.BaseUrl, "/") + "/models"
+		if stored.ApiKey != "" {
+			probeUrl += "?key=" + url.QueryEscape(stored.ApiKey)
+		}
+	default:
+		return false, 0, fmt.Sprintf("the %s channel type is not supported yet in this stage", stored.Type)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, probeUrl, nil)
 	if err != nil {
 		return false, 0, err.Error()
 	}
-	if stored.Type == "openai" && stored.ApiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+stored.ApiKey)
+	switch stored.Type {
+	case "openai", "deepseek", "custom":
+		if stored.ApiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+stored.ApiKey)
+		}
+	case "claude":
+		if stored.ApiKey != "" {
+			req.Header.Set("x-api-key", stored.ApiKey)
+		}
+		req.Header.Set("anthropic-version", "2023-06-01")
 	}
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		// Do not follow redirects, so the reported status is the one the
-		// configured base URL actually returns.
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	client := proxy.GetProxyHttpClient()
+	client.Timeout = 10 * time.Second
+	// Do not follow redirects, so the reported status is the one the
+	// configured base URL actually returns.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	resp, err := client.Do(req)
 	if err != nil {
 		// Unwrap the *url.Error so the reason is not buried behind the URL.
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) {
-			return false, 0, urlErr.Err.Error()
+			return false, 0, fmt.Sprintf("%s (GET %s)", urlErr.Err.Error(), probeUrl)
 		}
 		return false, 0, err.Error()
 	}
 	defer resp.Body.Close()
 
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-	return resp.StatusCode >= 200 && resp.StatusCode < 300, resp.StatusCode, resp.Status
+
+	// Include the exact probe URL in the result so the UI can show which
+	// endpoint was actually tested.
+	statusMessage := fmt.Sprintf("%s (GET %s)", resp.Status, probeUrl)
+	return resp.StatusCode >= 200 && resp.StatusCode < 300, resp.StatusCode, statusMessage
+}
+
+// openAiCompatibleModelsUrl builds the models endpoint URL for channel types
+// whose upstream speaks the OpenAI HTTP API. A base URL may already include
+// the "/v1" path segment (e.g. https://api.openai.com/v1), so it is only
+// appended when missing.
+func openAiCompatibleModelsUrl(baseUrl string) string {
+	baseUrl = strings.TrimRight(baseUrl, "/")
+	if strings.HasSuffix(baseUrl, "/v1") {
+		return baseUrl + "/models"
+	}
+	return baseUrl + "/v1/models"
 }
 
 // GetChannelsByModel returns every enabled channel that supports the given

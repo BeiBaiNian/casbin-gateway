@@ -107,6 +107,7 @@ class ChannelListPage extends BaseListPage {
       openai: "#10a37f",
       claude: "#d97757",
       gemini: "#4285f4",
+      deepseek: "#4d6bfe",
       custom: "#8b5cf6",
     };
     return (

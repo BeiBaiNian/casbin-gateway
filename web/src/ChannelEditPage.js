@@ -26,14 +26,16 @@ const BASE_URL_PRESETS = {
   openai: ["https://api.openai.com/v1"],
   claude: ["https://api.anthropic.com/v1"],
   gemini: ["https://generativelanguage.googleapis.com/v1beta"],
-  custom: ["https://oneapi.example.com", "https://api.deepseek.com/v1", "https://api.moonshot.cn/v1"],
+  deepseek: ["https://api.deepseek.com"],
+  custom: ["https://oneapi.example.com", "https://api.moonshot.cn/v1"],
 };
 
 const MODEL_PRESETS = {
   openai: ["gpt-5.5", "gpt-5", "gpt-5-mini", "o3", "o4-mini"],
   claude: ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"],
   gemini: ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-pro"],
-  custom: ["deepseek-chat", "deepseek-reasoner", "moonshot-v1-8k", "qwen-max"],
+  deepseek: ["deepseek-v4-flash", "deepseek-v4-pro"],
+  custom: ["moonshot-v1-8k", "qwen-max"],
 };
 
 class ChannelEditPage extends React.Component {
@@ -182,6 +184,7 @@ class ChannelEditPage extends React.Component {
               <Option value="openai">OpenAI</Option>
               <Option value="claude">Claude (Anthropic)</Option>
               <Option value="gemini">Gemini (Google)</Option>
+              <Option value="deepseek">DeepSeek</Option>
               <Option value="custom">Custom</Option>
             </Select>
           </Col>
@@ -294,7 +297,7 @@ class ChannelEditPage extends React.Component {
               <Col span={22}>
                 <Alert
                   message={this.state.result.success ? i18next.t("channel:Connection Successful") : i18next.t("channel:Connection Failed")}
-                  description={this.state.result.statusCode ? `HTTP ${this.state.result.statusCode} - ${this.state.result.message}` : this.state.result.message}
+                  description={this.state.result.message}
                   type={this.state.result.success ? "success" : "error"}
                   showIcon
                 />

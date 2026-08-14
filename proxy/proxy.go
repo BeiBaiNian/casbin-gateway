@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/beego/beego"
@@ -32,7 +34,7 @@ func InitHttpClient() {
 	DefaultHttpClient = http.DefaultClient
 
 	// use proxy
-	ProxyHttpClient = getProxyHttpClient()
+	ProxyHttpClient = GetProxyHttpClient()
 }
 
 func isAddressOpen(address string) bool {
@@ -52,14 +54,32 @@ func isAddressOpen(address string) bool {
 	return false
 }
 
-func getProxyHttpClient() *http.Client {
+// GetProxyHttpClient returns an HTTP client that routes outbound connections
+// through the proxy configured in app.conf ("httpProxy") when one is set, or
+// a plain client otherwise.
+//
+// Two proxy formats are supported:
+//   - http://host:port or https://host:port: an HTTP(S) proxy (the common
+//     case, e.g. Clash at http://127.0.0.1:7899)
+//   - host:port: a SOCKS5 proxy (legacy behavior, kept for compatibility)
+func GetProxyHttpClient() *http.Client {
 	httpProxy := beego.AppConfig.String("httpProxy")
 	if httpProxy == "" {
 		return &http.Client{}
 	}
 
-	if !isAddressOpen(httpProxy) {
+	if !isAddressOpen(proxyAddress(httpProxy)) {
 		return &http.Client{}
+	}
+
+	if strings.HasPrefix(httpProxy, "http://") || strings.HasPrefix(httpProxy, "https://") {
+		proxyUrl, err := url.Parse(httpProxy)
+		if err != nil {
+			panic(err)
+		}
+		return &http.Client{
+			Transport: &http.Transport{Proxy: http.ProxyURL(proxyUrl)},
+		}
 	}
 
 	// https://stackoverflow.com/questions/33585587/creating-a-go-socks5-client
@@ -72,6 +92,17 @@ func getProxyHttpClient() *http.Client {
 	return &http.Client{
 		Transport: tr,
 	}
+}
+
+// proxyAddress strips the scheme from an http://host:port proxy setting so
+// the address can be dialed directly during the liveness check.
+func proxyAddress(httpProxy string) string {
+	if strings.HasPrefix(httpProxy, "http://") || strings.HasPrefix(httpProxy, "https://") {
+		if u, err := url.Parse(httpProxy); err == nil {
+			return u.Host
+		}
+	}
+	return httpProxy
 }
 
 func GetProxyDialer() *net.Dialer {
