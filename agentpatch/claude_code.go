@@ -85,6 +85,16 @@ func (claudeCodePatcher) Unpatch(target Target) error {
 	return RevokeIngestToken(target)
 }
 
+// PatchNotice explains the change in the operator's own words. Every other
+// patcher supplies one, so without it the Claude Code row was the only one in
+// the UI that gave no hint about what changes or whether a restart is needed.
+func (claudeCodePatcher) PatchNotice(patched bool) (string, string) {
+	if patched {
+		return "Removes Gateway's audit-only Claude Code hooks.", "Restart any Claude Code session that is already running."
+	}
+	return "Installs audit-only Claude Code hooks. Hooks observe events and never block an action.", "Restart any Claude Code session that is already running."
+}
+
 func (claudeCodePatcher) Status(target Target) (Status, error) {
 	path, err := claudeCodeConfigPath(target)
 	if err != nil {
