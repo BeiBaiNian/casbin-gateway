@@ -33,10 +33,7 @@ import (
 	"github.com/apache/casbin-gateway/auditutil"
 )
 
-const (
-	transcriptPollInterval = time.Second
-	maxTranscriptLine      = 8 * 1024 * 1024
-)
+const maxTranscriptLine = 8 * 1024 * 1024
 
 type transcriptRoot struct {
 	path   string
@@ -187,7 +184,7 @@ func (monitor *transcriptMonitor) Status() transcriptStatus {
 
 func (monitor *transcriptMonitor) run() {
 	defer close(monitor.done)
-	ticker := time.NewTicker(transcriptPollInterval)
+	ticker := time.NewTicker(monitorPollInterval())
 	defer ticker.Stop()
 	for {
 		select {

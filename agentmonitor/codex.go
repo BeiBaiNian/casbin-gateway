@@ -32,7 +32,6 @@ import (
 
 const (
 	codexMonitorStateFile = "codex-rollout-monitor.json"
-	codexPollInterval     = time.Second
 	maxCodexRolloutLine   = 8 * 1024 * 1024
 )
 
@@ -66,13 +65,30 @@ type codexSavedState struct {
 	Cursors map[string]*codexCursor `json:"cursors"`
 }
 
+// codexRootSummary is what one sessions directory looked like after the last
+// poll. Status answers from it so that reading the UI never waits on disk and
+// never touches cursor state the poller is mutating.
+type codexRootSummary struct {
+	agentFiles  map[string]int
+	unknown     int
+	lastPolled  time.Time
+	everSampled bool
+}
+
+// codexMonitorManager owns two locks with a strict order: pollMutex is taken
+// before mutex, never the other way round. pollMutex serializes the file IO and
+// the cursor mutation it performs; mutex only guards the maps, so status stays
+// responsive while a poll is reading disk.
 type codexMonitorManager struct {
+	pollMutex sync.Mutex
+
 	mutex     sync.Mutex
 	statePath string
 	addRecord func(*Record)
 	claims    map[string]codexClaim
 	cursors   map[string]*codexCursor
 	lastErr   map[string]error
+	summaries map[string]codexRootSummary
 	dirty     bool
 	stop      chan struct{}
 	done      chan struct{}
@@ -87,10 +103,14 @@ func newCodexMonitorManager(statePath string, addRecord func(*Record)) *codexMon
 		claims:    map[string]codexClaim{},
 		cursors:   map[string]*codexCursor{},
 		lastErr:   map[string]error{},
+		summaries: map[string]codexRootSummary{},
 	}
 }
 
 func (manager *codexMonitorManager) start() error {
+	// pollMutex is always taken before mutex; see codexMonitorManager.
+	manager.pollMutex.Lock()
+	defer manager.pollMutex.Unlock()
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 	if manager.stop != nil {
@@ -178,21 +198,32 @@ func (manager *codexMonitorManager) enable(claim codexClaim) error {
 		return errors.New("agent path, owner and an absolute CODEX_HOME are required")
 	}
 
+	// Seeding reads the sessions directory and writes cursors, so it takes
+	// pollMutex to stay the single writer, then mutex for the maps.
+	manager.pollMutex.Lock()
+	defer manager.pollMutex.Unlock()
+
 	manager.mutex.Lock()
-	defer manager.mutex.Unlock()
 	if manager.statePath == "" {
 		manager.statePath = monitorStatePath(codexMonitorStateFile)
 	}
 	key := codexClaimKey(claim.AgentID, claim.Path, claim.Owner)
-	if _, exists := manager.claims[key]; exists {
+	_, exists := manager.claims[key]
+	root := codexSessionsRoot(claim.CodexHome)
+	seeded := manager.hasClaimForRootLocked(root)
+	manager.mutex.Unlock()
+
+	if exists {
 		return nil
 	}
-	root := codexSessionsRoot(claim.CodexHome)
-	if !manager.hasClaimForRootLocked(root) {
-		if err := manager.seedRootLocked(root); err != nil {
+	if !seeded {
+		if err := manager.seedRoot(root); err != nil {
 			return err
 		}
 	}
+
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
 	manager.claims[key] = claim
 	manager.dirty = true
 	if err := manager.saveLocked(); err != nil {
@@ -208,6 +239,8 @@ func DisableCodexMonitor(agentID, path, ownerName string) error {
 }
 
 func (manager *codexMonitorManager) disable(agentID, path, ownerName string) error {
+	manager.pollMutex.Lock()
+	defer manager.pollMutex.Unlock()
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 	key := codexClaimKey(agentID, path, ownerName)
@@ -232,48 +265,42 @@ func CodexMonitorStatus(agentID, path, ownerName string) (bool, string) {
 	return codexMonitor.status(canonicalAgentID(agentID), path, ownerName)
 }
 
+// status answers entirely from the last poll's summary. It performs no disk IO,
+// so the UI can refresh it as often as it likes without competing with the
+// poller for the session directories.
 func (manager *codexMonitorManager) status(agentID, path, ownerName string) (bool, string) {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
+
 	claim, found := manager.claims[codexClaimKey(agentID, path, ownerName)]
 	if !found {
 		return false, "not patched"
 	}
-	root := codexSessionsRoot(claim.CodexHome)
-	files, exists, err := codexRolloutFiles(root)
-	if err == nil {
-		err = manager.lastErr[codexPathKey(root)]
-	}
-	if err != nil {
+	key := codexPathKey(codexSessionsRoot(claim.CodexHome))
+	if err := manager.lastErr[key]; err != nil {
 		return true, "monitor error: " + err.Error()
 	}
-	if !exists {
-		return true, "waiting for activity: sessions directory not found"
+	summary, sampled := manager.summaries[key]
+	if !sampled || !summary.everSampled {
+		return true, "waiting for the first scan of the sessions directory"
 	}
-	if len(files) == 0 {
+
+	matchingFiles := summary.agentFiles[claim.AgentID]
+	knownFiles := 0
+	for _, count := range summary.agentFiles {
+		knownFiles += count
+	}
+	if knownFiles == 0 && summary.unknown > 0 {
+		return true, fmt.Sprintf("unsupported source: %d rollout file(s) did not identify as Codex", summary.unknown)
+	}
+	if knownFiles == 0 {
 		return true, "waiting for activity: no rollout files"
-	}
-	matchingFiles, knownFiles, unsupportedFiles := 0, 0, 0
-	for _, cursor := range manager.cursors {
-		if codexPathKey(cursor.Root) != codexPathKey(root) {
-			continue
-		}
-		if cursor.AgentID == "" {
-			unsupportedFiles++
-			continue
-		}
-		knownFiles++
-		if cursor.AgentID == claim.AgentID {
-			matchingFiles++
-		}
-	}
-	if knownFiles == 0 && unsupportedFiles > 0 {
-		return true, fmt.Sprintf("unsupported source: %d rollout file(s) did not identify as Codex", unsupportedFiles)
 	}
 	if matchingFiles == 0 {
 		return true, "waiting for activity: no matching source"
 	}
-	return true, fmt.Sprintf("active: monitoring %d rollout file(s)", matchingFiles)
+	return true, fmt.Sprintf("active: monitoring %d rollout file(s); last scan %s",
+		matchingFiles, summary.lastPolled.Format(time.RFC3339))
 }
 
 func (manager *codexMonitorManager) startPollerLocked() {
@@ -286,7 +313,7 @@ func (manager *codexMonitorManager) startPollerLocked() {
 func (manager *codexMonitorManager) run(stop <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
 	manager.poll()
-	ticker := time.NewTicker(codexPollInterval)
+	ticker := time.NewTicker(monitorPollInterval())
 	defer ticker.Stop()
 	for {
 		select {
@@ -298,62 +325,144 @@ func (manager *codexMonitorManager) run(stop <-chan struct{}, done chan<- struct
 	}
 }
 
+// poll rescans every claimed sessions directory. It holds pollMutex for the
+// whole pass so cursor state has a single writer, and takes mutex only in short
+// bursts so the status endpoint is never blocked behind disk IO.
 func (manager *codexMonitorManager) poll() {
+	manager.pollMutex.Lock()
+	defer manager.pollMutex.Unlock()
+
+	for key, root := range manager.claimedRoots() {
+		files, _, err := codexRolloutFiles(root)
+		if err != nil {
+			manager.setRootError(key, err)
+			continue
+		}
+		manager.setRootError(key, nil)
+		// Rollout directories only ever grow, so cursors for files that have been
+		// rotated away are dropped here instead of accumulating forever.
+		manager.pruneCursors(root, files)
+
+		for _, path := range files {
+			cursor, err := manager.cursorForFile(root, path, false)
+			if err != nil {
+				manager.setRootError(key, err)
+				continue
+			}
+			if err := manager.consumeFile(cursor); err != nil {
+				manager.setRootError(key, err)
+			}
+		}
+		manager.refreshSummary(key, root)
+	}
+	manager.flushState()
+}
+
+func (manager *codexMonitorManager) claimedRoots() map[string]string {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
-
 	roots := map[string]string{}
 	for _, claim := range manager.claims {
 		root := codexSessionsRoot(claim.CodexHome)
 		roots[codexPathKey(root)] = root
 	}
-	for key, root := range roots {
-		files, _, err := codexRolloutFiles(root)
-		if err != nil {
-			manager.lastErr[key] = err
+	return roots
+}
+
+func (manager *codexMonitorManager) setRootError(key string, err error) {
+	manager.mutex.Lock()
+	if err == nil {
+		delete(manager.lastErr, key)
+	} else {
+		manager.lastErr[key] = err
+	}
+	manager.mutex.Unlock()
+}
+
+// pruneCursors drops cursors under root whose file no longer exists.
+func (manager *codexMonitorManager) pruneCursors(root string, files []string) {
+	live := make(map[string]struct{}, len(files))
+	for _, path := range files {
+		live[codexPathKey(path)] = struct{}{}
+	}
+
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	rootKey := codexPathKey(root)
+	for key, cursor := range manager.cursors {
+		if codexPathKey(cursor.Root) != rootKey {
 			continue
 		}
-		delete(manager.lastErr, key)
-		for _, path := range files {
-			cursor, err := manager.cursorForFileLocked(root, path, false)
-			if err != nil {
-				manager.lastErr[key] = err
-				continue
-			}
-			if err := manager.consumeFileLocked(cursor); err != nil {
-				manager.lastErr[key] = err
-			}
-		}
-	}
-	if manager.dirty {
-		if err := manager.saveLocked(); err != nil {
-			for key := range roots {
-				manager.lastErr[key] = err
-			}
+		if _, found := live[key]; !found {
+			delete(manager.cursors, key)
+			manager.dirty = true
 		}
 	}
 }
 
-func (manager *codexMonitorManager) seedRootLocked(root string) error {
+// refreshSummary records what status should report for root, so status never
+// reads cursor fields the poller may be writing.
+func (manager *codexMonitorManager) refreshSummary(key, root string) {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+
+	summary := codexRootSummary{agentFiles: map[string]int{}, lastPolled: time.Now(), everSampled: true}
+	rootKey := codexPathKey(root)
+	for _, cursor := range manager.cursors {
+		if codexPathKey(cursor.Root) != rootKey {
+			continue
+		}
+		if cursor.AgentID == "" {
+			summary.unknown++
+			continue
+		}
+		summary.agentFiles[cursor.AgentID]++
+	}
+	manager.summaries[key] = summary
+}
+
+func (manager *codexMonitorManager) flushState() {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	if !manager.dirty {
+		return
+	}
+	if err := manager.saveLocked(); err != nil {
+		for key := range manager.summaries {
+			manager.lastErr[key] = err
+		}
+	}
+}
+
+// seedRoot skips the rollout history that already exists when a root is first
+// claimed. It must be called with pollMutex held.
+func (manager *codexMonitorManager) seedRoot(root string) error {
 	files, _, err := codexRolloutFiles(root)
 	if err != nil {
 		return err
 	}
 	for _, path := range files {
-		if _, err := manager.cursorForFileLocked(root, path, true); err != nil {
+		if _, err := manager.cursorForFile(root, path, true); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (manager *codexMonitorManager) cursorForFileLocked(root, path string, seedEOF bool) (*codexCursor, error) {
+// cursorForFile resolves the cursor for one rollout file. It must be called
+// with pollMutex held: file metadata is read outside mutex, and only the map
+// lookup and insert take it.
+func (manager *codexMonitorManager) cursorForFile(root, path string, seedEOF bool) (*codexCursor, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
 	key := codexPathKey(path)
+
+	manager.mutex.Lock()
 	cursor := manager.cursors[key]
+	manager.mutex.Unlock()
+
 	if cursor == nil {
 		meta, err := codexFileHeader(path)
 		if err != nil {
@@ -363,20 +472,22 @@ func (manager *codexMonitorManager) cursorForFileLocked(root, path string, seedE
 			Path: path, Root: root, SessionKey: meta.SessionKey, AgentID: meta.AgentID,
 			Pending: map[string]codexPendingCall{},
 		}
+		manager.mutex.Lock()
 		manager.cursors[key] = cursor
 		manager.dirty = true
+		manager.mutex.Unlock()
 	}
 
 	if seedEOF {
 		cursor.Offset = info.Size()
 		resetCodexCursorTurn(cursor)
-		manager.dirty = true
+		manager.markDirty()
 	} else if info.Size() < cursor.Offset {
 		cursor.Offset = 0
 		cursor.SessionKey = ""
 		cursor.AgentID = ""
 		resetCodexCursorTurn(cursor)
-		manager.dirty = true
+		manager.markDirty()
 	}
 	if cursor.AgentID == "" && cursor.Offset == 0 && info.Size() > 0 {
 		meta, err := codexFileHeader(path)
@@ -394,7 +505,15 @@ func resetCodexCursorTurn(cursor *codexCursor) {
 	cursor.Pending = map[string]codexPendingCall{}
 }
 
-func (manager *codexMonitorManager) consumeFileLocked(cursor *codexCursor) error {
+func (manager *codexMonitorManager) markDirty() {
+	manager.mutex.Lock()
+	manager.dirty = true
+	manager.mutex.Unlock()
+}
+
+// consumeFile reads the bytes appended since the last poll. It must be called
+// with pollMutex held; the read itself deliberately runs without mutex.
+func (manager *codexMonitorManager) consumeFile(cursor *codexCursor) error {
 	info, err := os.Stat(cursor.Path)
 	if err != nil {
 		return err
@@ -422,9 +541,9 @@ func (manager *codexMonitorManager) consumeFileLocked(cursor *codexCursor) error
 			return nil
 		}
 		cursor.Offset += size
-		manager.dirty = true
+		manager.markDirty()
 		if line != nil {
-			claim := manager.claimForCursorLocked(cursor)
+			claim := manager.claimForCursor(cursor)
 			for _, record := range parseCodexRolloutLine(bytes.TrimSpace(line), cursor, claim) {
 				manager.addRecord(record)
 			}
@@ -432,7 +551,9 @@ func (manager *codexMonitorManager) consumeFileLocked(cursor *codexCursor) error
 	}
 }
 
-func (manager *codexMonitorManager) claimForCursorLocked(cursor *codexCursor) *codexClaim {
+func (manager *codexMonitorManager) claimForCursor(cursor *codexCursor) *codexClaim {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
 	for _, claim := range manager.claims {
 		if claim.AgentID == cursor.AgentID && codexPathKey(codexSessionsRoot(claim.CodexHome)) == codexPathKey(cursor.Root) {
 			return &claim

@@ -32,7 +32,6 @@ import (
 
 const (
 	openAgentMonitorStateFile = "openagent-audit-monitor.json"
-	openAgentPollInterval     = time.Second
 	maxOpenAgentAuditLine     = 8 * 1024 * 1024
 	openAgentAgentID          = "openagent"
 	openAgentAuditSubdir      = "audit"
@@ -227,7 +226,7 @@ func (manager *openAgentMonitorManager) startPollerLocked() {
 func (manager *openAgentMonitorManager) run(stop <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
 	manager.poll()
-	ticker := time.NewTicker(openAgentPollInterval)
+	ticker := time.NewTicker(monitorPollInterval())
 	defer ticker.Stop()
 	for {
 		select {
