@@ -17,7 +17,9 @@ package controllers
 import (
 	"encoding/json"
 	"net"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/apache/casbin-gateway/agent"
 	"github.com/apache/casbin-gateway/agentmonitor"
@@ -147,13 +149,34 @@ func (c *ApiController) AddAgentRecord() {
 	c.ResponseOk()
 }
 
+// readAgentPatchTarget resolves the request body against the installations that
+// were actually discovered. Patching writes into the owner's home directory, so
+// an unverified body would let a caller name any account on the host.
 func (c *ApiController) readAgentPatchTarget() (agentpatch.Target, bool) {
 	var target agentpatch.Target
 	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &target); err != nil {
 		c.ResponseError(err.Error())
 		return target, false
 	}
-	return target, true
+
+	installations, err := agent.Scan(false)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return target, false
+	}
+	for _, installation := range installations {
+		if candidate := targetOf(installation); matchesTarget(candidate, target) {
+			return candidate, true
+		}
+	}
+	c.ResponseError("no discovered agent installation matches this target")
+	return target, false
+}
+
+func matchesTarget(discovered, requested agentpatch.Target) bool {
+	return discovered.AgentId == requested.AgentId &&
+		strings.EqualFold(filepath.Clean(discovered.Path), filepath.Clean(requested.Path)) &&
+		strings.EqualFold(discovered.Owner, requested.Owner)
 }
 
 func targetOf(installation agent.Installation) agentpatch.Target {
