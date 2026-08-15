@@ -133,6 +133,28 @@ func GetAgentPatchStateDir() string {
 	return dir
 }
 
+// GetAgentRecordCapacity is how many agent monitoring records Gateway keeps in
+// memory. Records are never written to disk, so this value alone bounds the
+// memory the live window can occupy.
+func GetAgentRecordCapacity() int {
+	res, err := strconv.Atoi(GetConfigString("agentRecordCapacity"))
+	if err != nil || res <= 0 {
+		res = 1000
+	}
+	return res
+}
+
+// GetAgentMonitorPollSeconds is how often Gateway rescans the append-only logs
+// of agents that are monitored by tailing files. Larger values trade detection
+// latency for far less disk traffic on hosts with a long agent history.
+func GetAgentMonitorPollSeconds() int {
+	res, err := strconv.Atoi(GetConfigString("agentMonitorPollSeconds"))
+	if err != nil || res <= 0 {
+		res = 5
+	}
+	return res
+}
+
 func GetConfigRealDataSourceName(driverName string) string {
 	var dataSourceName string
 	if driverName != "mysql" {

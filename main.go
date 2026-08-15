@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/apache/casbin-gateway/agenthook"
 	"github.com/apache/casbin-gateway/agentmonitor"
@@ -54,7 +55,11 @@ func main() {
 	run.InitSelfStart()
 	object.StartMonitorSitesLoop()
 
-	agentmonitor.Configure(conf.GetAgentPatchStateDir())
+	agentmonitor.Configure(
+		conf.GetAgentPatchStateDir(),
+		time.Duration(conf.GetAgentMonitorPollSeconds())*time.Second,
+		conf.GetAgentRecordCapacity(),
+	)
 	if err := agentmonitor.Start(); err != nil {
 		beego.Error("agent monitor could not start:", err)
 	}

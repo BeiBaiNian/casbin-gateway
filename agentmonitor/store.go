@@ -21,8 +21,11 @@ import (
 	"time"
 )
 
-// RecordCapacity is the fixed live diagnostic window retained by Gateway.
-const RecordCapacity = 1000
+// DefaultRecordCapacity is the live diagnostic window retained by Gateway when
+// no capacity is configured. Records live only in memory, so this value bounds
+// how much a busy host can retain: each record may hold up to
+// auditutil.MaxPayloadBytes of sanitized payload.
+const DefaultRecordCapacity = 1000
 
 // RecordQuery narrows the live diagnostic window. Empty fields match all
 // values and a non-positive Limit returns every matching record.
@@ -58,10 +61,41 @@ type Store struct {
 	sequence uint64
 }
 
-var recordStore = newStore(RecordCapacity)
+var recordStore = newStore(DefaultRecordCapacity)
 
 func newStore(capacity int) *Store {
+	if capacity <= 0 {
+		capacity = DefaultRecordCapacity
+	}
 	return &Store{entries: make([]storedRecord, capacity)}
+}
+
+// SetRecordCapacity resizes the live window, keeping the most recent records
+// that still fit. It is a no-op when the capacity is unchanged.
+func SetRecordCapacity(capacity int) {
+	recordStore.SetCapacity(capacity)
+}
+
+// SetCapacity resizes the ring buffer in place, preserving arrival order.
+func (store *Store) SetCapacity(capacity int) {
+	if capacity <= 0 {
+		capacity = DefaultRecordCapacity
+	}
+
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	if capacity == len(store.entries) {
+		return
+	}
+
+	retained := store.snapshotLocked()
+	if len(retained) > capacity {
+		retained = retained[len(retained)-capacity:]
+	}
+	store.entries = make([]storedRecord, capacity)
+	copy(store.entries, retained)
+	store.count = len(retained)
+	store.next = store.count % capacity
 }
 
 // AddRecord appends one event to Gateway's process-local monitoring window.

@@ -21,27 +21,44 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
-// DefaultStateDir stores monitor declarations and tail cursors. Monitoring
-// records themselves are never written here.
-const DefaultStateDir = "./data/agent-patches"
+const (
+	// DefaultStateDir stores monitor declarations and tail cursors. Monitoring
+	// records themselves are never written here.
+	DefaultStateDir = "./data/agent-patches"
+
+	// DefaultPollInterval is how often file-tailed agents are rescanned. Agent
+	// session directories only ever grow, so polling faster than this costs real
+	// disk traffic for very little extra freshness.
+	DefaultPollInterval = 5 * time.Second
+)
 
 var monitorConfig = struct {
 	sync.RWMutex
-	stateDir string
-}{stateDir: DefaultStateDir}
+	stateDir     string
+	pollInterval time.Duration
+}{stateDir: DefaultStateDir, pollInterval: DefaultPollInterval}
 
-// Configure selects the directory used for declaration and cursor JSON files.
-// It must be called before Start when the default directory is unsuitable.
-func Configure(stateDir string) {
+// Configure selects the directory used for declaration and cursor JSON files,
+// how often local logs are rescanned, and how many records the live window
+// holds. It must be called before Start when the defaults are unsuitable.
+func Configure(stateDir string, pollInterval time.Duration, recordCapacity int) {
 	monitorConfig.Lock()
 	if strings.TrimSpace(stateDir) == "" {
 		monitorConfig.stateDir = DefaultStateDir
 	} else {
 		monitorConfig.stateDir = filepath.Clean(stateDir)
 	}
+	if pollInterval <= 0 {
+		monitorConfig.pollInterval = DefaultPollInterval
+	} else {
+		monitorConfig.pollInterval = pollInterval
+	}
 	monitorConfig.Unlock()
+
+	SetRecordCapacity(recordCapacity)
 }
 
 func monitorStatePath(name string) string {
@@ -49,6 +66,13 @@ func monitorStatePath(name string) string {
 	path := filepath.Join(monitorConfig.stateDir, name)
 	monitorConfig.RUnlock()
 	return path
+}
+
+func monitorPollInterval() time.Duration {
+	monitorConfig.RLock()
+	interval := monitorConfig.pollInterval
+	monitorConfig.RUnlock()
+	return interval
 }
 
 // Start restores persisted monitor declarations and begins polling their local
