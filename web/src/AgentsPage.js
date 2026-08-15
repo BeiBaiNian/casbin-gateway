@@ -71,11 +71,11 @@ export default function AgentsPage({account}) {
     setBusyKey(rowKey(record));
     (patched ? AgentBackend.unpatchAgent(target) : AgentBackend.patchAgent(target)).then(res => {
       if (res.status === "ok") {
-        const success = patched ? "Unpatched" : "Patched";
+        const done = patched ? i18next.t("agent:Monitoring disabled") : i18next.t("agent:Monitoring enabled");
         const followup = res.data?.followup || record.followup;
         Setting.showMessage("success", followup
-          ? `${i18next.t(`agent:${success}`)} ${record.name}. ${followup}`
-          : `${i18next.t(`agent:${success}`)} ${record.name}`);
+          ? `${done}: ${record.name}. ${followup}`
+          : `${done}: ${record.name}`);
         scan();
       } else {
         Setting.showMessage("error", res.msg || i18next.t("agent:Failed to update agent patch"));

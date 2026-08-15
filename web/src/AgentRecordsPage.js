@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React, {useCallback, useEffect, useState} from "react";
-import {Alert, Button, Descriptions, Input, Result, Select, Space, Table, Tag, Typography} from "antd";
+import {Alert, Button, Descriptions, Input, Result, Select, Space, Switch, Table, Tag, Typography} from "antd";
 import {ReloadOutlined, RobotOutlined} from "@ant-design/icons";
 import i18next from "i18next";
 import {Link, useHistory, useLocation} from "react-router-dom";
@@ -27,8 +27,17 @@ function monitorAgentId(agentId) {
   return agentId === "codex_vscode" || agentId === "codex-vscode" ? "codex-cli" : agentId;
 }
 
+// The server keeps a bounded in-memory window; these are the slices of it the
+// page can ask for. Without a control here the UI could only ever reach the
+// first 200 of the records the backend was holding.
+const limitOptions = [200, 500, 1000, 5000];
+const defaultLimit = 200;
+
+// A translucent overlay rather than a fixed grey, so the payload block stays
+// readable whichever theme the surrounding app is using.
 const payloadStyle = {
-  background: "#f5f5f5",
+  background: "rgba(127, 127, 127, 0.12)",
+  color: "inherit",
   borderRadius: 4,
   fontFamily: "monospace",
   fontSize: 12,
@@ -97,20 +106,27 @@ export default function AgentRecordsPage({account}) {
   const eventType = search.get("eventType") || "";
   const outcome = search.get("outcome") || "";
   const session = search.get("session") || "";
+  const limit = Number(search.get("limit")) || defaultLimit;
   const isAdmin = Setting.isAdminUser(account);
   const [agents, setAgents] = useState([]);
   const [records, setRecords] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [sessionDraft, setSessionDraft] = useState(session);
 
-  const load = useCallback(() => {
+  const load = useCallback((foreground = true) => {
     if (!isAdmin) {
       return;
     }
 
-    setLoading(true);
-    AgentBackend.getAgentRecords(agent, eventType, outcome, session).then(res => {
+    // Background refreshes must not raise the table's loading state: the poll
+    // below runs every few seconds and would otherwise cover the rows the
+    // operator is reading, and spin the refresh button permanently.
+    if (foreground) {
+      setLoading(true);
+    }
+    AgentBackend.getAgentRecords(agent, eventType, outcome, session, limit).then(res => {
       if (res.status === "ok") {
         setRecords(res.data || []);
         setError("");
@@ -120,9 +136,11 @@ export default function AgentRecordsPage({account}) {
     }).catch(err => {
       setError(err.message || String(err));
     }).then(() => {
-      setLoading(false);
+      if (foreground) {
+        setLoading(false);
+      }
     });
-  }, [agent, eventType, isAdmin, outcome, session]);
+  }, [agent, eventType, isAdmin, limit, outcome, session]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -141,10 +159,13 @@ export default function AgentRecordsPage({account}) {
       return;
     }
 
-    load();
-    const interval = setInterval(load, 3000);
+    load(true);
+    if (!autoRefresh) {
+      return undefined;
+    }
+    const interval = setInterval(() => load(false), 3000);
     return () => clearInterval(interval);
-  }, [isAdmin, load]);
+  }, [autoRefresh, isAdmin, load]);
 
   useEffect(() => {
     setSessionDraft(session);
@@ -250,8 +271,22 @@ export default function AgentRecordsPage({account}) {
     <div style={{padding: "24px"}}>
       <Space style={{display: "flex", justifyContent: "space-between", marginBottom: 16}}>
         <Title level={3} style={{margin: 0}}>{i18next.t("agent:Agent Records")}</Title>
-        <Button icon={<ReloadOutlined />} loading={loading} onClick={load}>{i18next.t("general:Refresh")}</Button>
+        <Space>
+          <Switch
+            checked={autoRefresh}
+            checkedChildren={i18next.t("agent:Auto refresh")}
+            unCheckedChildren={i18next.t("agent:Auto refresh")}
+            onChange={setAutoRefresh}
+          />
+          <Button icon={<ReloadOutlined />} loading={loading} onClick={() => load(true)}>{i18next.t("general:Refresh")}</Button>
+        </Space>
       </Space>
+      <Alert
+        type="info"
+        showIcon
+        message={i18next.t("agent:Records are kept in memory only and are lost when Gateway restarts")}
+        style={{marginBottom: 16}}
+      />
       <Space wrap style={{marginBottom: 16}}>
         <Select
           value={agent}
@@ -276,6 +311,12 @@ export default function AgentRecordsPage({account}) {
           ]}
           onChange={value => setFilter("outcome", value)}
           style={{width: 160}}
+        />
+        <Select
+          value={limit}
+          options={limitOptions.map(value => ({label: i18next.t("agent:Last {count} records").replace("{count}", value), value: value}))}
+          onChange={value => setFilter("limit", value === defaultLimit ? "" : String(value))}
+          style={{width: 170}}
         />
         <Input.Search
           allowClear
