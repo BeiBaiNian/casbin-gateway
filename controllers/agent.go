@@ -120,18 +120,20 @@ func (c *ApiController) GetAgentSessions() {
 	c.ResponseOk(agentmonitor.ListSessions(agentmonitor.RecordQuery{}))
 }
 
-// AddAgentRecord accepts reports from a hook or MCP process launched locally
-// by Gateway. Those processes have no browser session, so loopback is the
-// authorization boundary.
+// AddAgentRecord accepts reports from a hook or MCP process launched locally by
+// Gateway. Those processes have no browser session, so they authenticate with
+// the per-installation credential issued at Patch time. Loopback alone is not a
+// trust boundary: behind a reverse proxy every caller looks local, and any web
+// page the operator visits can reach 127.0.0.1.
 func (c *ApiController) AddAgentRecord() {
-	remoteAddr := c.Ctx.Request.RemoteAddr
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		host = remoteAddr
+	ip, ok := c.directLoopbackClient()
+	if !ok {
+		c.ResponseError("agent record ingestion is limited to direct loopback requests")
+		return
 	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		c.ResponseError("agent record ingestion is limited to loopback")
+	agentId, ok := agentpatch.ValidateIngestToken(c.Ctx.Input.Header(agentmonitor.IngestTokenHeader))
+	if !ok {
+		c.ResponseError("agent record ingestion requires a valid installation token")
 		return
 	}
 
@@ -144,9 +146,36 @@ func (c *ApiController) AddAgentRecord() {
 		c.ResponseError("agent is required")
 		return
 	}
+	// The token decides which agent a reporter may speak for, so a compromised
+	// hook cannot attribute its activity to a different installation.
+	if agentId != "" && !strings.EqualFold(record.Agent, agentId) {
+		c.ResponseError("agent does not match the installation this token was issued for")
+		return
+	}
 	record.ClientIp = ip.String()
 	agentmonitor.AddRecord(&record)
 	c.ResponseOk()
+}
+
+// directLoopbackClient reports the peer address, rejecting anything that was
+// relayed by a proxy. A forwarding header means the real client is remote even
+// though the socket is local.
+func (c *ApiController) directLoopbackClient() (net.IP, bool) {
+	for _, header := range []string{"X-Forwarded-For", "X-Real-Ip", "Forwarded"} {
+		if c.Ctx.Input.Header(header) != "" {
+			return nil, false
+		}
+	}
+	remoteAddr := c.Ctx.Request.RemoteAddr
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return nil, false
+	}
+	return ip, true
 }
 
 // readAgentPatchTarget resolves the request body against the installations that

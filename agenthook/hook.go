@@ -59,6 +59,7 @@ func Run(args []string, input io.Reader) error {
 	recordsURL := flags.String("records-url", "", "Gateway agent record endpoint")
 	agentPath := flags.String("agent-path", "", "agent installation path")
 	owner := flags.String("user", "", "agent installation owner")
+	ingestToken := flags.String("ingest-token", "", "credential presented to the Gateway record endpoint")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -88,6 +89,9 @@ func Run(args []string, input io.Reader) error {
 		return err
 	}
 	request.Header.Set("Content-Type", "application/json")
+	if *ingestToken != "" {
+		request.Header.Set(agentmonitor.IngestTokenHeader, *ingestToken)
+	}
 	response, err := (&http.Client{Timeout: reportTimeout}).Do(request)
 	if err != nil {
 		return err

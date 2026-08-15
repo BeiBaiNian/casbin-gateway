@@ -21,6 +21,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// IngestTokenHeader carries the per-installation secret that a hook or MCP
+// recorder presents when reporting a record. It lives here so that the reporter
+// packages and the patcher packages can share it without importing each other.
+const IngestTokenHeader = "X-Casbin-Gateway-Agent-Token"
+
 // Record is one observed agent behaviour. It is deliberately independent from
 // Gateway's HTTP traffic record and is retained only in the live monitor store.
 type Record struct {

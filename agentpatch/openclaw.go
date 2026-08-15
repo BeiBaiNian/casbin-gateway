@@ -21,6 +21,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/apache/casbin-gateway/agentmonitor"
 )
 
 const (
@@ -50,6 +52,14 @@ func (p openclawPatcher) Patch(target Target) error {
 	if err != nil {
 		return err
 	}
+	token, err := IssueIngestToken(target)
+	if err != nil {
+		return err
+	}
+	handler, err := renderOpenclawHandler(target, token)
+	if err != nil {
+		return err
+	}
 	return Apply(target, func(changes *ChangeSet) error {
 		if err := changes.MkdirAll(layout.hookDir); err != nil {
 			return err
@@ -57,7 +67,7 @@ func (p openclawPatcher) Patch(target Target) error {
 		if err := changes.WriteFile(filepath.Join(layout.hookDir, "HOOK.md"), []byte(openclawHookManifest), 0o644); err != nil {
 			return err
 		}
-		if err := changes.WriteFile(filepath.Join(layout.hookDir, "handler.js"), []byte(renderOpenclawHandler(target)), 0o644); err != nil {
+		if err := changes.WriteFile(filepath.Join(layout.hookDir, "handler.js"), []byte(handler), 0o644); err != nil {
 			return err
 		}
 		return enableOpenclawHook(changes, layout.configPath)
@@ -65,7 +75,10 @@ func (p openclawPatcher) Patch(target Target) error {
 }
 
 func (openclawPatcher) Unpatch(target Target) error {
-	return Revert(target)
+	if err := Revert(target); err != nil {
+		return err
+	}
+	return RevokeIngestToken(target)
 }
 
 func (p openclawPatcher) Status(target Target) (Status, error) {
@@ -116,10 +129,23 @@ func (p openclawPatcher) layoutOf(target Target) (openclawLayout, error) {
 	}, nil
 }
 
-func renderOpenclawHandler(target Target) string {
-	handler := strings.ReplaceAll(openclawHookHandler, "__CASBIN_GATEWAY_RECORDS_URL__", jsonString(recordsURL()))
-	handler = strings.ReplaceAll(handler, "__CASBIN_GATEWAY_AGENT_PATH__", jsonString(target.Path))
-	return strings.ReplaceAll(handler, "__CASBIN_GATEWAY_OWNER__", jsonString(target.Owner))
+func renderOpenclawHandler(target Target, ingestToken string) (string, error) {
+	url, err := recordsURL()
+	if err != nil {
+		return "", err
+	}
+	replacements := map[string]string{
+		"__CASBIN_GATEWAY_RECORDS_URL__":         jsonString(url),
+		"__CASBIN_GATEWAY_AGENT_PATH__":          jsonString(target.Path),
+		"__CASBIN_GATEWAY_OWNER__":               jsonString(target.Owner),
+		"__CASBIN_GATEWAY_INGEST_TOKEN__":        jsonString(ingestToken),
+		"__CASBIN_GATEWAY_INGEST_TOKEN_HEADER__": jsonString(agentmonitor.IngestTokenHeader),
+	}
+	handler := openclawHookHandler
+	for placeholder, value := range replacements {
+		handler = strings.ReplaceAll(handler, placeholder, value)
+	}
+	return handler, nil
 }
 
 func enableOpenclawHook(changes *ChangeSet, configPath string) error {

@@ -63,28 +63,30 @@ var tools = []map[string]any{{
 
 // Server serves one MCP stdio session.
 type Server struct {
-	in         io.Reader
-	out        io.Writer
-	agentID    string
-	agentPath  string
-	user       string
-	recordsURL string
-	client     *http.Client
+	in          io.Reader
+	out         io.Writer
+	agentID     string
+	agentPath   string
+	user        string
+	recordsURL  string
+	ingestToken string
+	client      *http.Client
 
 	queue     chan *agentmonitor.Record
 	reporting sync.WaitGroup
 }
 
-func newServer(in io.Reader, out io.Writer, agentID, agentPath, user, recordsURL string) *Server {
+func newServer(in io.Reader, out io.Writer, agentID, agentPath, user, recordsURL, ingestToken string) *Server {
 	return &Server{
-		in:         in,
-		out:        out,
-		agentID:    agentID,
-		agentPath:  agentPath,
-		user:       user,
-		recordsURL: recordsURL,
-		client:     &http.Client{Timeout: reportTimeout},
-		queue:      make(chan *agentmonitor.Record, reportQueueDepth),
+		in:          in,
+		out:         out,
+		agentID:     agentID,
+		agentPath:   agentPath,
+		user:        user,
+		recordsURL:  recordsURL,
+		ingestToken: ingestToken,
+		client:      &http.Client{Timeout: reportTimeout},
+		queue:       make(chan *agentmonitor.Record, reportQueueDepth),
 	}
 }
 
@@ -110,10 +112,11 @@ func Run(args []string) error {
 	agentID := flags.String("agent", "claude-desktop", "agent that launched this server")
 	agentPath := flags.String("agent-path", "", "agent installation path")
 	user := flags.String("user", "", "agent installation owner")
+	ingestToken := flags.String("ingest-token", "", "credential presented to the Gateway record endpoint")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	return newServer(os.Stdin, os.Stdout, *agentID, *agentPath, *user, *recordsURL).Serve()
+	return newServer(os.Stdin, os.Stdout, *agentID, *agentPath, *user, *recordsURL, *ingestToken).Serve()
 }
 
 // Serve processes line-delimited JSON-RPC messages until the client closes
@@ -240,7 +243,15 @@ func (s *Server) startReporter() {
 			if err != nil {
 				continue
 			}
-			response, err := s.client.Post(s.recordsURL, "application/json", bytes.NewReader(body))
+			request, err := http.NewRequest(http.MethodPost, s.recordsURL, bytes.NewReader(body))
+			if err != nil {
+				continue
+			}
+			request.Header.Set("Content-Type", "application/json")
+			if s.ingestToken != "" {
+				request.Header.Set(agentmonitor.IngestTokenHeader, s.ingestToken)
+			}
+			response, err := s.client.Do(request)
 			if err == nil {
 				_ = response.Body.Close()
 			}

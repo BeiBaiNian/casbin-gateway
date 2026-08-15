@@ -72,13 +72,17 @@ func (claudeCodePatcher) Unpatch(target Target) error {
 		return err
 	}
 	config, mode, exists, err := readJSONConfig(path)
-	if err != nil || !exists {
+	if err != nil {
 		return err
 	}
-	if !removeClaudeCodeHooks(config) {
-		return nil
+	// The credential is revoked on every unpatch path, including the ones that
+	// change no file, so a stale hook can never keep reporting.
+	if exists && removeClaudeCodeHooks(config) {
+		if err := writeJSONConfig(path, config, mode); err != nil {
+			return err
+		}
 	}
-	return writeJSONConfig(path, config, mode)
+	return RevokeIngestToken(target)
 }
 
 func (claudeCodePatcher) Status(target Target) (Status, error) {
@@ -118,13 +122,22 @@ func claudeCodeHookCommand(target Target) (string, []string, error) {
 	if err != nil {
 		return "", nil, fmt.Errorf("resolve Gateway executable: %w", err)
 	}
+	url, err := recordsURL()
+	if err != nil {
+		return "", nil, err
+	}
+	token, err := IssueIngestToken(target)
+	if err != nil {
+		return "", nil, err
+	}
 	return executable, []string{
 		agenthook.Subcommand,
 		agenthook.OwnershipFlag,
 		"--agent", "claude-code",
-		"--records-url", recordsURL(),
+		"--records-url", url,
 		"--agent-path", target.Path,
 		"--user", target.Owner,
+		"--ingest-token", token,
 	}, nil
 }
 

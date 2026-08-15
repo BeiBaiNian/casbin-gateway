@@ -96,9 +96,11 @@ func (p claudeDesktopPatcher) Unpatch(target Target) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		return agentmonitor.DisableCoworkMonitor(target.Path)
+		if err := agentmonitor.DisableCoworkMonitor(target.Path); err != nil {
+			return err
+		}
 	}
-	return nil
+	return RevokeIngestToken(target)
 }
 
 // updateClaudeDesktopServers applies mutate to the mcpServers object and writes
@@ -177,6 +179,14 @@ func (p claudeDesktopPatcher) serverEntry(target Target) (map[string]any, error)
 	if err != nil {
 		return nil, fmt.Errorf("resolve Gateway executable: %w", err)
 	}
+	url, err := recordsURL()
+	if err != nil {
+		return nil, err
+	}
+	token, err := IssueIngestToken(target)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"command": executable,
 		"args": []string{
@@ -184,7 +194,8 @@ func (p claudeDesktopPatcher) serverEntry(target Target) (map[string]any, error)
 			"--agent", p.AgentId(),
 			"--agent-path", target.Path,
 			"--user", target.Owner,
-			"--records-url", recordsURL(),
+			"--records-url", url,
+			"--ingest-token", token,
 		},
 	}, nil
 }

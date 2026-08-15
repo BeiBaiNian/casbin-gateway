@@ -15,6 +15,8 @@
 const RECORDS_URL = __CASBIN_GATEWAY_RECORDS_URL__;
 const AGENT_PATH = __CASBIN_GATEWAY_AGENT_PATH__;
 const OWNER = __CASBIN_GATEWAY_OWNER__;
+const INGEST_TOKEN = __CASBIN_GATEWAY_INGEST_TOKEN__;
+const INGEST_TOKEN_HEADER = __CASBIN_GATEWAY_INGEST_TOKEN_HEADER__;
 const POST_TIMEOUT_MS = 3000;
 const MAX_OBJECT_CHARS = 64 * 1024;
 
@@ -46,9 +48,11 @@ function objectFor(context) {
 function post(record) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), POST_TIMEOUT_MS);
+  const headers = { "Content-Type": "application/json" };
+  if (INGEST_TOKEN) headers[INGEST_TOKEN_HEADER] = INGEST_TOKEN;
   fetch(RECORDS_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(record),
     signal: controller.signal,
   }).catch(() => {}).finally(() => clearTimeout(timer));

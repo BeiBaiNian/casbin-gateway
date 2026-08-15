@@ -16,14 +16,25 @@ package agentpatch
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/apache/casbin-gateway/conf"
 )
 
-func recordsURL() string {
-	port := conf.GetConfigString("httpport")
+const defaultHttpPort = "17000"
+
+// recordsURL is the loopback endpoint a patched installation reports to. A
+// malformed httpport would bake an unreachable URL into an agent's config, so
+// it is rejected while the operator can still see the error.
+func recordsURL() (string, error) {
+	port := strings.TrimSpace(conf.GetConfigString("httpport"))
 	if port == "" {
-		port = "17000"
+		port = defaultHttpPort
 	}
-	return fmt.Sprintf("http://127.0.0.1:%s/api/add-agent-record", port)
+	number, err := strconv.Atoi(port)
+	if err != nil || number <= 0 || number > 65535 {
+		return "", fmt.Errorf("cannot build the agent record endpoint: httpport %q is not a valid port", port)
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d/api/add-agent-record", number), nil
 }
