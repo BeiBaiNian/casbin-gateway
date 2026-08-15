@@ -39,6 +39,10 @@ func (claudeDesktopPatcher) AgentId() string { return "claude-desktop" }
 
 func (claudeDesktopPatcher) Supported() bool { return true }
 
+// Patch registers exactly one MCP server entry and leaves the rest of
+// claude_desktop_config.json alone. Claude Desktop rewrites that file whenever
+// the user edits their servers, so a whole-file backup could never be restored
+// safely; owning a single key keeps Patch and Unpatch reliable regardless.
 func (p claudeDesktopPatcher) Patch(target Target) error {
 	configPath, err := p.configPath(target)
 	if err != nil {
@@ -48,50 +52,83 @@ func (p claudeDesktopPatcher) Patch(target Target) error {
 	if err != nil {
 		return err
 	}
-	if err := Apply(target, func(changes *ChangeSet) error {
-		if err := changes.MkdirAll(filepath.Dir(configPath)); err != nil {
-			return err
-		}
-		config, err := readJSONObject(changes, configPath)
-		if err != nil {
-			return err
-		}
-		servers, exists := config["mcpServers"]
-		if !exists {
-			servers = map[string]any{}
-			config["mcpServers"] = servers
-		}
-		object, ok := objectAt(servers)
-		if !ok {
-			return errors.New("mcpServers must be a JSON object")
-		}
-		object[claudeDesktopServerName] = entry
-		updated, err := json.MarshalIndent(config, "", "  ")
-		if err != nil {
-			return err
-		}
-		return changes.WriteFile(configPath, append(updated, '\n'), 0o600)
-	}); err != nil {
+
+	stateMutex.Lock()
+	err = updateClaudeDesktopServers(configPath, func(servers map[string]any) bool {
+		servers[claudeDesktopServerName] = entry
+		return true
+	})
+	stateMutex.Unlock()
+	if err != nil {
 		return err
 	}
+
 	if runtime.GOOS != "windows" {
 		return nil
 	}
 	if err := agentmonitor.EnableCoworkMonitor(target.Path, target.Owner); err != nil {
-		_ = Revert(target)
+		_ = p.Unpatch(target)
 		return err
 	}
 	return nil
 }
 
-func (claudeDesktopPatcher) Unpatch(target Target) error {
-	if err := Revert(target); err != nil {
+func (p claudeDesktopPatcher) Unpatch(target Target) error {
+	configPath, err := p.configPath(target)
+	if err != nil {
 		return err
 	}
+
+	stateMutex.Lock()
+	err = updateClaudeDesktopServers(configPath, func(servers map[string]any) bool {
+		if _, found := servers[claudeDesktopServerName]; !found {
+			return false
+		}
+		delete(servers, claudeDesktopServerName)
+		return true
+	})
+	// Discard any manifest written by an earlier release that backed up the whole
+	// file, without restoring it over the user's current configuration.
+	discardStateLocked(target)
+	stateMutex.Unlock()
+	if err != nil {
+		return err
+	}
+
 	if runtime.GOOS == "windows" {
 		return agentmonitor.DisableCoworkMonitor(target.Path)
 	}
 	return nil
+}
+
+// updateClaudeDesktopServers applies mutate to the mcpServers object and writes
+// the file back only when mutate reports a change.
+func updateClaudeDesktopServers(configPath string, mutate func(map[string]any) bool) error {
+	config, mode, exists, err := readJSONConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	servers, found := config["mcpServers"]
+	if !found {
+		servers = map[string]any{}
+	}
+	object, ok := objectAt(servers)
+	if !ok {
+		return errors.New("mcpServers must be a JSON object")
+	}
+	if !mutate(object) {
+		return nil
+	}
+	if len(object) == 0 {
+		delete(config, "mcpServers")
+	} else {
+		config["mcpServers"] = object
+	}
+	if !exists {
+		mode = 0o600
+	}
+	return writeJSONConfig(configPath, config, mode)
 }
 
 func (p claudeDesktopPatcher) Status(target Target) (Status, error) {
@@ -105,9 +142,6 @@ func (p claudeDesktopPatcher) Status(target Target) (Status, error) {
 	}
 	if !exists || !hasClaudeDesktopServer(config) {
 		return Status{Detail: "MCP recorder is not registered"}, nil
-	}
-	if !IsApplied(target) {
-		return Status{Patched: true, Detail: "MCP recorder is registered outside Gateway"}, nil
 	}
 	if runtime.GOOS != "windows" {
 		return Status{Patched: true, Detail: "MCP recorder registered; restart Claude Desktop to apply it"}, nil

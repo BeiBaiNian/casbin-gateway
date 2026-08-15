@@ -18,14 +18,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apache/casbin-gateway/conf"
 )
+
+// gatewayEntryName is the identifier Gateway writes into every agent
+// configuration it touches, so operators can find and remove it by hand.
+const gatewayEntryName = "casbin-gateway-agent-monitor"
 
 type changeKind string
 
@@ -130,7 +136,9 @@ func Apply(target Target, apply func(*ChangeSet) error) error {
 	stateMutex.Lock()
 	defer stateMutex.Unlock()
 
-	if err := revertLocked(target); err != nil {
+	// A previous patch whose files were edited externally must not block a fresh
+	// one: revertLocked has already cleaned up the tracked state by that point.
+	if err := revertLocked(target); err != nil && !errors.As(err, new(*PartialRevertError)) {
 		return err
 	}
 	changes := &ChangeSet{
@@ -158,18 +166,32 @@ func Revert(target Target) error {
 	return revertLocked(target)
 }
 
+// revertLocked restores what it can and always clears the tracked state, so an
+// installation can never end up unable to unpatch and unable to re-patch.
 func revertLocked(target Target) error {
 	saved, err := loadManifest(target)
 	if err != nil || saved == nil {
 		return err
 	}
-	if err := rollback(saved, backupDir(target)); err != nil {
-		return err
+	rollbackErr := rollback(saved, backupDir(target))
+	if rollbackErr != nil && !errors.As(rollbackErr, new(*PartialRevertError)) {
+		return rollbackErr
 	}
 	if err := os.Remove(manifestPath(target)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return os.RemoveAll(backupDir(target))
+	if err := os.RemoveAll(backupDir(target)); err != nil {
+		return err
+	}
+	return rollbackErr
+}
+
+// discardStateLocked drops a target's manifest and backups without restoring
+// them. Patchers that own a precise entry rather than a whole file use it to
+// clear state written by an earlier, backup-based release.
+func discardStateLocked(target Target) {
+	_ = os.Remove(manifestPath(target))
+	_ = os.RemoveAll(backupDir(target))
 }
 
 // IsApplied reports whether Gateway has the manifest needed to restore target.
@@ -180,58 +202,74 @@ func IsApplied(target Target) bool {
 	return err == nil && saved != nil
 }
 
+// rollback restores the files this patch still owns. A file that changed after
+// Patch is left exactly as the operator or the agent left it: refusing the whole
+// unpatch instead would strand the installation, because Apply reverts first and
+// so a stale manifest would block re-patching too. Skipped files are reported so
+// the caller can tell the operator what to clean up by hand.
 func rollback(saved *manifest, backups string) error {
-	if err := verifyPatchOwnership(saved); err != nil {
-		return err
-	}
-
 	var first error
+	var skipped []string
 	for index := len(saved.Changes) - 1; index >= 0; index-- {
 		item := saved.Changes[index]
-		var err error
-		switch item.Kind {
-		case changeDir:
+		if item.Kind == changeDir {
 			_ = os.Remove(item.Path)
-		case changeFile:
-			if item.Backup == "" {
-				err = os.Remove(item.Path)
-				if os.IsNotExist(err) {
-					err = nil
-				}
-			} else if content, readErr := os.ReadFile(filepath.Join(backups, item.Backup)); readErr != nil {
-				err = readErr
-			} else {
-				err = os.WriteFile(item.Path, content, item.Mode)
-				if err == nil {
-					err = os.Chmod(item.Path, item.Mode)
-				}
+			continue
+		}
+		if !patchStillOwns(item) {
+			skipped = append(skipped, item.Path)
+			continue
+		}
+
+		var err error
+		if item.Backup == "" {
+			err = os.Remove(item.Path)
+			if os.IsNotExist(err) {
+				err = nil
+			}
+		} else if content, readErr := os.ReadFile(filepath.Join(backups, item.Backup)); readErr != nil {
+			err = readErr
+		} else {
+			err = os.WriteFile(item.Path, content, item.Mode)
+			if err == nil {
+				err = os.Chmod(item.Path, item.Mode)
 			}
 		}
 		if err != nil && first == nil {
 			first = fmt.Errorf("restore %s: %w", item.Path, err)
 		}
 	}
+	if first == nil && len(skipped) != 0 {
+		return &PartialRevertError{Paths: skipped}
+	}
 	return first
 }
 
-func verifyPatchOwnership(saved *manifest) error {
-	for _, item := range saved.Changes {
-		if item.Kind != changeFile {
-			continue
-		}
-		content, err := os.ReadFile(item.Path)
-		if err != nil {
-			return fmt.Errorf("cannot safely unpatch %s: %w", item.Path, err)
-		}
-		info, err := os.Stat(item.Path)
-		if err != nil {
-			return fmt.Errorf("cannot safely unpatch %s: %w", item.Path, err)
-		}
-		if item.PatchedHash == "" || item.PatchedHash != contentHash(content) || item.PatchedMode != info.Mode().Perm() {
-			return fmt.Errorf("cannot safely unpatch %s because it changed after Patch", item.Path)
-		}
+// PartialRevertError reports files that Unpatch deliberately left untouched
+// because they changed after Patch. The patch state is still cleaned up, so the
+// installation can be patched again.
+type PartialRevertError struct {
+	Paths []string
+}
+
+func (e *PartialRevertError) Error() string {
+	return fmt.Sprintf("monitoring was disabled, but %s changed after Patch and was left unmodified; remove any remaining %q entry by hand",
+		strings.Join(e.Paths, ", "), gatewayEntryName)
+}
+
+// patchStillOwns reports whether a file is byte-for-byte what Patch wrote.
+func patchStillOwns(item change) bool {
+	content, err := os.ReadFile(item.Path)
+	if err != nil {
+		// A file the patch created and something else deleted is already in the
+		// desired post-unpatch state; a file we cannot read is not ours to touch.
+		return os.IsNotExist(err) && item.Backup == ""
 	}
-	return nil
+	info, err := os.Stat(item.Path)
+	if err != nil {
+		return false
+	}
+	return item.PatchedHash != "" && item.PatchedHash == contentHash(content) && item.PatchedMode == info.Mode().Perm()
 }
 
 func stateDir() string {
