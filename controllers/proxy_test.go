@@ -258,3 +258,23 @@ func TestForwardToChannel(t *testing.T) {
 		t.Errorf("Content-Type = %s, expected application/json", header)
 	}
 }
+
+// A base URL carrying the /v1 prefix (the form suggested by the web UI
+// presets) must not produce a doubled /v1/v1 path upstream.
+func TestForwardToChannelWithV1BaseUrl(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("upstream path = %s, the /v1 prefix was doubled", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer upstream.Close()
+
+	channel := &object.Channel{Owner: "admin", Name: "v1", Type: "openai", BaseUrl: upstream.URL + "/v1", ApiKey: "sk-v1"}
+	c, recorder := newTestApiController()
+	_, _, written := c.forwardToChannel(channel, []byte(`{"model":"gpt-4"}`), false, true)
+	if !written || recorder.Code != http.StatusOK {
+		t.Errorf("forwarding failed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
+	}
+}

@@ -202,6 +202,34 @@ func validateBaseUrl(baseUrl string) error {
 	return nil
 }
 
+// BuildOpenAiUrl joins an OpenAI-compatible endpoint onto a channel base URL.
+//
+// Base URLs may be configured either bare ("https://api.openai.com") or with
+// the standard /v1 prefix ("https://api.openai.com/v1", the form used by the
+// web UI presets and most upstream docs). Both forms are normalized here so
+// the endpoint is never doubled, and trailing slashes are tolerated. A
+// subpath ending in /v1, as used by some API gateways, is recognized as well.
+// endpoint must start with "/" and omit the /v1 prefix, e.g.
+// "/chat/completions" or "/models".
+//
+// Every OpenAI-compatible upstream URL must be built through this function,
+// so future endpoints inherit the same normalization.
+func BuildOpenAiUrl(baseUrl, endpoint string) string {
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return ""
+	}
+	u.Path = strings.TrimRight(u.Path, "/")
+	if u.Path == "" {
+		u.Path = "/v1"
+	} else if !strings.HasSuffix(u.Path, "/v1") {
+		u.Path += "/v1"
+	}
+	u.Path += endpoint
+	u.RawPath = ""
+	return u.String()
+}
+
 func AddChannel(channel *Channel) (bool, error) {
 	if err := validateChannel(channel); err != nil {
 		return false, err
@@ -275,7 +303,7 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 
 	probeUrl := strings.TrimRight(stored.BaseUrl, "/")
 	if stored.Type == "openai" {
-		probeUrl += "/v1/models"
+		probeUrl = BuildOpenAiUrl(stored.BaseUrl, "/models")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, probeUrl, nil)

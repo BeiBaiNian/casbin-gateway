@@ -170,8 +170,9 @@ func (c *ApiController) ChatCompletions() {
 // the next channel. The response of the last channel is always relayed, even
 // when its status would otherwise be retried.
 func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte, stream bool, isLast bool) (int, string, bool) {
-	// The path is hardcoded to the OpenAI-compatible /v1/chat/completions.
-	upstreamUrl := strings.TrimRight(channel.BaseUrl, "/") + "/v1/chat/completions"
+	// The endpoint is built through object.BuildOpenAiUrl, which normalizes
+	// base URLs that already carry the /v1 prefix so it is never doubled.
+	upstreamUrl := object.BuildOpenAiUrl(channel.BaseUrl, "/chat/completions")
 
 	// The context is cancelled when this function returns, which happens only
 	// after the response body has been relayed to the client.
