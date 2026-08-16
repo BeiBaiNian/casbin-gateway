@@ -79,6 +79,7 @@
     "API Key": "API 密钥",
     "API Key hint": "已保存的密钥不会返回给浏览器。保持 *** 不变即可沿用当前密钥，清空该字段则删除密钥。",
     "Base URL": "基础 URL",
+    "Base URL hint": "实际请求将发往",
     "Channel": "渠道",
     "Channel added successfully": "渠道添加成功",
     "Channel deleted successfully": "渠道删除成功",

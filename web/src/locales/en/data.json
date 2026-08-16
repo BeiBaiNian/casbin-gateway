@@ -79,6 +79,7 @@
     "API Key": "API Key",
     "API Key hint": "The stored key is never sent back to the browser. Leave *** as it is to keep the current key, or clear the field to remove it.",
     "Base URL": "Base URL",
+    "Base URL hint": "Requests will be sent to",
     "Channel": "Channel",
     "Channel added successfully": "Channel added successfully",
     "Channel deleted successfully": "Channel deleted successfully",

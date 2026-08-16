@@ -202,6 +202,25 @@ func validateBaseUrl(baseUrl string) error {
 	return nil
 }
 
+// BuildOpenAiUrl joins an OpenAI-compatible endpoint onto a channel base URL.
+// The base URL may be bare, already carry the /v1 prefix or already end with
+// the endpoint itself; none of those forms are doubled.
+func BuildOpenAiUrl(baseUrl string, endpoint string) (string, error) {
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return "", fmt.Errorf("invalid base URL: %s", err.Error())
+	}
+
+	path := strings.TrimSuffix(strings.TrimRight(u.Path, "/"), endpoint)
+	if !strings.HasSuffix(path, "/v1") {
+		path += "/v1"
+	}
+
+	u.Path = path + endpoint
+	u.RawPath = ""
+	return u.String(), nil
+}
+
 func AddChannel(channel *Channel) (bool, error) {
 	if err := validateChannel(channel); err != nil {
 		return false, err
@@ -273,16 +292,16 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 		return false, 0, err.Error()
 	}
 
-	probeUrl := strings.TrimRight(stored.BaseUrl, "/")
-	if stored.Type == "openai" {
-		probeUrl += "/v1/models"
+	probeUrl, err := BuildOpenAiUrl(stored.BaseUrl, "/models")
+	if err != nil {
+		return false, 0, err.Error()
 	}
 
 	req, err := http.NewRequest(http.MethodGet, probeUrl, nil)
 	if err != nil {
 		return false, 0, err.Error()
 	}
-	if stored.Type == "openai" && stored.ApiKey != "" {
+	if stored.ApiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+stored.ApiKey)
 	}
 

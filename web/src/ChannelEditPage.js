@@ -29,6 +29,33 @@ const BASE_URL_PRESETS = {
   custom: ["https://oneapi.example.com", "https://api.deepseek.com/v1", "https://api.moonshot.cn/v1"],
 };
 
+// The types the gateway forwards as OpenAI-formatted requests.
+const OPENAI_COMPATIBLE_TYPES = ["openai", "custom"];
+
+// Mirrors object.BuildOpenAiUrl on the server.
+function buildOpenAiUrl(baseUrl, endpoint) {
+  let url;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return "";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "";
+  }
+
+  let path = url.pathname.replace(/\/+$/, "");
+  if (path.endsWith(endpoint)) {
+    path = path.slice(0, path.length - endpoint.length);
+  }
+  if (!path.endsWith("/v1")) {
+    path += "/v1";
+  }
+
+  url.pathname = path + endpoint;
+  return url.toString();
+}
+
 const MODEL_PRESETS = {
   openai: ["gpt-5.5", "gpt-5", "gpt-5-mini", "o3", "o4-mini"],
   claude: ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"],
@@ -105,6 +132,23 @@ class ChannelEditPage extends React.Component {
       this.setState({testing: false});
       Setting.showMessage("error", `${i18next.t("channel:Failed to test")}: ${error}`);
     });
+  }
+
+  renderUpstreamUrl(channel) {
+    if (!OPENAI_COMPATIBLE_TYPES.includes(channel.type)) {
+      return null;
+    }
+
+    const upstreamUrl = buildOpenAiUrl(channel.baseUrl, "/chat/completions");
+    if (upstreamUrl === "") {
+      return null;
+    }
+
+    return (
+      <div style={{color: "#888", fontSize: "12px", marginTop: "4px"}}>
+        {i18next.t("channel:Base URL hint")}: <span style={{fontFamily: "monospace"}}>{upstreamUrl}</span>
+      </div>
+    );
   }
 
   render() {
@@ -201,6 +245,7 @@ class ChannelEditPage extends React.Component {
               }}
               placeholder="https://api.openai.com/v1"
             />
+            {this.renderUpstreamUrl(channel)}
           </Col>
         </Row>
 
