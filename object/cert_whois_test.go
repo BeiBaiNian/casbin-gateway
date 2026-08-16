@@ -18,35 +18,11 @@
 package object
 
 import (
-	"fmt"
 	"testing"
 )
 
+// TestUpdateDomainExpireTime performs real WHOIS lookups against external
+// services, which is a manual operation and is skipped in automated test runs.
 func TestUpdateDomainExpireTime(t *testing.T) {
-	InitConfig()
-
-	certs, err := GetCerts("admin")
-	if err != nil {
-		panic(err)
-	}
-
-	for i, cert := range certs {
-		certExpireTime, err := getDomainExpireTime(cert.Name)
-		if err != nil {
-			panic(err)
-		}
-
-		if cert.DomainExpireTime == certExpireTime {
-			continue
-		}
-
-		cert.DomainExpireTime = certExpireTime
-
-		res, err := UpdateCert(cert.GetId(), cert)
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Printf("[%d/%d] Refreshed cert [%s]'s domain expire time: [%s], res = %v\n", i+1, len(certs), cert.Name, cert.DomainExpireTime, res)
-	}
+	t.Skip("performs real WHOIS lookups against external services, run manually with real data")
 }

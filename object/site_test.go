@@ -19,40 +19,49 @@ package object
 
 import (
 	"testing"
-
-	"github.com/apache/casbin-gateway/casdoor"
 )
 
-func TestCheckNode(t *testing.T) {
-	InitConfig()
-	casdoor.InitCasdoorConfig()
+// TestUpdateSiteStatus verifies that UpdateSite persists a status change
+// ("Inactive") for a site fixture. Note: the createTestSite fixture has no
+// nodes, so the checkNodes() call above only exercises the empty-node path
+// and none of its ping/process side effects are executed.
+func TestUpdateSiteStatus(t *testing.T) {
+	createTestSite(t, "caswaf_my")
 
-	site, err := getSite("admin", "caswaf_my")
+	site, err := getSite(testOwner, "caswaf_my")
 	if err != nil {
-		panic(err)
+		t.Fatalf("getSite() error: %v", err)
 	}
 	if site == nil {
-		panic("site should not be nil")
+		t.Fatalf("site should not be nil")
 	}
 
 	site.Status = "Active"
-	err = site.checkNodes()
-	if err != nil {
-		panic(err)
+	if err = site.checkNodes(); err != nil {
+		t.Fatalf("checkNodes() error: %v", err)
 	}
 
-	site, err = getSite("admin", "caswaf_my")
+	site, err = getSite(testOwner, "caswaf_my")
 	if err != nil {
-		panic(err)
+		t.Fatalf("getSite() error: %v", err)
 	}
 	if site == nil {
-		panic("site should not be nil")
+		t.Fatalf("site should not be nil")
 	}
 
 	site.Status = "Inactive"
+	if _, err = UpdateSite(site.GetId(), site); err != nil {
+		t.Fatalf("UpdateSite() error: %v", err)
+	}
 
-	_, err = UpdateSite(site.GetId(), site)
+	updated, err := getSite(testOwner, "caswaf_my")
 	if err != nil {
-		panic(err)
+		t.Fatalf("getSite() error: %v", err)
+	}
+	if updated == nil {
+		t.Fatalf("site should not be nil")
+	}
+	if updated.Status != "Inactive" {
+		t.Fatalf("expected site status to be \"Inactive\", got %q", updated.Status)
 	}
 }

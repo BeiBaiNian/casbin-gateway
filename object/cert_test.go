@@ -18,146 +18,72 @@
 package object
 
 import (
-	"fmt"
 	"testing"
-
-	"github.com/apache/casbin-gateway/casdoor"
-	"github.com/apache/casbin-gateway/proxy"
-	"github.com/apache/casbin-gateway/util"
+	"time"
 )
 
 func TestGetCertExpireTime(t *testing.T) {
-	InitConfig()
+	certPem, notAfter := generateTestCertPem(t)
+	createTestCert(t, "casbin.com", certPem)
 
-	cert, err := getCert("admin", "casbin.com")
+	cert, err := getCert(testOwner, "casbin.com")
 	if err != nil {
-		panic(err)
+		t.Fatalf("getCert() error: %v", err)
+	}
+	if cert == nil {
+		t.Fatalf("cert should not be nil")
 	}
 
 	expireTime, err := getCertExpireTime(cert.Certificate)
 	if err != nil {
-		panic(err)
+		t.Fatalf("getCertExpireTime() error: %v", err)
 	}
 
-	println(expireTime)
+	expected := notAfter.Truncate(time.Second)
+	actual, err := time.Parse(time.RFC3339, expireTime)
+	if err != nil {
+		t.Fatalf("failed to parse expire time %q: %v", expireTime, err)
+	}
+	if !actual.Equal(expected) {
+		t.Fatalf("expire time = %s, want %s", actual.Format(time.RFC3339), expected.Format(time.RFC3339))
+	}
 }
 
+// TestRenewCert renews a real certificate via an external provider, which is a
+// manual operation and is skipped in automated test runs.
 func TestRenewCert(t *testing.T) {
-	InitConfig()
-	proxy.InitHttpClient()
-
-	cert, err := GetCert("admin/cert")
-	if err != nil {
-		panic(err)
-	}
-
-	res, err := RenewCert(cert)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Renewed cert: [%s] to [%s], res = %v\n", cert.Name, cert.ExpireTime, res)
+	t.Skip("renews a real certificate via an external provider, run manually with real data")
 }
 
+// TestRenewAllCerts renews real certificates via external providers, which is
+// a manual operation and is skipped in automated test runs.
 func TestRenewAllCerts(t *testing.T) {
-	InitConfig()
-	proxy.InitHttpClient()
-
-	certs, err := GetCerts("admin")
-	if err != nil {
-		panic(err)
-	}
-
-	filteredCerts := []*Cert{}
-	for _, cert := range certs {
-		if cert.Owner != "admin" || cert.Provider == "" {
-			continue
-		}
-
-		if cert.Provider == "GoDaddy" {
-			continue
-		}
-
-		var nearExpire bool
-		nearExpire, err = cert.isCertNearExpire()
-		if err != nil {
-			panic(err)
-		}
-		if !nearExpire {
-			continue
-		}
-
-		filteredCerts = append(filteredCerts, cert)
-	}
-
-	for i, cert := range filteredCerts {
-		if cert.Owner != "admin" || cert.Provider == "" {
-			continue
-		}
-
-		if cert.Provider == "GoDaddy" {
-			continue
-		}
-
-		var nearExpire bool
-		nearExpire, err = cert.isCertNearExpire()
-		if err != nil {
-			panic(err)
-		}
-		if !nearExpire {
-			continue
-		}
-
-		var res bool
-		res, err = RenewCert(cert)
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Printf("[%d/%d] Renewed cert: [%s] to [%s], res = %v\n", i+1, len(filteredCerts), cert.Name, cert.ExpireTime, res)
-	}
+	t.Skip("renews real certificates via external providers, run manually with real data")
 }
 
-func TestApplyAllCerts(t *testing.T) {
-	InitConfig()
-
-	baseDir := "F:/github_repos/nginx/conf/ssl"
-	certs, err := GetCerts("admin")
-	if err != nil {
-		panic(err)
-	}
-
-	for _, cert := range certs {
-		if cert.Certificate == "" || cert.PrivateKey == "" {
-			continue
-		}
-
-		util.WriteStringToPath(cert.Certificate, fmt.Sprintf("%s/%s.pem", baseDir, cert.Name))
-		util.WriteStringToPath(cert.PrivateKey, fmt.Sprintf("%s/%s.key", baseDir, cert.Name))
-	}
-}
-
-func TestCheckCerts(t *testing.T) {
-	InitConfig()
-	casdoor.InitCasdoorConfig()
-	proxy.InitHttpClient()
+// TestCheckCertsNoOpForEmptyNodes covers the no-op path of checkCerts() for
+// a site fixture with no nodes and no tag: getNodeNameFromTag("") returns ""
+// which never equals the real hostname, so checkCerts() returns nil before
+// the domain loop runs. The test therefore really verifies getCertMap() and
+// getSite() plus that early return, not any certificate processing.
+func TestCheckCertsNoOpForEmptyNodes(t *testing.T) {
+	createTestSite(t, "test-site")
 
 	var err error
 	certMap, err = getCertMap()
 	if err != nil {
-		panic(err)
+		t.Fatalf("getCertMap() error: %v", err)
 	}
 
-	site, err := getSite("admin", "test-site")
+	site, err := getSite(testOwner, "test-site")
 	if err != nil {
-		panic(err)
+		t.Fatalf("getSite() error: %v", err)
 	}
 	if site == nil {
-		panic("site should not be nil")
+		t.Fatalf("site should not be nil")
 	}
 
-	err = site.checkCerts()
-	if err != nil {
-		panic(err)
+	if err = site.checkCerts(); err != nil {
+		t.Fatalf("checkCerts() error: %v", err)
 	}
 }
