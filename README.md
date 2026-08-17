@@ -53,7 +53,7 @@ Casbin Gateway contains 2 parts:
 
 ## Installation
 
-Casbin Gateway uses Casdoor to manage members. So you need to create an organization and an application for Casbin Gateway in a Casdoor instance.
+Casbin Gateway runs standalone out of the box: it signs users in against its own user table, seeding an `admin` account with the password `123` on first start. Connecting it to a [Casdoor](https://casdoor.org) instance is optional, and enables single sign-on plus the Casdoor-backed features listed under [Optional configuration](#optional-configuration).
 
 ### Deployment Options
 
@@ -66,14 +66,12 @@ Casbin Gateway uses Casdoor to manage members. So you need to create an organiza
 #### Get the code
 
 ```shell
-go get github.com/casdoor/casdoor
 go get github.com/apache/casbin-gateway
 ```
 
 or
 
 ```shell
-git clone https://github.com/casdoor/casdoor
 git clone https://github.com/apache/casbin-gateway
 ```
 
@@ -87,24 +85,25 @@ dataSourceName = root:123@tcp(localhost:3306)/
 
 Casbin Gateway uses XORM to connect to DB, so all DBs supported by XORM can also be used.
 
-#### Configure Casdoor
-
-After creating an organization and an application for Casbin Gateway in a Casdoor, you need to update `clientID`, `clientSecret`, `casdoorOrganization` and `casdoorApplication` in app.conf.
-
 #### Run Casbin Gateway
 
 - Configure and run Casbin Gateway by yourself. If you want to learn more, see the [documentation](https://caswaf.org).
 - Open browser: http://localhost:16001/
+- Sign in as `admin` with the password `123`, then change it from the "My Account" page.
 
 ### Optional configuration
 
+#### Connect to Casdoor
+
+Casdoor takes over member management and single sign-on. Create an organization and an application for Casbin Gateway in a [Casdoor](https://casdoor.org) instance, then fill in `casdoorEndpoint`, `clientId`, `clientSecret`, `casdoorOrganization` and `casdoorApplication` in app.conf. The built-in user table is bypassed as soon as `casdoorEndpoint` is set, and sign-in redirects to Casdoor instead.
+
 #### Setup your WAF to enable some third-party login platform
 
-Casbin Gateway uses Casdoor to manage members. If you want to log in with oauth, you should see [casdoor oauth configuration](https://casdoor.org/docs/provider/oauth/overview).
+With Casdoor connected, you can log in with oauth: see the [casdoor oauth configuration](https://casdoor.org/docs/provider/oauth/overview).
 
 #### OSS, Mail, and SMS services
 
-Casbin Gateway uses Casdoor to upload files to cloud storage, send Emails and send SMSs. See Casdoor for more details.
+Casbin Gateway uses Casdoor to upload files to cloud storage, send Emails and send SMSs. Health-check alerts, the `CAPTCHA` rule action, per-site Casdoor SSO and the resource storage provider are all inactive until Casdoor is configured. See Casdoor for more details.
 
 ## Contribute
 

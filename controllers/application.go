@@ -14,10 +14,20 @@
 
 package controllers
 
-import "github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+import (
+	"github.com/apache/casbin-gateway/auth"
+	"github.com/apache/casbin-gateway/conf"
+)
 
 func (c *ApiController) GetApplications() {
-	applications, err := casdoorsdk.GetOrganizationApplications()
+	// Casdoor applications are only used to put a site behind Casdoor SSO.
+	// With no Casdoor configured there are none to choose from.
+	if !conf.IsCasdoorAvailable() {
+		c.ResponseOk([]*auth.Application{})
+		return
+	}
+
+	applications, err := auth.GetOrganizationApplications()
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

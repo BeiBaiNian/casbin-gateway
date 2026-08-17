@@ -17,18 +17,28 @@ package casdoor
 import (
 	_ "embed"
 
-	"github.com/beego/beego"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+	"github.com/apache/casbin-gateway/auth"
+	"github.com/apache/casbin-gateway/conf"
 )
 
 //go:embed token_jwt_key.pem
 var JwtPublicKey string
 
+// InitCasdoorConfig wires up the Casdoor SDK when "casdoorEndpoint" is set in
+// app.conf. Casdoor is optional: with no endpoint configured, Gateway signs
+// users in against its own local user table instead, and every Casdoor-backed
+// feature degrades via conf.IsCasdoorAvailable().
 func InitCasdoorConfig() {
-	casdoorEndpoint := beego.AppConfig.String("casdoorEndpoint")
-	clientId := beego.AppConfig.String("clientId")
-	clientSecret := beego.AppConfig.String("clientSecret")
-	casdoorOrganization := beego.AppConfig.String("casdoorOrganization")
-	casdoorApplication := beego.AppConfig.String("casdoorApplication")
-	casdoorsdk.InitConfig(casdoorEndpoint, clientId, clientSecret, JwtPublicKey, casdoorOrganization, casdoorApplication)
+	casdoorEndpoint := conf.GetConfigString("casdoorEndpoint")
+	if casdoorEndpoint == "" {
+		conf.SetCasdoorAvailable(false)
+		return
+	}
+
+	clientId := conf.GetConfigString("clientId")
+	clientSecret := conf.GetConfigString("clientSecret")
+	casdoorOrganization := conf.GetConfigString("casdoorOrganization")
+	casdoorApplication := conf.GetConfigString("casdoorApplication")
+	auth.InitConfig(casdoorEndpoint, clientId, clientSecret, JwtPublicKey, casdoorOrganization, casdoorApplication)
+	conf.SetCasdoorAvailable(true)
 }

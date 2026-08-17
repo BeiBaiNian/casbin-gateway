@@ -14,10 +14,20 @@
 
 package controllers
 
-import "github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+import (
+	"github.com/apache/casbin-gateway/auth"
+	"github.com/apache/casbin-gateway/conf"
+)
 
 func (c *ApiController) GetProviders() {
-	providers, err := casdoorsdk.GetProviders()
+	// Providers live in Casdoor. Without it, the site alert provider picker
+	// simply has nothing to offer instead of failing the whole page.
+	if !conf.IsCasdoorAvailable() {
+		c.ResponseOk([]*auth.Provider{})
+		return
+	}
+
+	providers, err := auth.GetProviders()
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

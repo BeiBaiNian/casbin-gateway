@@ -46,6 +46,7 @@ func main() {
 	object.InitAdapter()
 	object.CreateTables()
 	casdoor.InitCasdoorConfig()
+	object.InitUsers()
 	proxy.InitHttpClient()
 	ip.InitIpDb()
 	object.InitSiteMap()

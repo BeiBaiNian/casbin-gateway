@@ -18,7 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+	"github.com/apache/casbin-gateway/auth"
+	"github.com/apache/casbin-gateway/conf"
 )
 
 var siteMap = map[string]*Site{}
@@ -32,31 +33,36 @@ func InitSiteMap() {
 	}
 }
 
-func getCasdoorCertMap() (map[string]*casdoorsdk.Cert, error) {
-	certs, err := casdoorsdk.GetCerts()
+func getCasdoorCertMap() (map[string]*auth.Cert, error) {
+	certs, err := auth.GetCerts()
 	if err != nil {
-		return nil, fmt.Errorf("casdoorsdk.GetCerts() error: %s", err.Error())
+		return nil, fmt.Errorf("auth.GetCerts() error: %s", err.Error())
 	}
 
-	res := map[string]*casdoorsdk.Cert{}
+	res := map[string]*auth.Cert{}
 	for _, cert := range certs {
 		res[cert.Name] = cert
 	}
 	return res, nil
 }
 
-func getCasdoorApplicationMap() (map[string]*casdoorsdk.Application, error) {
+func getCasdoorApplicationMap() (map[string]*auth.Application, error) {
+	// Sites are only bound to a Casdoor application when Casdoor is configured.
+	if !conf.IsCasdoorAvailable() {
+		return nil, nil
+	}
+
 	casdoorCertMap, err := getCasdoorCertMap()
 	if err != nil {
 		return nil, err
 	}
 
-	applications, err := casdoorsdk.GetOrganizationApplications()
+	applications, err := auth.GetOrganizationApplications()
 	if err != nil {
-		return nil, fmt.Errorf("casdoorsdk.GetOrganizationApplications() error: %s", err.Error())
+		return nil, fmt.Errorf("auth.GetOrganizationApplications() error: %s", err.Error())
 	}
 
-	res := map[string]*casdoorsdk.Application{}
+	res := map[string]*auth.Application{}
 	for _, application := range applications {
 		if application.Cert != "" {
 			if cert, ok := casdoorCertMap[application.Cert]; ok {

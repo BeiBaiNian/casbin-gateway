@@ -18,6 +18,7 @@ import {isMobile as isMobileDevice} from "react-device-detect";
 import i18next from "i18next";
 import moment from "moment";
 import Sdk from "casdoor-js-sdk";
+import * as Conf from "./Conf";
 
 export let ServerUrl = "";
 
@@ -48,6 +49,18 @@ export function initCasdoorSdk(config) {
   CasdoorSdk = new Sdk(config);
 }
 
+// Casdoor is optional: with no "casdoorEndpoint" in app.conf the backend reports
+// an empty server URL and the app signs in against its own user table instead.
+export function isCasdoorAvailable() {
+  return Conf.AuthConfig.serverUrl !== "";
+}
+
+// A session created by the built-in username/password login, as opposed to one
+// issued by Casdoor. Such a user has no Casdoor profile page to link to.
+export function isBasicLoginMode(account) {
+  return account?.owner === "basic";
+}
+
 function getUrlWithLanguage(url) {
   if (url.includes("?")) {
     return `${url}&language=${getLanguage()}`;
@@ -57,18 +70,30 @@ function getUrlWithLanguage(url) {
 }
 
 export function getSignupUrl() {
+  if (!isCasdoorAvailable()) {
+    return "";
+  }
   return getUrlWithLanguage(CasdoorSdk.getSignupUrl());
 }
 
 export function getSigninUrl() {
+  if (!isCasdoorAvailable()) {
+    return "";
+  }
   return getUrlWithLanguage(CasdoorSdk.getSigninUrl());
 }
 
 export function getUserProfileUrl(userName, account) {
+  if (!isCasdoorAvailable() || isBasicLoginMode(account)) {
+    return "";
+  }
   return getUrlWithLanguage(CasdoorSdk.getUserProfileUrl(userName, account));
 }
 
 export function getMyProfileUrl(account) {
+  if (!isCasdoorAvailable() || isBasicLoginMode(account)) {
+    return "";
+  }
   return getUrlWithLanguage(CasdoorSdk.getMyProfileUrl(account));
 }
 

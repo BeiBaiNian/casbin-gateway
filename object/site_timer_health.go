@@ -19,7 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+	"github.com/apache/casbin-gateway/auth"
+	"github.com/apache/casbin-gateway/conf"
 )
 
 var healthCheckTryTimesMap = map[string]int{}
@@ -52,7 +53,15 @@ func healthCheck(site *Site, domain string) error {
 	}
 
 	pingResponse = fmt.Sprintf("Casbin Gateway health check failed for domain %s, %s", domain, pingResponse)
-	user, err := casdoorsdk.GetUser(site.Owner)
+
+	// Alerts are delivered through Casdoor's email and SMS providers. Without
+	// Casdoor there is nowhere to send them, so the check itself still runs but
+	// stays silent.
+	if !conf.IsCasdoorAvailable() {
+		return nil
+	}
+
+	user, err := auth.GetUser(site.Owner)
 	if err != nil {
 		return err
 	}
@@ -61,13 +70,13 @@ func healthCheck(site *Site, domain string) error {
 	}
 	for _, provider := range site.AlertProviders {
 		if strings.HasPrefix(provider, "Email/") {
-			err := casdoorsdk.SendEmailByProvider("Casbin Gateway HealthCheck Alert", pingResponse, "Casbin Gateway", provider[6:], user.Email)
+			err := auth.SendEmailByProvider("Casbin Gateway HealthCheck Alert", pingResponse, "Casbin Gateway", provider[6:], user.Email)
 			if err != nil {
 				fmt.Println(err)
 			}
 		}
 		if strings.HasPrefix(provider, "SMS/") {
-			err := casdoorsdk.SendSmsByProvider(pingResponse, provider[4:], user.Phone)
+			err := auth.SendSmsByProvider(pingResponse, provider[4:], user.Phone)
 			if err != nil {
 				fmt.Println(err)
 			}

@@ -18,8 +18,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/beego/beego"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+	"github.com/apache/casbin-gateway/auth"
+	"github.com/apache/casbin-gateway/conf"
 )
 
 type CasdoorProvider struct {
@@ -31,13 +31,19 @@ func NewCasdoorProvider(providerName string) (*CasdoorProvider, error) {
 		return nil, fmt.Errorf("storage provider name: [%s] doesn't exist", providerName)
 	}
 
+	// This provider stores objects as Casdoor resources, so it is unusable
+	// unless Casdoor is configured.
+	if !conf.IsCasdoorAvailable() {
+		return nil, fmt.Errorf("the storage provider requires a \"casdoorEndpoint\" in app.conf")
+	}
+
 	return &CasdoorProvider{providerName: providerName}, nil
 }
 
 func (p *CasdoorProvider) ListObjects(prefix string) ([]*Object, error) {
-	casdoorOrganization := beego.AppConfig.String("casdoorOrganization")
-	casdoorApplication := beego.AppConfig.String("casdoorApplication")
-	resources, err := casdoorsdk.GetResources(casdoorOrganization, casdoorApplication, "provider", p.providerName, "Direct", prefix)
+	casdoorOrganization := conf.GetConfigString("casdoorOrganization")
+	casdoorApplication := conf.GetConfigString("casdoorApplication")
+	resources, err := auth.GetResources(casdoorOrganization, casdoorApplication, "provider", p.providerName, "Direct", prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +61,7 @@ func (p *CasdoorProvider) ListObjects(prefix string) ([]*Object, error) {
 }
 
 func (p *CasdoorProvider) PutObject(user string, parent string, key string, fileBuffer *bytes.Buffer) (string, error) {
-	fileUrl, _, err := casdoorsdk.UploadResource(user, "Casibase", parent, fmt.Sprintf("Direct/%s/%s", p.providerName, key), fileBuffer.Bytes())
+	fileUrl, _, err := auth.UploadResource(user, "Casibase", parent, fmt.Sprintf("Direct/%s/%s", p.providerName, key), fileBuffer.Bytes())
 	if err != nil {
 		return "", err
 	}
@@ -63,10 +69,10 @@ func (p *CasdoorProvider) PutObject(user string, parent string, key string, file
 }
 
 func (p *CasdoorProvider) DeleteObject(key string) error {
-	resource := &casdoorsdk.Resource{
+	resource := &auth.Resource{
 		Name: key,
 	}
-	_, err := casdoorsdk.DeleteResource(resource)
+	_, err := auth.DeleteResource(resource)
 	if err != nil {
 		return err
 	}

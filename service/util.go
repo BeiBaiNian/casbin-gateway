@@ -21,10 +21,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apache/casbin-gateway/auth"
 	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/object"
-	"github.com/beego/beego"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 )
 
 func joinPath(a string, b string) string {
@@ -112,15 +111,16 @@ func getX509CertByDomain(domain string) (*tls.Certificate, error) {
 	return &tlsCert, certErr
 }
 
-func getCasdoorClientFromSite(site *object.Site) (*casdoorsdk.Client, error) {
+func getCasdoorClientFromSite(site *object.Site) (*auth.Client, error) {
+	if !conf.IsCasdoorAvailable() {
+		return nil, fmt.Errorf("the site is behind Casdoor SSO but no \"casdoorEndpoint\" is configured in app.conf")
+	}
+
 	if site.ApplicationObj == nil {
 		return nil, fmt.Errorf("site.ApplicationObj is empty")
 	}
 
-	casdoorEndpoint := beego.AppConfig.String("casdoorEndpoint")
-	if casdoorEndpoint == "http://localhost:8000" {
-		casdoorEndpoint = "http://localhost:7001"
-	}
+	casdoorEndpoint := getCasdoorEndpoint()
 
 	clientId := site.ApplicationObj.ClientId
 	clientSecret := site.ApplicationObj.ClientSecret
@@ -130,7 +130,7 @@ func getCasdoorClientFromSite(site *object.Site) (*casdoorsdk.Client, error) {
 		certificate = site.ApplicationObj.CertObj.Certificate
 	}
 
-	res := casdoorsdk.NewClient(casdoorEndpoint, clientId, clientSecret, certificate, site.ApplicationObj.Organization, site.CasdoorApplication)
+	res := auth.NewClient(casdoorEndpoint, clientId, clientSecret, certificate, site.ApplicationObj.Organization, site.CasdoorApplication)
 	return res, nil
 }
 

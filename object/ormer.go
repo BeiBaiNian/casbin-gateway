@@ -184,6 +184,12 @@ func (a *Ormer) createTable() {
 		panic(err)
 	}
 
+	// Local users, used for sign-in when no Casdoor is configured.
+	err = a.Engine.Sync2(new(User))
+	if err != nil {
+		panic(err)
+	}
+
 	err = a.Engine.Sync2(new(Site))
 	if err != nil {
 		panic(err)

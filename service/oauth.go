@@ -19,16 +19,16 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+	"github.com/apache/casbin-gateway/auth"
 )
 
-func getSigninUrl(casdoorClient *casdoorsdk.Client, callbackUrl string, originalPath string) string {
+func getSigninUrl(casdoorClient *auth.Client, callbackUrl string, originalPath string) string {
 	scope := "read"
 	return fmt.Sprintf("%s/login/oauth/authorize?client_id=%s&response_type=code&redirect_uri=%s&scope=%s&state=%s",
 		casdoorClient.Endpoint, casdoorClient.ClientId, url.QueryEscape(callbackUrl), scope, url.QueryEscape(originalPath))
 }
 
-func redirectToCasdoor(casdoorClient *casdoorsdk.Client, w http.ResponseWriter, r *http.Request) {
+func redirectToCasdoor(casdoorClient *auth.Client, w http.ResponseWriter, r *http.Request) {
 	scheme := getScheme(r)
 
 	callbackUrl := fmt.Sprintf("%s://%s/caswaf-handler", scheme, r.Host)

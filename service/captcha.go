@@ -23,8 +23,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/apache/casbin-gateway/auth"
 	"github.com/apache/casbin-gateway/conf"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"github.com/google/uuid"
 )
 
@@ -40,6 +40,13 @@ type verifyResponse struct {
 var verifiedSession = make(map[string]time.Time)
 
 func redirectToCaptcha(w http.ResponseWriter, r *http.Request) {
+	// The CAPTCHA challenge page is served by Casdoor. Without an endpoint the
+	// redirect would just loop back into the proxied site, so say why instead.
+	if !conf.IsCasdoorAvailable() {
+		responseError(w, "Casbin Gateway error: the CAPTCHA rule action requires a \"casdoorEndpoint\" in app.conf")
+		return
+	}
+
 	scheme := getScheme(r)
 	callbackUrl := fmt.Sprintf("%s://%s/caswaf-captcha-verify", scheme, r.Host)
 	captchaUri := fmt.Sprintf(
@@ -70,7 +77,7 @@ func handleCaptchaCallback(w http.ResponseWriter, r *http.Request) {
 	_ = writer.WriteField("applicationId", applicationId)
 	_ = writer.WriteField("captchaType", typeStr)
 	_ = writer.Close()
-	verifyURL := casdoorsdk.GetUrl("verify-captcha", nil)
+	verifyURL := auth.GetUrl("verify-captcha", nil)
 	req, err := http.NewRequest("POST", verifyURL, &b)
 	if err != nil {
 		redirectToCaptcha(w, r)

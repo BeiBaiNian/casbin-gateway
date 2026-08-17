@@ -33,6 +33,7 @@ import RuleEditPage from "./RuleEditPage";
 import ChannelListPage from "./ChannelListPage";
 import ChannelEditPage from "./ChannelEditPage";
 import SigninPage from "./SigninPage";
+import AccountPage from "./AccountPage";
 import RecordListPage from "./RecordListPage";
 import RecordEditPage from "./RecordEditPage";
 import i18next from "i18next";
@@ -63,7 +64,23 @@ class App extends Component {
 
   UNSAFE_componentWillMount() {
     this.updateMenuKey();
-    this.getAccount();
+    this.getSigninOptions();
+  }
+
+  // The auth config lives in app.conf, so ask the backend for it before doing
+  // anything that depends on whether Casdoor is configured at all.
+  getSigninOptions() {
+    AccountBackend.getSigninOptions()
+      .then((res) => {
+        if (res.status === "ok") {
+          Conf.setAuthConfig(res.data.authConfig);
+          Setting.initCasdoorSdk(Conf.AuthConfig);
+        }
+        this.getAccount();
+      })
+      .catch(() => {
+        this.getAccount();
+      });
   }
 
   componentDidUpdate() {
@@ -161,7 +178,13 @@ class App extends Component {
 
   handleRightDropdownClick(e) {
     if (e.key === "/account") {
-      Setting.openLink(Setting.getMyProfileUrl(this.state.account));
+      const profileUrl = Setting.getMyProfileUrl(this.state.account);
+      if (profileUrl === "") {
+        // Built-in login: the profile is edited in Gateway itself.
+        this.props.history.push("/account");
+      } else {
+        Setting.openLink(profileUrl);
+      }
     } else if (e.key === "/logout") {
       this.signout();
     }
@@ -220,16 +243,19 @@ class App extends Component {
     if (this.state.account === undefined) {
       return null;
     } else if (this.state.account === null) {
-      res.push(
-        <Menu.Item key="/signup" style={{float: "right", marginRight: "20px"}}>
-          <a href={Setting.getSignupUrl()}>
-            {i18next.t("account:Sign Up")}
-          </a>
-        </Menu.Item>
-      );
+      // Signing up is a Casdoor feature; the built-in login has no self-service.
+      if (Setting.getSignupUrl() !== "") {
+        res.push(
+          <Menu.Item key="/signup" style={{float: "right", marginRight: "20px"}}>
+            <a href={Setting.getSignupUrl()}>
+              {i18next.t("account:Sign Up")}
+            </a>
+          </Menu.Item>
+        );
+      }
       res.push(
         <Menu.Item key="/signin" style={{float: "right"}}>
-          <a href={Setting.getSigninUrl()}>
+          <a href={Setting.getSigninUrl() || "/signin"}>
             {i18next.t("account:Sign In")}
           </a>
         </Menu.Item>
@@ -416,6 +442,7 @@ class App extends Component {
           <Route exact path="/home" render={(props) => <HomePage account={this.state.account} {...props} />} />
           <Route exact path="/" render={(props) => <Redirect to="/sites" />} />
           <Route exact path="/signin" render={(props) => this.renderHomeIfSignedIn(<SigninPage {...props} />)} />
+          <Route exact path="/account" render={(props) => this.renderSigninIfNotSignedIn(<AccountPage account={this.state.account} {...props} />)} />
           <Route exact path="/agents" render={(props) => this.renderSigninIfNotSignedIn(<AgentsPage account={this.state.account} {...props} />)} />
           <Route exact path="/agent-records" render={(props) => this.renderSigninIfNotSignedIn(<AgentRecordsPage account={this.state.account} {...props} />)} />
           <Route exact path="/agent-sessions" render={(props) => this.renderSigninIfNotSignedIn(<AgentSessionsPage account={this.state.account} {...props} />)} />

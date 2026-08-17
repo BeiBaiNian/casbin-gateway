@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apache/casbin-gateway/auth"
 	"github.com/apache/casbin-gateway/run"
 	"github.com/apache/casbin-gateway/util"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"github.com/xorm-io/core"
 )
 
@@ -65,8 +65,8 @@ type Site struct {
 	Status         string      `xorm:"varchar(100)" json:"status"`
 	Nodes          []*NodeItem `xorm:"mediumtext" json:"nodes"`
 
-	CasdoorApplication string                  `xorm:"varchar(100)" json:"casdoorApplication"`
-	ApplicationObj     *casdoorsdk.Application `xorm:"-" json:"applicationObj"`
+	CasdoorApplication string            `xorm:"varchar(100)" json:"casdoorApplication"`
+	ApplicationObj     *auth.Application `xorm:"-" json:"applicationObj"`
 }
 
 func GetGlobalSites() ([]*Site, error) {

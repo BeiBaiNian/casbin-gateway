@@ -1,9 +1,21 @@
 {
   "account": {
+    "Avatar": "Avatar",
+    "Avatar image URL, optional": "Avatar image URL, optional",
+    "Modify password": "Modify password",
+    "Modify password...": "Modify password...",
     "My Account": "My Account",
+    "New Password": "New Password",
+    "Old Password": "Old Password",
+    "Please input your password": "Please input your password",
+    "Please input your username": "Please input your username",
+    "Profile": "Profile",
+    "Set Password": "Set Password",
     "Sign In": "Sign In",
     "Sign Out": "Sign Out",
-    "Sign Up": "Sign Up"
+    "Sign Up": "Sign Up",
+    "Sign in is unavailable": "Sign in is unavailable",
+    "Username": "Username"
   },
   "agent": {
     "Agent": "Agent",
@@ -135,6 +147,7 @@
     "Nodes": "Nodes",
     "OK": "OK",
     "Owner": "Owner",
+    "Password": "Password",
     "Path": "Path",
     "Records": "Records",
     "Refresh": "Refresh",

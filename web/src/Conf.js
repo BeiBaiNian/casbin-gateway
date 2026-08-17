@@ -12,14 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Casdoor is optional. These values stay empty unless the backend reports a
+// configured "casdoorEndpoint" in app.conf, in which case setAuthConfig() fills
+// them in at startup and the app signs in through Casdoor instead of the
+// built-in username/password form.
 export const AuthConfig = {
-  serverUrl: "https://door.casdoor.com",
-  // serverUrl: "http://localhost:7001",
-  clientId: "af6b5aa958822fb9dc33",
-  appName: "app-casibase",
-  organizationName: "casbin",
+  serverUrl: "",
+  clientId: "",
+  appName: "",
+  organizationName: "",
   redirectPath: "/callback",
 };
+
+export function setAuthConfig(config) {
+  if (config === null || config === undefined) {
+    return;
+  }
+
+  Object.keys(AuthConfig).forEach((key) => {
+    if (config[key] !== undefined && config[key] !== null) {
+      AuthConfig[key] = config[key];
+    }
+  });
+}
 
 export const IsDemoMode = false;
 
