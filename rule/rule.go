@@ -62,13 +62,13 @@ func CheckRules(ruleIds []string, r *http.Request) (*RuleResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if result != nil {
 			// Use rule's action if no action specified by the rule check
 			if result.Action == "" {
 				result.Action = rule.Action
 			}
-			
+
 			// Determine status code
 			if result.StatusCode == 0 {
 				if rule.StatusCode != 0 {
@@ -89,7 +89,7 @@ func CheckRules(ruleIds []string, r *http.Request) (*RuleResult, error) {
 					}
 				}
 			}
-			
+
 			// Update reason if rule has custom reason
 			if result.Action == "Block" || result.Action == "Drop" {
 				if rule.IsVerbose {
@@ -101,11 +101,11 @@ func CheckRules(ruleIds []string, r *http.Request) (*RuleResult, error) {
 					result.Reason = fmt.Sprintf("hit rule %s: %s", ruleIds[i], result.Reason)
 				}
 			}
-			
+
 			return result, nil
 		}
 	}
-	
+
 	// Default action if no rule matched
 	return &RuleResult{
 		Action:     "Allow",

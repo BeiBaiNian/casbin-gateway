@@ -35,7 +35,6 @@ func forwardHandler(targetUrl string, writer http.ResponseWriter, request *http.
 
 	if nil != err {
 		panic(err)
-		return
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
@@ -70,10 +69,10 @@ func forwardHandler(targetUrl string, writer http.ResponseWriter, request *http.
 				for _, cookie := range cookies {
 					// Check if Secure attribute is already present (case-insensitive)
 					cookieLower := strings.ToLower(cookie)
-					hasSecure := strings.Contains(cookieLower, ";secure;") || 
-					             strings.Contains(cookieLower, "; secure;") ||
-					             strings.HasSuffix(cookieLower, ";secure") ||
-					             strings.HasSuffix(cookieLower, "; secure")
+					hasSecure := strings.Contains(cookieLower, ";secure;") ||
+						strings.Contains(cookieLower, "; secure;") ||
+						strings.HasSuffix(cookieLower, ";secure") ||
+						strings.HasSuffix(cookieLower, "; secure")
 					if !hasSecure {
 						cookie = cookie + "; Secure"
 					}
@@ -85,7 +84,7 @@ func forwardHandler(targetUrl string, writer http.ResponseWriter, request *http.
 		// Fix CORS issue: Remove CORS header combinations that allow credential theft from any origin
 		allowOrigin := resp.Header.Get("Access-Control-Allow-Origin")
 		allowCredentials := resp.Header.Get("Access-Control-Allow-Credentials")
-		
+
 		// Remove CORS headers when the combination is present:
 		// 1. Access-Control-Allow-Credentials: true with Access-Control-Allow-Origin: *
 		//    This is actually blocked by browsers but we sanitize it anyway

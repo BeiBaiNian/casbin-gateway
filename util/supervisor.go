@@ -48,7 +48,7 @@ func InitSelfGuard() {
 		// Already supervised, just return and continue normal execution
 		return
 	}
-	
+
 	// Start as supervisor
 	err := runSupervisor()
 	if err != nil {
@@ -62,9 +62,9 @@ func InitSelfGuard() {
 // runSupervisor starts the supervisor that monitors and restarts the main process
 func runSupervisor() error {
 	fmt.Println("Starting Casbin Gateway with auto-recovery mechanism...")
-	
+
 	restartTimes := []time.Time{}
-	
+
 	for {
 		// Clean up old restart times outside the window
 		now := time.Now()
@@ -75,46 +75,46 @@ func runSupervisor() error {
 			}
 		}
 		restartTimes = validRestarts
-		
+
 		// Check if we've exceeded max restarts
 		if len(restartTimes) >= MaxRestarts {
 			return fmt.Errorf("exceeded maximum restart limit (%d restarts in %v), stopping supervisor", MaxRestarts, RestartWindow)
 		}
-		
+
 		// Start the child process
 		cmd := exec.Command(os.Args[0], os.Args[1:]...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Stdin = os.Stdin
-		
+
 		// Set environment variable to indicate supervised process
 		cmd.Env = append(os.Environ(), fmt.Sprintf("%s=1", EnvSupervisorKey))
-		
+
 		// Start the process
 		if err := cmd.Start(); err != nil {
 			fmt.Printf("Failed to start process: %v\n", err)
 			return err
 		}
-		
+
 		processStartTime := time.Now()
 		fmt.Printf("Started supervised process with PID: %d\n", cmd.Process.Pid)
-		
+
 		// Setup signal handling to forward signals to child
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		
+
 		// Wait for process completion or signal
 		doneChan := make(chan error, 1)
 		go func() {
 			doneChan <- cmd.Wait()
 		}()
-		
+
 		select {
 		case err := <-doneChan:
 			// Process exited
 			exitTime := time.Now()
 			uptime := exitTime.Sub(processStartTime)
-			
+
 			if err != nil {
 				// A configuration failure repeats on every restart, so pass the
 				// child's exit code up instead of burning through the restart
@@ -127,11 +127,11 @@ func runSupervisor() error {
 
 				// Record this restart
 				restartTimes = append(restartTimes, time.Now())
-				
-				fmt.Printf("Waiting %v before restarting... (restart %d/%d)\n", 
+
+				fmt.Printf("Waiting %v before restarting... (restart %d/%d)\n",
 					RestartDelay, len(restartTimes), MaxRestarts)
 				time.Sleep(RestartDelay)
-				
+
 				// Continue to restart
 				continue
 			} else {
@@ -139,7 +139,7 @@ func runSupervisor() error {
 				fmt.Println("Process exited cleanly")
 				return nil
 			}
-			
+
 		case sig := <-sigChan:
 			// Received shutdown signal, forward to child
 			fmt.Printf("Received signal %v, forwarding to child process...\n", sig)
