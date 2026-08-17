@@ -20,6 +20,9 @@
 # Built binaries
 casbin-gateway
 
+# Release and nightly archives, staged here by the workflows
+dist/
+
 tmp/
 tmpFiles/
 *.tmp

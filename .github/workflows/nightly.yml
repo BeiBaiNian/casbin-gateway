@@ -1,0 +1,173 @@
+name: Nightly
+
+# Every push to master refreshes the "nightly" pre-release with one archive per
+# platform, built from that commit. These are convenience builds, not releases:
+# the source package cut by release.yml stays the only official artifact, so
+# this workflow never creates a version tag and never publishes a full release.
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Nightly runs are never cancelled halfway: the publish step deletes the old
+# release before creating the new one, and a cancellation in that window would
+# leave no nightly at all.
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.25"
+  BASENAME: casbin-gateway-nightly
+
+jobs:
+  frontend:
+    name: Build web UI
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'apache/casbin-gateway' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: ./web/yarn.lock
+
+      # Source maps are left out on purpose: everything under web/build ends up
+      # inside every one of the three binaries below.
+      - name: Build
+        run: yarn install && CI=false GENERATE_SOURCEMAP=false yarn run build
+        working-directory: ./web
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build-${{ github.run_id }}
+          path: ./web/build
+          retention-days: 1
+
+  nightly:
+    name: Publish nightly
+    runs-on: ubuntu-latest
+    needs: [ frontend ]
+    if: ${{ github.repository == 'apache/casbin-gateway' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ./go.mod
+
+      # The binaries are built with -tags embed, which bakes conf/app.conf, the
+      # web UI and the IP database in, so web/build has to be in place first.
+      - name: Download web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build-${{ github.run_id }}
+          path: ./web/build
+
+      - name: Build the platform archives
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          # goos goarch arch-name-used-in-the-file-name
+          targets=(
+            "linux   amd64 x86_64"
+            "darwin  amd64 x86_64"
+            "windows amd64 x86_64"
+          )
+
+          for target in "${targets[@]}"; do
+            read -r goos goarch archName <<< "${target}"
+
+            name="${BASENAME}-${goos}-${archName}"
+            stage="dist/${name}"
+            mkdir -p "${stage}"
+
+            binary="${stage}/casbin-gateway"
+            if [[ "${goos}" == "windows" ]]; then
+              binary="${binary}.exe"
+            fi
+
+            echo "Building ${name}"
+            GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
+              go build -tags embed -trimpath -ldflags "-s -w" -o "${binary}" .
+
+            cp LICENSE NOTICE DISCLAIMER README.md "${stage}/"
+
+            if [[ "${goos}" == "windows" ]]; then
+              archive="${name}.zip"
+              (cd dist && zip -qr "${archive}" "${name}")
+            else
+              archive="${name}.tar.gz"
+              tar -czf "dist/${archive}" -C dist "${name}"
+            fi
+
+            rm -rf "${stage}"
+          done
+
+          ls -l dist
+
+      - name: Write release notes
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          ## This is not an official release
+
+          These are automated convenience builds of the current `master`. Use them for
+          testing and development only.
+
+          Official releases are source packages, published on the
+          [releases page](https://github.com/apache/casbin-gateway/releases).
+
+          ## Contents
+
+          Each archive holds one self-contained `casbin-gateway` executable, together with
+          `LICENSE`, `NOTICE` and `DISCLAIMER`. The executable is built with `-tags embed`,
+          so it carries its own settings, web UI and IP database and starts with no files
+          next to it. Data is written to `./data`, `./logs` and `./tmp` in the working
+          directory.
+
+          | Platform | Archive |
+          | --- | --- |
+          | Linux x86_64 | `BASENAME_PLACEHOLDER-linux-x86_64.tar.gz` |
+          | macOS x86_64 | `BASENAME_PLACEHOLDER-darwin-x86_64.tar.gz` |
+          | Windows x86_64 | `BASENAME_PLACEHOLDER-windows-x86_64.zip` |
+          NOTES
+
+          sed -i "s/BASENAME_PLACEHOLDER/${BASENAME}/g" release-notes.md
+          printf '\nBuilt from commit %s.\n' "${GITHUB_SHA}" >> release-notes.md
+          cat release-notes.md
+
+      # The nightly release is replaced rather than updated, so that its tag
+      # moves to the commit it was actually built from. --cleanup-tag removes
+      # the old tag as well, and --target recreates it at this commit.
+      #
+      # The gh CLI is used instead of a marketplace action: the ASF org only
+      # allows actions owned by GitHub or by the enterprise allow-list.
+      - name: Replace the nightly pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release delete nightly --yes --cleanup-tag
+          fi
+
+          gh release create nightly \
+            --prerelease \
+            --target "${GITHUB_SHA}" \
+            --title "Nightly build (not an official release)" \
+            --notes-file release-notes.md \
+            dist/*.tar.gz dist/*.zip

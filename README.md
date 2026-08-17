@@ -168,6 +168,28 @@ The startup summary reports which source each one came from:
 
 Being self-contained is about startup, not about staying read-only: a running Gateway still writes `./data` (the SQLite database, deployed apps, agent patch state), `./logs` and `./tmp` relative to its working directory. Start it from the directory where that state belongs.
 
+#### Nightly builds
+
+Every push to `master` rebuilds the [`nightly`](https://github.com/apache/casbin-gateway/releases/tag/nightly) pre-release, with one such archive per platform — Linux, macOS and Windows, `x86_64` — each carrying `LICENSE`, `NOTICE` and `DISCLAIMER`.
+
+**Nightly builds are not official releases.** They are automated builds of whatever is on `master`, and exist so that a change can be tried without a Go and Node toolchain. Anything else should be built from a source release.
+
+On Linux and macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/install.sh | bash
+```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/install.ps1 | iex
+```
+
+Either one downloads the archive for this machine and unpacks it into `~/.local/share/casbin-gateway` (`%LOCALAPPDATA%\casbin-gateway` on Windows) and starts Gateway there. Set `INSTALL_DIR` to install somewhere else, or `NO_START=1` to install without starting.
+
+The `casbin-gateway` command they put on your PATH is a small wrapper rather than the executable itself: Gateway keeps its database, logs and temporary files in the working directory, so the wrapper always starts it in the install directory. Running the executable directly from somewhere else gives you a second, empty installation there.
+
 ### Necessary configuration
 
 #### Get the code

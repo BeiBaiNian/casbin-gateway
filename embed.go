@@ -33,6 +33,12 @@ import (
 	"embed"
 	"io/fs"
 
+	// The IANA time zone database, which util.GetCurrentTime() needs. A
+	// self-contained binary cannot count on the host for it: Windows ships no
+	// zoneinfo at all, and -trimpath drops the GOROOT copy Go falls back to,
+	// so without this the first timestamp panics with "unknown time zone".
+	_ "time/tzdata"
+
 	"github.com/apache/casbin-gateway/embedsupport"
 )
 
