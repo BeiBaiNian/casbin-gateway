@@ -88,6 +88,16 @@ func CreateTables() {
 	ormer.createTable()
 }
 
+// PingDatabase reports whether the configured database answers right now. It is
+// used by the startup summary, so it returns the error instead of panicking.
+func PingDatabase() error {
+	if ormer == nil || ormer.Engine == nil {
+		return fmt.Errorf("the database adapter is not initialized")
+	}
+
+	return ormer.Engine.Ping()
+}
+
 // Ormer represents the MySQL adapter for policy storage.
 type Ormer struct {
 	driverName     string

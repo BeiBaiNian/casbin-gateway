@@ -61,7 +61,84 @@ Casbin Gateway runs standalone out of the box: it signs users in against its own
 - **Docker Compose**: Use the provided `docker-compose.yml` for quick local setup
 - **Manual Installation**: Build and run from source
 
-The reverse-proxy gateway on ports 80 and 443 is disabled by default, so starting the management application does not take over those ports. Set `gatewayEnabled = true` in `conf/app.conf` when you are ready to use the WAF proxy.
+The reverse-proxy gateway on ports 80 and 443 is disabled by default, so starting the management application does not take over those ports. Set `gatewayEnabled = true` in `conf/app.conf` when you are ready to use the WAF proxy. On Linux and macOS those ports also need root, so for a first try it is easier to point `gatewayHttpPort` at a high port such as `8080`.
+
+### Quick start
+
+From nothing to a request flowing through the gateway, in five steps.
+
+#### 1. Start MySQL
+
+Any MySQL 5.7+ reachable from Gateway will do. With Docker:
+
+```bash
+docker run -d --name caswaf-db -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123 mysql:8.0.25
+```
+
+Gateway creates the `caswaf` database itself on first start. If your MySQL is elsewhere, or the password is not `123`, change `dataSourceName` in `conf/app.conf`.
+
+#### 2. Build the web UI
+
+The backend serves the compiled frontend from `web/build`, so build it once before starting the backend:
+
+```bash
+cd web && yarn install && yarn build
+```
+
+For frontend development, run `yarn start` instead. That serves the UI on http://localhost:16001 with hot reload and proxies API calls to the backend on port 17000, so both have to be running.
+
+#### 3. Run the backend
+
+```bash
+go run main.go
+```
+
+It prints a summary of what it is actually doing — ports, whether the reverse proxy is on, whether the database answered, and which sign-in it will use:
+
+```
++----------------------------------------------------------------------------+
+| Casbin Gateway                                                              |
++----------------+-----------------------------------------------------------+
+| Management UI  | http://localhost:17000                                     |
+| Web UI files   | web/build                                                  |
+| Reverse proxy  | enabled                                                    |
+| Gateway HTTP   | :8080                                                      |
+| Gateway HTTPS  | :8443                                                      |
+| Database       | mysql, database "caswaf" (connected)                       |
+| Sign-in        | built-in user table, Casdoor is not configured             |
+| App dir        | ./data/apps                                                |
++----------------+-----------------------------------------------------------+
+```
+
+If a port is taken, Gateway says which process holds it and stops, rather than starting half-configured.
+
+#### 4. Sign in and add a site
+
+Open http://localhost:17000, sign in as `admin` with the password `123`, and change it from the "My Account" page.
+
+Then go to **Sites** → **Add**, and set:
+
+- **Domain**: the hostname clients will use, e.g. `test.example.com`
+- **Host** and **Port**: where the traffic goes, e.g. `127.0.0.1` and `8000`
+- **Mode**: `HTTP` (`HTTPS Only`, the default, redirects plain HTTP away before it reaches the backend)
+
+Save. Then set `gatewayEnabled = true` in `conf/app.conf` and restart the backend — the Sites page shows a warning while the reverse proxy is off, because site configurations do nothing until it is on.
+
+#### 5. Verify the forwarding
+
+Start anything on the backend port you configured, for example:
+
+```bash
+python -m http.server 8000
+```
+
+The gateway routes on the `Host` header, so no DNS or `hosts` entry is needed to test it:
+
+```bash
+curl -H "Host: test.example.com" http://127.0.0.1:8080/
+```
+
+You should get your backend's response. A `site not found for host` reply means the request reached Gateway but no site matches that `Host` value.
 
 ### Necessary configuration
 
@@ -89,8 +166,8 @@ Casbin Gateway uses XORM to connect to DB, so all DBs supported by XORM can also
 
 #### Run Casbin Gateway
 
-- Configure and run Casbin Gateway by yourself. If you want to learn more, see the [documentation](https://caswaf.org).
-- Open browser: http://localhost:16001/
+- Build the web UI once with `cd web && yarn install && yarn build`, then run the backend with `go run main.go`. See [Quick start](#quick-start) for the whole path, and the [documentation](https://caswaf.org) for everything else.
+- Open browser: http://localhost:17000/ (the backend serves the compiled UI). During frontend development, `yarn start` serves it on http://localhost:16001/ instead and proxies API calls to port 17000.
 - Sign in as `admin` with the password `123`, then change it from the "My Account" page.
 
 ### Optional configuration

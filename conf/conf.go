@@ -76,6 +76,40 @@ func GetConfigInt(key string) int {
 	return num
 }
 
+// GetConfigIntDefault reads an int setting, falling back to defaultValue when
+// the key is missing or unparsable. Unlike GetConfigInt it never panics, so it
+// suits settings that have a sensible built-in value.
+func GetConfigIntDefault(key string, defaultValue int) int {
+	value := strings.Trim(GetConfigString(key), `"' `)
+	num, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return num
+}
+
+// GetHttpPort is the port serving the management UI and the REST API.
+func GetHttpPort() int {
+	return GetConfigIntDefault("httpport", 17000)
+}
+
+// IsGatewayEnabled reports whether the reverse-proxy gateway should bind the
+// gateway ports. It defaults to false: taking over ports 80 and 443 is opt-in,
+// because those usually belong to something else on the host.
+func IsGatewayEnabled() bool {
+	return strings.EqualFold(strings.Trim(GetConfigString("gatewayEnabled"), `"' `), "true")
+}
+
+// GetGatewayHttpPort is the plain-HTTP port of the reverse-proxy gateway.
+func GetGatewayHttpPort() int {
+	return GetConfigIntDefault("gatewayHttpPort", 80)
+}
+
+// GetGatewayHttpsPort is the HTTPS port of the reverse-proxy gateway.
+func GetGatewayHttpsPort() int {
+	return GetConfigIntDefault("gatewayHttpsPort", 443)
+}
+
 func GetConfigInt64(key string) (int64, error) {
 	value := GetConfigString(key)
 	num, err := strconv.ParseInt(value, 10, 64)

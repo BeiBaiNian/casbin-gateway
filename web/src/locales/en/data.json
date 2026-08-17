@@ -224,7 +224,9 @@
     "Public IP": "Public IP",
     "Rules": "Rules",
     "SSL cert": "SSL cert",
-    "Status": "Status"
+    "Status": "Status",
+    "The reverse proxy is not enabled": "The reverse proxy is not enabled",
+    "The sites below will not be proxied. Set gatewayEnabled = true in conf/app.conf and restart Casbin Gateway to enable it.": "The sites below will not be proxied. Set gatewayEnabled = true in conf/app.conf and restart Casbin Gateway to enable it."
   },
   "usage": {
     "All": "All",

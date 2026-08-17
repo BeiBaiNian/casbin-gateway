@@ -32,6 +32,11 @@ const (
 	RestartWindow = 5 * time.Minute
 	// RestartDelay is the delay before restarting after a crash
 	RestartDelay = 2 * time.Second
+	// ExitCodeFatalConfig marks an exit caused by configuration, such as a port
+	// that is already taken. Restarting cannot fix it, so the supervisor stops
+	// instead of looping through the same failure. The value is the conventional
+	// sysexits.h EX_CONFIG.
+	ExitCodeFatalConfig = 78
 )
 
 // InitSelfGuard initializes the self-recovery mechanism
@@ -111,8 +116,15 @@ func runSupervisor() error {
 			uptime := exitTime.Sub(processStartTime)
 			
 			if err != nil {
+				// A configuration failure repeats on every restart, so pass the
+				// child's exit code up instead of burning through the restart
+				// budget. The child has already explained itself.
+				if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == ExitCodeFatalConfig {
+					os.Exit(ExitCodeFatalConfig)
+				}
+
 				fmt.Printf("Process crashed after %v: %v\n", uptime, err)
-				
+
 				// Record this restart
 				restartTimes = append(restartTimes, time.Now())
 				

@@ -224,7 +224,9 @@
     "Public IP": "公网IP",
     "Rules": "Rules",
     "SSL cert": "SSL证书",
-    "Status": "状态"
+    "Status": "状态",
+    "The reverse proxy is not enabled": "反向代理未启用",
+    "The sites below will not be proxied. Set gatewayEnabled = true in conf/app.conf and restart Casbin Gateway to enable it.": "下面的站点不会被代理。请在 conf/app.conf 中设置 gatewayEnabled = true 并重启 Casbin Gateway 后生效。"
   },
   "usage": {
     "All": "全部",

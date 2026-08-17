@@ -90,7 +90,18 @@ func main() {
 	}
 	beego.BConfig.WebConfig.Session.SessionGCMaxLifetime = 3600 * 24 * 365
 
-	port := beego.AppConfig.DefaultInt("httpport", 17000)
+	port := conf.GetHttpPort()
+
+	service.PrintStartupSummary()
+
+	// beego.Run() binds the management port itself and reports a conflict as a
+	// stack trace, so the port is probed here first to explain it in one line,
+	// and before the gateway below binds anything. The gap between probe and
+	// bind is unavoidable but harmless: losing the race just puts us back to
+	// beego's own error.
+	if err := util.CheckPortAvailable(port); err != nil {
+		util.FatalListenError(port, `change "httpport" in conf/app.conf`, err)
+	}
 
 	service.Start()
 

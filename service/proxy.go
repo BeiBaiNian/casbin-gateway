@@ -24,10 +24,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/object"
 	"github.com/apache/casbin-gateway/rule"
 	"github.com/apache/casbin-gateway/util"
-	"github.com/beego/beego"
 )
 
 func forwardHandler(targetUrl string, writer http.ResponseWriter, request *http.Request) {
@@ -327,28 +327,32 @@ func Start() {
 	serverMux.HandleFunc("/caswaf-handler", handleAuthCallback)
 	serverMux.HandleFunc("/caswaf-captcha-verify", handleCaptchaCallback)
 
-	gatewayEnabled, err := beego.AppConfig.Bool("gatewayEnabled")
-	if err != nil {
-		panic(err)
-	}
-	if !gatewayEnabled {
-		fmt.Printf("Casbin Gateway not enabled (gatewayEnabled == \"false\")\n")
+	if !conf.IsGatewayEnabled() {
+		fmt.Printf("Casbin Gateway reverse proxy is not enabled (gatewayEnabled = false), so site configurations will not take effect\n")
 		return
 	}
 
-	gatewayHttpPort, err := beego.AppConfig.Int("gatewayHttpPort")
+	gatewayHttpPort := conf.GetGatewayHttpPort()
+	gatewayHttpsPort := conf.GetGatewayHttpsPort()
+
+	// Both ports are bound up front and the listeners are handed to the servers
+	// below. Binding here turns a port conflict into one readable line before
+	// anything else starts, and holding on to the listeners means nothing can
+	// take the port between this check and the server that serves on it.
+	httpListener, err := util.ListenTcp(gatewayHttpPort)
 	if err != nil {
-		panic(err)
+		util.FatalListenError(gatewayHttpPort, `set "gatewayEnabled = false" in conf/app.conf to run the management UI only`, err)
 	}
 
-	gatewayHttpsPort, err := beego.AppConfig.Int("gatewayHttpsPort")
+	httpsListener, err := util.ListenTcp(gatewayHttpsPort)
 	if err != nil {
-		panic(err)
+		httpListener.Close()
+		util.FatalListenError(gatewayHttpsPort, `set "gatewayEnabled = false" in conf/app.conf to run the management UI only`, err)
 	}
 
 	go func() {
 		fmt.Printf("Casbin Gateway running on: http://127.0.0.1:%d\n", gatewayHttpPort)
-		err := http.ListenAndServe(fmt.Sprintf(":%d", gatewayHttpPort), serverMux)
+		err := http.Serve(httpListener, serverMux)
 		if err != nil {
 			panic(err)
 		}
@@ -358,7 +362,6 @@ func Start() {
 		fmt.Printf("Casbin Gateway running on: https://127.0.0.1:%d\n", gatewayHttpsPort)
 		server := &http.Server{
 			Handler: serverMux,
-			Addr:    fmt.Sprintf(":%d", gatewayHttpsPort),
 			TLSConfig: &tls.Config{
 				// Minimum TLS version 1.2, TLS 1.3 is automatically supported
 				MinVersion: tls.VersionTLS12,
@@ -394,7 +397,7 @@ func Start() {
 			return cert, nil
 		}
 
-		err := server.ListenAndServeTLS("", "")
+		err := server.ServeTLS(httpsListener, "", "")
 		if err != nil {
 			panic(err)
 		}

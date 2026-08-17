@@ -14,16 +14,21 @@
 
 import React from "react";
 import {Link} from "react-router-dom";
-import {Button, Popconfirm, Table, Tag, Tooltip} from "antd";
+import {Alert, Button, Popconfirm, Table, Tag, Tooltip} from "antd";
 import moment from "moment";
 import * as Setting from "./Setting";
 import * as SiteBackend from "./backend/SiteBackend";
+import * as SystemBackend from "./backend/SystemBackend";
 import i18next from "i18next";
 import BaseListPage from "./BaseListPage";
 
 class SiteListPage extends BaseListPage {
   constructor(props) {
     super(props);
+    this.state = {
+      ...this.state,
+      gatewayEnabled: null,
+    };
   }
 
   UNSAFE_componentWillMount() {
@@ -35,6 +40,35 @@ class SiteListPage extends BaseListPage {
       },
     });
     this.fetch({pagination: this.state.pagination});
+    this.getGatewayStatus();
+  }
+
+  // The sites below only do something when the reverse proxy is running, so the
+  // page has to say when it is off. Otherwise every site here looks configured
+  // and nothing is actually proxied.
+  getGatewayStatus() {
+    SystemBackend.getGatewayStatus()
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({gatewayEnabled: res.data.gatewayEnabled});
+        }
+      });
+  }
+
+  renderGatewayAlert() {
+    if (this.state.gatewayEnabled !== false) {
+      return null;
+    }
+
+    return (
+      <Alert
+        style={{marginBottom: "10px"}}
+        type="warning"
+        showIcon
+        message={i18next.t("site:The reverse proxy is not enabled")}
+        description={i18next.t("site:The sites below will not be proxied. Set gatewayEnabled = true in conf/app.conf and restart Casbin Gateway to enable it.")}
+      />
+    );
   }
 
   newSite() {
@@ -412,6 +446,7 @@ class SiteListPage extends BaseListPage {
 
     return (
       <div>
+        {this.renderGatewayAlert()}
         <Table columns={columns} dataSource={data} rowKey="name" size="middle" bordered pagination={this.state.pagination}
           title={() => (
             <div>
