@@ -32,11 +32,4 @@ func TestGenerateI18nStrings(t *testing.T) {
 	writeI18nFile("en", dataEn)
 
 	applyToOtherLanguage(dataEn, "zh")
-	applyToOtherLanguage(dataEn, "fr")
-	applyToOtherLanguage(dataEn, "de")
-	applyToOtherLanguage(dataEn, "id")
-	applyToOtherLanguage(dataEn, "ja")
-	applyToOtherLanguage(dataEn, "ko")
-	applyToOtherLanguage(dataEn, "ru")
-	applyToOtherLanguage(dataEn, "es")
 }
