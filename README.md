@@ -1,35 +1,41 @@
 <h1 align="center" style="border-bottom: none;">📦⚡️ Casbin Gateway</h1>
 <h3 align="center">An open-source Web Application Firewall (WAF) software developed by Go and React.</h3>
 <p align="center">
-  <a href="#badge">
-    <img alt="semantic-release" src="https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg">
+  <a href="https://github.com/apache/casbin-gateway/actions/workflows/golangci-lint.yml">
+    <img alt="Lint" src="https://github.com/apache/casbin-gateway/actions/workflows/golangci-lint.yml/badge.svg">
   </a>
-  <a href="https://hub.docker.com/r/casbin/caswaf">
-    <img alt="docker pull casbin/caswaf" src="https://img.shields.io/docker/pulls/casbin/caswaf.svg">
+  <a href="https://github.com/apache/casbin-gateway/actions/workflows/build.yml">
+    <img alt="Build" src="https://github.com/apache/casbin-gateway/actions/workflows/build.yml/badge.svg">
+  </a>
+  <a href="https://pkg.go.dev/github.com/apache/casbin-gateway">
+    <img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/apache/casbin-gateway.svg">
   </a>
   <a href="https://github.com/apache/casbin-gateway/releases/latest">
     <img alt="GitHub Release" src="https://img.shields.io/github/v/release/apache/casbin-gateway.svg">
   </a>
-  <a href="https://hub.docker.com/r/casbin/caswaf">
-    <img alt="Docker Image Version (latest semver)" src="https://img.shields.io/badge/Docker%20Hub-latest-brightgreen">
-  </a>
 </p>
 
 <p align="center">
-  <a href="https://goreportcard.com/report/github.com/apache/casbin-gateway">
-    <img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/apache/casbin-gateway?style=flat-square">
+  <a href="https://hub.docker.com/r/casbin/caswaf">
+    <img alt="docker pull casbin/caswaf" src="https://img.shields.io/docker/pulls/casbin/caswaf.svg">
+  </a>
+  <a href="https://hub.docker.com/r/casbin/caswaf">
+    <img alt="Docker Image Version (latest semver)" src="https://img.shields.io/badge/Docker%20Hub-latest-brightgreen">
   </a>
   <a href="https://github.com/apache/casbin-gateway/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/apache/casbin-gateway?style=flat-square" alt="license">
+    <img alt="license" src="https://img.shields.io/github/license/apache/casbin-gateway">
   </a>
   <a href="https://github.com/apache/casbin-gateway/issues">
-    <img alt="GitHub issues" src="https://img.shields.io/github/issues/apache/casbin-gateway?style=flat-square">
+    <img alt="GitHub issues" src="https://img.shields.io/github/issues/apache/casbin-gateway">
   </a>
-  <a href="#">
-    <img alt="GitHub stars" src="https://img.shields.io/github/stars/apache/casbin-gateway?style=flat-square">
+  <a href="https://github.com/apache/casbin-gateway/stargazers">
+    <img alt="GitHub stars" src="https://img.shields.io/github/stars/apache/casbin-gateway">
   </a>
   <a href="https://github.com/apache/casbin-gateway/network">
-    <img alt="GitHub forks" src="https://img.shields.io/github/forks/apache/casbin-gateway?style=flat-square">
+    <img alt="GitHub forks" src="https://img.shields.io/github/forks/apache/casbin-gateway">
+  </a>
+  <a href="https://discord.gg/S5UjpzGZjN">
+    <img alt="Discord" src="https://img.shields.io/discord/1022748306096537660?logo=discord&label=discord&color=5865F2">
   </a>
 </p>
 
@@ -57,7 +63,6 @@ Casbin Gateway runs standalone out of the box: it stores its data in a local SQL
 
 ### Deployment Options
 
-- **[Kubernetes Deployment](k8s/README.md)**: Deploy Casbin Gateway on Kubernetes with complete manifests and guide
 - **Docker Compose**: Use the provided `docker-compose.yml` for quick local setup
 - **Manual Installation**: Build and run from source
 
