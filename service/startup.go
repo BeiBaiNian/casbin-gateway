@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/apache/casbin-gateway/conf"
+	"github.com/apache/casbin-gateway/embedsupport"
 	"github.com/apache/casbin-gateway/object"
 	"github.com/apache/casbin-gateway/util"
 )
@@ -38,6 +39,7 @@ type summaryRow struct {
 func PrintStartupSummary() {
 	rows := []summaryRow{
 		{"Management UI", fmt.Sprintf("http://localhost:%d", conf.GetHttpPort())},
+		{"Settings", describeConf()},
 		{"Web UI files", describeWebBuild()},
 		{"Reverse proxy", describeGateway()},
 		{"Gateway HTTP", describeGatewayPort(conf.GetGatewayHttpPort())},
@@ -50,9 +52,21 @@ func PrintStartupSummary() {
 	printSummaryTable("Casbin Gateway", rows)
 }
 
+func describeConf() string {
+	if embedsupport.IsEmbeddedConf() {
+		return "embedded in the binary (put your own conf/app.conf next to it to override)"
+	}
+
+	return "conf/app.conf"
+}
+
 func describeWebBuild() string {
 	if util.FileExist(webBuildDir + "/index.html") {
 		return webBuildDir
+	}
+
+	if embedsupport.HasWeb() {
+		return "embedded in the binary"
 	}
 
 	return fmt.Sprintf("%s is missing, run \"yarn install && yarn build\" in web/", webBuildDir)

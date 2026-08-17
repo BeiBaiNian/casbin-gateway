@@ -65,6 +65,7 @@ Casbin Gateway runs standalone out of the box: it stores its data in a local SQL
 
 - **Docker Compose**: Use the provided `docker-compose.yml` for quick local setup
 - **Manual Installation**: Build and run from source
+- **Single binary**: Build one self-contained executable that runs with no files next to it, see [Single binary](#single-binary)
 
 The reverse-proxy gateway on ports 80 and 443 is disabled by default, so starting the management application does not take over those ports. Set `gatewayEnabled = true` in `conf/app.conf` when you are ready to use the WAF proxy. On Linux and macOS those ports also need root, so for a first try it is easier to point `gatewayHttpPort` at a high port such as `8080`.
 
@@ -95,6 +96,7 @@ It prints a summary of what it is actually doing — ports, whether the reverse 
 | Casbin Gateway                                                              |
 +----------------+-----------------------------------------------------------+
 | Management UI  | http://localhost:17000                                     |
+| Settings       | conf/app.conf                                              |
 | Web UI files   | web/build                                                  |
 | Reverse proxy  | enabled                                                    |
 | Gateway HTTP   | :8080                                                      |
@@ -134,6 +136,37 @@ curl -H "Host: test.example.com" http://127.0.0.1:8080/
 ```
 
 You should get your backend's response. A `site not found for host` reply means the request reached Gateway but no site matches that `Host` value.
+
+### Single binary
+
+Normally Gateway reads three things from disk when it starts: `conf/app.conf`, the compiled web UI in `web/build`, and the IP location database `ip/17monipdb.dat`. Building with the `embed` tag bakes all three into the executable, so it can be copied somewhere on its own and started from anywhere:
+
+```bash
+cd web && yarn install && GENERATE_SOURCEMAP=false yarn build
+```
+
+```bash
+go build -tags embed -o casbin-gateway .
+```
+
+Build the frontend first: everything under `web/build` goes into the binary, so `go build -tags embed` fails to compile while that directory is missing. Turning source maps off keeps them out of the binary, where they would cost several times what the code they map costs.
+
+Files on disk always win over the embedded copies, so a single binary can still be configured and developed against without rebuilding it:
+
+| Embedded asset | Overridden by |
+| --- | --- |
+| `conf/app.conf` | `conf/app.conf` in the working directory, or next to the executable |
+| `web/build` | `web/build/index.html` in the working directory, which then serves the whole UI |
+| `ip/17monipdb.dat` | `ip/17monipdb.dat` in the working directory |
+
+The startup summary reports which source each one came from:
+
+```
+| Settings       | embedded in the binary (put your own conf/app.conf next to it to override) |
+| Web UI files   | embedded in the binary                                                     |
+```
+
+Being self-contained is about startup, not about staying read-only: a running Gateway still writes `./data` (the SQLite database, deployed apps, agent patch state), `./logs` and `./tmp` relative to its working directory. Start it from the directory where that state belongs.
 
 ### Necessary configuration
 

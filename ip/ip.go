@@ -17,14 +17,32 @@ package ip
 import (
 	"fmt"
 
+	"github.com/apache/casbin-gateway/embedsupport"
 	"github.com/apache/casbin-gateway/util"
 )
 
+// ipDbPath is where the IP location database lives in the source tree.
+const ipDbPath = "ip/17monipdb.dat"
+
+// InitIpDb loads the IP location database used to tell abroad traffic apart
+// from Chinese traffic. The file on disk is used when it is there; a binary
+// built with -tags embed falls back to the copy baked into it.
 func InitIpDb() {
-	err := Init("ip/17monipdb.dat")
-	if err != nil {
-		panic(err)
+	if util.FileExist(ipDbPath) {
+		err := Init(ipDbPath)
+		if err != nil {
+			panic(err)
+		}
+
+		return
 	}
+
+	data := embedsupport.IpDb()
+	if len(data) == 0 {
+		panic(fmt.Errorf("the IP location database \"%s\" is missing", ipDbPath))
+	}
+
+	InitWithData(data)
 }
 
 func IsAbroadIp(ip string) bool {

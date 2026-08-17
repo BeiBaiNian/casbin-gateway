@@ -29,7 +29,14 @@ import (
 var WafConf string
 
 func init() {
-	// this array contains the beego configuration items that may be modified via env
+	ApplyEnvOverrides()
+}
+
+// ApplyEnvOverrides copies the beego configuration items that may be modified
+// via env into beego's config. It runs at init, and again whenever the config
+// is reloaded afterwards — beego.LoadAppConfig() builds a new config from the
+// file alone, so anything set here would otherwise be lost.
+func ApplyEnvOverrides() {
 	presetConfigItems := []string{"httpport", "appname"}
 	for _, key := range presetConfigItems {
 		if value, ok := os.LookupEnv(key); ok {
