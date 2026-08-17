@@ -13,11 +13,15 @@ This guide provides instructions for deploying Casbin Gateway on Kubernetes.
 
 The deployment consists of:
 - **Casbin Gateway Application**: The main WAF application
-- **MySQL Database**: Stores Casbin Gateway configuration and data
-- **Secrets**: Stores sensitive credentials (Casdoor client ID/secret, MySQL password)
+- **PersistentVolumeClaim**: Holds the SQLite database at `/data/caswaf.db`. There is no database server to deploy
+- **Secrets**: Stores sensitive credentials (Casdoor client ID/secret)
 - **ConfigMap**: Contains Casbin Gateway configuration template
-- **Services**: Exposes Casbin Gateway and MySQL within the cluster
+- **Service**: Exposes Casbin Gateway within the cluster
 - **Ingress** (optional): Exposes Casbin Gateway externally
+
+Because SQLite is a single file written by one process, the Deployment stays at
+one replica and uses the `Recreate` strategy. Switch to MySQL or PostgreSQL (see
+[Using an external database](#using-an-external-database)) before scaling out.
 
 ## Quick Start
 
@@ -38,14 +42,11 @@ Edit `k8s/secret.yaml` and update the sensitive credentials:
 stringData:
   casdoor-client-id: "YOUR_ACTUAL_CLIENT_ID"
   casdoor-client-secret: "YOUR_ACTUAL_CLIENT_SECRET"
-  mysql-password: "YOUR_STRONG_PASSWORD"
 ```
 
 **Important**: 
 - **REQUIRED**: You must replace all placeholder values before deployment
 - Get `casdoor-client-id` and `casdoor-client-secret` from your Casdoor application settings
-- Use a strong password for `mysql-password` (min 12 characters recommended)
-- This password must match the one in `k8s/mysql.yaml`
 - The deployment will fail with validation errors if placeholders are not replaced
 
 **Security Best Practice**: Never commit actual secrets to version control. Consider using:
@@ -53,16 +54,11 @@ stringData:
 - [External Secrets Operator](https://external-secrets.io/)
 - Cloud provider secret management (AWS Secrets Manager, Azure Key Vault, GCP Secret Manager)
 
-### 3. Configure MySQL Password
+### 3. Review the data volume
 
-Edit `k8s/mysql.yaml` and update the MySQL root password:
-
-```bash
-# Generate base64 encoded password (use the same password as in secret.yaml)
-echo -n "YOUR_SECURE_PASSWORD" | base64
-```
-
-Then update the `mysql-root-password` in the Secret resource with the base64 value.
+`k8s/pvc.yaml` requests 10Gi of `ReadWriteOnce` storage for the SQLite database.
+Adjust the size, or add a `storageClassName`, if your cluster has no default
+storage class.
 
 ### 4. Configure Casdoor Endpoint (Optional)
 
@@ -86,7 +82,7 @@ chmod +x deploy.sh
 
 The script will:
 - Validate your configuration
-- Deploy MySQL and wait for it to be ready
+- Create the namespace and the data volume
 - Deploy secrets and configuration
 - Deploy Casbin Gateway application
 - Optionally deploy Ingress
@@ -95,11 +91,11 @@ The script will:
 **Option B: Using individual files**
 
 ```bash
-# Create namespace and deploy MySQL
-kubectl apply -f k8s/mysql.yaml
+# Create the namespace
+kubectl apply -f k8s/namespace.yaml
 
-# Wait for MySQL to be ready
-kubectl wait --for=condition=ready pod -l app=caswaf-mysql -n caswaf --timeout=300s
+# Create the volume that holds the SQLite database
+kubectl apply -f k8s/pvc.yaml
 
 # Deploy Secrets
 kubectl apply -f k8s/secret.yaml
@@ -152,8 +148,7 @@ kubectl port-forward svc/caswaf 17000:17000 -n caswaf
 
 Stores sensitive credentials:
 - `casdoor-client-id`: Casdoor application client ID
-- `casdoor-client-secret`: Casdoor application client secret  
-- `mysql-password`: MySQL root password (must match mysql.yaml)
+- `casdoor-client-secret`: Casdoor application client secret
 
 **Security Note**: Never commit actual secrets to version control. Use sealed-secrets, external secret operators, or other secret management solutions in production.
 
@@ -165,9 +160,9 @@ Key configuration parameters:
 |-----------|-------------|---------|
 | `httpport` | Casbin Gateway HTTP port | `17000` |
 | `runmode` | Run mode (dev/prod) | `prod` |
-| `driverName` | Database driver | `mysql` |
-| `dataSourceName` | MySQL connection string | Uses secrets substitution |
-| `dbName` | Database name | `caswaf` |
+| `driverName` | Database driver | `sqlite` |
+| `dataSourceName` | SQLite file, or the connection string of a database server | `/data/caswaf.db` |
+| `dbName` | Database name (unused by SQLite) | `caswaf` |
 | `casdoorEndpoint` | Casdoor API endpoint | Required |
 | `casdoorInsecureSkipVerify` | Skip TLS verification for Casdoor | `true` |
 | `clientId` | Casdoor application client ID | Uses secrets substitution |
@@ -175,43 +170,38 @@ Key configuration parameters:
 | `casdoorOrganization` | Casdoor organization name | `built-in` |
 | `casdoorApplication` | Casdoor application name | Required |
 
-### MySQL Deployment (`mysql.yaml`)
+### Data Volume (`pvc.yaml`)
 
-- Uses MySQL 8.0.36 (latest stable)
-- Persistent storage with PVC (10Gi)
-- Includes health checks (liveness and readiness probes)
-- Root password stored in Kubernetes Secret with obvious placeholder
+- 10Gi `ReadWriteOnce` claim mounted at `/data`
+- Holds `caswaf.db`, the SQLite database, plus its `-wal` and `-shm` sidecar files
+- Deleting the claim deletes all Gateway data
 
 ### Casbin Gateway Deployment (`deployment.yaml`)
 
 Features:
-- Init containers:
-  - Wait for MySQL readiness
-  - Substitute secrets into configuration file
+- Init container that substitutes secrets into the configuration file
 - TCP-based liveness and readiness probes (no authentication required)
 - Resource limits and requests
 - Configuration mounted from ConfigMap with secret substitution
+- One replica with the `Recreate` strategy, because the SQLite file takes a
+  single writer
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### 1. "wait-for-it: timeout occurred after waiting 15 seconds for db:3306"
+#### 1. Pod stuck in `Pending`
 
-**Note**: This issue is fixed in the current deployment by using an init container instead of wait-for-it.
-
-**Cause**: MySQL is not ready or not accessible
+**Cause**: The `caswaf-data-pvc` claim is unbound, usually because the cluster has no default storage class.
 
 **Solution**:
 ```bash
-# Check MySQL pod status
-kubectl get pods -n caswaf -l app=caswaf-mysql
+# Check the claim and why it is not bound
+kubectl get pvc -n caswaf
+kubectl describe pvc caswaf-data-pvc -n caswaf
 
-# Check MySQL logs
-kubectl logs -n caswaf -l app=caswaf-mysql
-
-# Verify MySQL service
-kubectl get svc -n caswaf caswaf-mysql
+# List the available storage classes, then set storageClassName in k8s/pvc.yaml
+kubectl get storageclass
 ```
 
 #### 2. "casdoorsdk.GetCerts() error: Unauthorized operation"
@@ -236,20 +226,26 @@ kubectl get svc -n caswaf caswaf-mysql
 
 #### 3. Database Connection Issues
 
+The startup summary in the pod log names the database Gateway actually opened,
+and says whether it answered.
+
 **Solution**:
 ```bash
-# Test MySQL connection from Casbin Gateway pod
+# Confirm the SQLite file is on the volume
+kubectl exec -it deployment/caswaf -n caswaf -- ls -l /data
+
+# For an external database server, test that it is reachable from the pod
 kubectl exec -it deployment/caswaf -n caswaf -- sh
-# Then inside the pod:
-# nc -zv caswaf-mysql 3306
+# Then inside the pod, e.g.:
+# nc -zv mysql.example.com 3306
 ```
 
 #### 4. Init Container Stuck
 
-If the init container is stuck waiting for MySQL:
+If the `setup-config` init container never finishes:
 ```bash
 # Check init container logs
-kubectl logs -n caswaf <pod-name> -c wait-for-mysql
+kubectl logs -n caswaf <pod-name> -c setup-config
 
 # Force restart
 kubectl rollout restart deployment/caswaf -n caswaf
@@ -261,16 +257,13 @@ kubectl rollout restart deployment/caswaf -n caswaf
 # Casbin Gateway logs
 kubectl logs -f deployment/caswaf -n caswaf
 
-# MySQL logs
-kubectl logs -f deployment/caswaf-mysql -n caswaf
-
 # All logs in namespace
 kubectl logs -f -n caswaf --all-containers=true
 ```
 
 ## Production Recommendations
 
-1. **Use External MySQL**: For production, consider using a managed MySQL service (AWS RDS, Google Cloud SQL, etc.)
+1. **Use an External Database**: The SQLite default is fine for a single replica. For production, consider a managed MySQL or PostgreSQL service (AWS RDS, Google Cloud SQL, etc.) — see [Using an external database](#using-an-external-database)
 
 2. **Configure TLS**: 
    - Set `casdoorInsecureSkipVerify = false`
@@ -288,8 +281,9 @@ kubectl logs -f -n caswaf --all-containers=true
    ```
 
 4. **High Availability**:
-   - Increase replicas for Casbin Gateway
-   - Use MySQL replication or managed service
+   - Move to an external database first: more than one replica cannot share the SQLite file
+   - Then increase replicas for Casbin Gateway
+   - Use database replication or a managed service
    - Configure proper health checks
 
 5. **Monitoring**: Set up monitoring and alerting:
@@ -297,7 +291,10 @@ kubectl logs -f -n caswaf --all-containers=true
    - Application logs
    - Resource usage
 
-6. **Backup**: Regular backups of MySQL data
+6. **Backup**: Regular backups of the database. For SQLite that is the `caswaf-data-pvc` volume:
+   ```bash
+   kubectl exec deployment/caswaf -n caswaf -- tar cf - /data > caswaf-data.tar
+   ```
 
 7. **Security**:
    - Use Kubernetes Secrets for sensitive data
@@ -325,7 +322,10 @@ kubectl rollout status deployment/caswaf -n caswaf
 kubectl delete -f k8s/ingress.yaml
 kubectl delete -f k8s/deployment.yaml
 kubectl delete -f k8s/configmap.yaml
-kubectl delete -f k8s/mysql.yaml
+kubectl delete -f k8s/secret.yaml
+
+# Deleting the claim destroys the SQLite database
+kubectl delete -f k8s/pvc.yaml
 
 # Or delete the entire namespace
 kubectl delete namespace caswaf
@@ -333,14 +333,18 @@ kubectl delete namespace caswaf
 
 ## Advanced Configuration
 
-### Using External MySQL
+### Using an external database
 
 Edit `configmap.yaml`:
 ```yaml
-dataSourceName: root:password@tcp(external-mysql.example.com:3306)/
+driverName = mysql
+dataSourceName = root:password@tcp(external-mysql.example.com:3306)/
+dbName = caswaf
 ```
 
-Then skip deploying `mysql.yaml`.
+Gateway creates `dbName` on first start if it does not exist. Once the data no
+longer lives on the volume you can drop the `data` volume and its mount from
+`deployment.yaml`, stop deploying `pvc.yaml`, and raise `replicas`.
 
 ### Using Redis for Sessions
 

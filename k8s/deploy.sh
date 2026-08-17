@@ -42,7 +42,7 @@ if ! command -v kubectl &> /dev/null; then
 fi
 
 # Check if we're in the k8s directory
-if [ ! -f "secret.yaml" ] || [ ! -f "deployment.yaml" ]; then
+if [ ! -f "secret.yaml" ] || [ ! -f "deployment.yaml" ] || [ ! -f "pvc.yaml" ]; then
     echo -e "${RED}Error: Please run this script from the k8s directory${NC}"
     exit 1
 fi
@@ -55,33 +55,16 @@ if grep -q "CHANGEME_INSECURE_DEFAULT_REPLACE_THIS" secret.yaml; then
     echo "Please edit k8s/secret.yaml and replace all placeholder values with your actual credentials:"
     echo "  - casdoor-client-id"
     echo "  - casdoor-client-secret"
-    echo "  - mysql-password"
-    echo
-    echo "Also update k8s/mysql.yaml with the base64 encoded password:"
-    echo "  echo -n 'your-password' | base64"
-    exit 1
-fi
-
-if grep -q "CHANGEME_INSECURE_DEFAULT_REPLACE_THIS" mysql.yaml; then
-    echo -e "${RED}Error: MySQL password has not been configured!${NC}"
-    echo "Please edit k8s/mysql.yaml and set a strong password (base64 encoded)"
-    echo "  echo -n 'your-strong-password' | base64"
     exit 1
 fi
 
 echo -e "${GREEN}✓ Configuration looks good${NC}"
 echo
 
-echo -e "${YELLOW}Step 2: Deploying MySQL...${NC}"
-kubectl apply -f mysql.yaml
-
-echo "Waiting for MySQL to be ready..."
-kubectl wait --for=condition=ready pod -l app=caswaf-mysql -n caswaf --timeout=300s || {
-    echo -e "${RED}Error: MySQL failed to start${NC}"
-    echo "Check logs with: kubectl logs -n caswaf -l app=caswaf-mysql"
-    exit 1
-}
-echo -e "${GREEN}✓ MySQL is ready${NC}"
+echo -e "${YELLOW}Step 2: Creating the namespace and the data volume...${NC}"
+kubectl apply -f namespace.yaml
+kubectl apply -f pvc.yaml
+echo -e "${GREEN}✓ Namespace and data volume created${NC}"
 echo
 
 echo -e "${YELLOW}Step 3: Deploying Casbin Gateway configuration...${NC}"

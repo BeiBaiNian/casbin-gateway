@@ -11,8 +11,10 @@ data:
     runmode = prod
     SessionOn = true
     copyrequestbody = true
-    driverName = mysql
-    dataSourceName = root:MYSQL_PASSWORD_PLACEHOLDER@tcp(caswaf-mysql:3306)/
+    # A SQLite file on the PersistentVolumeClaim. For MySQL, set
+    # driverName = mysql and dataSourceName = root:PASSWORD@tcp(host:3306)/
+    driverName = sqlite
+    dataSourceName = /data/caswaf.db
     dbName = caswaf
     redisEndpoint =
     gatewayEnabled = false

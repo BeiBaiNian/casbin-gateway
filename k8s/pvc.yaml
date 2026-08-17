@@ -1,0 +1,13 @@
+---
+# Holds the SQLite database at /data/caswaf.db.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: caswaf-data-pvc
+  namespace: caswaf
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

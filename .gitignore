@@ -25,6 +25,12 @@ tmpFiles/
 *.tmp
 logs/
 data/agent-patches/
+
+# SQLite database and its WAL sidecar files
+*.db
+*.db-wal
+*.db-shm
+
 lastupdate.tmp
 commentsRouter*.go
 acme_account.key

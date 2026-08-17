@@ -49,11 +49,11 @@ Casbin Gateway contains 2 parts:
 | Name     | Description                            | Language               | Source code                                              |
 |----------|----------------------------------------|------------------------|----------------------------------------------------------|
 | Frontend | Web frontend UI for Casbin Gateway     | Javascript + React     | https://github.com/apache/casbin-gateway/tree/master/web |
-| Backend  | RESTful API backend for Casbin Gateway | Golang + Beego + MySQL | https://github.com/apache/casbin-gateway                 |
+| Backend  | RESTful API backend for Casbin Gateway | Golang + Beego + XORM  | https://github.com/apache/casbin-gateway                 |
 
 ## Installation
 
-Casbin Gateway runs standalone out of the box: it signs users in against its own user table, seeding an `admin` account with the password `123` on first start. Connecting it to a [Casdoor](https://casdoor.org) instance is optional, and enables single sign-on plus the Casdoor-backed features listed under [Optional configuration](#optional-configuration).
+Casbin Gateway runs standalone out of the box: it stores its data in a local SQLite file, so there is no database server to install, and it signs users in against its own user table, seeding an `admin` account with the password `123` on first start. Connecting it to a [Casdoor](https://casdoor.org) instance is optional, and enables single sign-on plus the Casdoor-backed features listed under [Optional configuration](#optional-configuration).
 
 ### Deployment Options
 
@@ -65,19 +65,9 @@ The reverse-proxy gateway on ports 80 and 443 is disabled by default, so startin
 
 ### Quick start
 
-From nothing to a request flowing through the gateway, in five steps.
+From nothing to a request flowing through the gateway, in four steps. No database server is needed: Gateway creates `./data/caswaf.db` on first start.
 
-#### 1. Start MySQL
-
-Any MySQL 5.7+ reachable from Gateway will do. With Docker:
-
-```bash
-docker run -d --name caswaf-db -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123 mysql:8.0.25
-```
-
-Gateway creates the `caswaf` database itself on first start. If your MySQL is elsewhere, or the password is not `123`, change `dataSourceName` in `conf/app.conf`.
-
-#### 2. Build the web UI
+#### 1. Build the web UI
 
 The backend serves the compiled frontend from `web/build`, so build it once before starting the backend:
 
@@ -87,7 +77,7 @@ cd web && yarn install && yarn build
 
 For frontend development, run `yarn start` instead. That serves the UI on http://localhost:16001 with hot reload and proxies API calls to the backend on port 17000, so both have to be running.
 
-#### 3. Run the backend
+#### 2. Run the backend
 
 ```bash
 go run main.go
@@ -104,7 +94,7 @@ It prints a summary of what it is actually doing — ports, whether the reverse 
 | Reverse proxy  | enabled                                                    |
 | Gateway HTTP   | :8080                                                      |
 | Gateway HTTPS  | :8443                                                      |
-| Database       | mysql, database "caswaf" (connected)                       |
+| Database       | sqlite, file "./data/caswaf.db" (connected)                |
 | Sign-in        | built-in user table, Casdoor is not configured             |
 | App dir        | ./data/apps                                                |
 +----------------+-----------------------------------------------------------+
@@ -112,7 +102,7 @@ It prints a summary of what it is actually doing — ports, whether the reverse 
 
 If a port is taken, Gateway says which process holds it and stops, rather than starting half-configured.
 
-#### 4. Sign in and add a site
+#### 3. Sign in and add a site
 
 Open http://localhost:17000, sign in as `admin` with the password `123`, and change it from the "My Account" page.
 
@@ -124,7 +114,7 @@ Then go to **Sites** → **Add**, and set:
 
 Save. Then set `gatewayEnabled = true` in `conf/app.conf` and restart the backend — the Sites page shows a warning while the reverse proxy is off, because site configurations do nothing until it is on.
 
-#### 5. Verify the forwarding
+#### 4. Verify the forwarding
 
 Start anything on the backend port you configured, for example:
 
@@ -156,13 +146,22 @@ git clone https://github.com/apache/casbin-gateway
 
 #### Setup database
 
-Casbin Gateway will store its users, nodes and topics information in a MySQL database named: `caswaf`, will create it if not existed. The DB connection string can be specified at: https://github.com/apache/casbin-gateway/blob/master/conf/app.conf
+Casbin Gateway stores its users, nodes and topics information in a SQLite file, created on first start. Nothing has to be installed or configured for this; the defaults in https://github.com/apache/casbin-gateway/blob/master/conf/app.conf are:
 
 ```ini
-dataSourceName = root:123@tcp(localhost:3306)/
+driverName = sqlite
+dataSourceName =
 ```
 
-Casbin Gateway uses XORM to connect to DB, so all DBs supported by XORM can also be used.
+An empty `dataSourceName` means `./data/caswaf.db`, relative to the working directory. Set it to another path to move the file.
+
+Casbin Gateway uses XORM to connect to DB, so all DBs supported by XORM can also be used. To use MySQL instead, point it at your server and Gateway creates the database named by `dbName` if it does not exist:
+
+```ini
+driverName = mysql
+dataSourceName = root:123@tcp(localhost:3306)/
+dbName = caswaf
+```
 
 #### Run Casbin Gateway
 

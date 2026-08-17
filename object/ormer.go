@@ -18,6 +18,8 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -28,8 +30,14 @@ import (
 	_ "github.com/lib/pq"                // db = postgres
 	"github.com/xorm-io/core"
 	"github.com/xorm-io/xorm"
-	_ "modernc.org/sqlite" // db = sqlite
+	sqlitedriver "modernc.org/sqlite" // db = sqlite
 )
+
+func init() {
+	// modernc.org/sqlite registers itself as "sqlite" only, so "sqlite3" in
+	// app.conf would otherwise fail with an unknown driver.
+	sql.Register("sqlite3", &sqlitedriver.Driver{})
+}
 
 var (
 	ormer                   *Ormer = nil
@@ -63,14 +71,16 @@ func InitConfig() {
 }
 
 func InitAdapter() {
+	driverName := conf.GetConfigDriverName()
+
 	if createDatabase {
-		err := createDatabaseForPostgres(conf.GetConfigString("driverName"), conf.GetConfigDataSourceName(), conf.GetConfigString("dbName"))
+		err := createDatabaseForPostgres(driverName, conf.GetConfigDataSourceName(), conf.GetConfigString("dbName"))
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	ormer = NewAdapter(conf.GetConfigString("driverName"), conf.GetConfigDataSourceName(), conf.GetConfigString("dbName"))
+	ormer = NewAdapter(driverName, conf.GetConfigDataSourceName(), conf.GetConfigString("dbName"))
 
 	tableNamePrefix := conf.GetConfigString("tableNamePrefix")
 	tbMapper := core.NewPrefixMapper(core.SnakeMapper{}, tableNamePrefix)
@@ -98,7 +108,7 @@ func PingDatabase() error {
 	return ormer.Engine.Ping()
 }
 
-// Ormer represents the MySQL adapter for policy storage.
+// Ormer represents the database adapter for policy storage.
 type Ormer struct {
 	driverName     string
 	dataSourceName string
@@ -156,6 +166,11 @@ func (a *Ormer) CreateDatabase() error {
 		return nil
 	}
 
+	// SQLite has no "CREATE DATABASE": open() creates the file.
+	if conf.IsSqliteDriver(a.driverName) {
+		return nil
+	}
+
 	engine, err := xorm.NewEngine(a.driverName, a.dataSourceName)
 	if err != nil {
 		return err
@@ -172,12 +187,54 @@ func (a *Ormer) open() {
 		dataSourceName = a.dataSourceName
 	}
 
+	isSqlite := conf.IsSqliteDriver(a.driverName)
+	if isSqlite {
+		err := prepareSqliteDir(dataSourceName)
+		if err != nil {
+			panic(err)
+		}
+
+		dataSourceName = withSqlitePragmas(dataSourceName)
+	}
+
 	engine, err := xorm.NewEngine(a.driverName, dataSourceName)
 	if err != nil {
 		panic(err)
 	}
 
+	if isSqlite {
+		// SQLite takes a single writer at a time.
+		engine.SetMaxOpenConns(1)
+	}
+
 	a.Engine = engine
+}
+
+// prepareSqliteDir creates the directory holding the SQLite file, since a fresh
+// checkout has no ./data yet.
+func prepareSqliteDir(dataSourceName string) error {
+	dir := filepath.Dir(dataSourceName)
+	if dir == "" || dir == "." {
+		return nil
+	}
+
+	return os.MkdirAll(dir, 0o755)
+}
+
+// withSqlitePragmas keeps SQLite usable under concurrent requests: WAL lets
+// readers run alongside the writer, and busy_timeout waits instead of failing
+// with SQLITE_BUSY.
+func withSqlitePragmas(dataSourceName string) string {
+	if strings.Contains(dataSourceName, "_pragma=") {
+		return dataSourceName
+	}
+
+	separator := "?"
+	if strings.Contains(dataSourceName, "?") {
+		separator = "&"
+	}
+
+	return dataSourceName + separator + "_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 }
 
 func (a *Ormer) close() {

@@ -5,7 +5,8 @@ kind: Kustomization
 namespace: caswaf
 
 resources:
-  - mysql.yaml
+  - namespace.yaml
+  - pvc.yaml
   - secret.yaml
   - configmap.yaml
   - deployment.yaml

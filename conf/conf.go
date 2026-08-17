@@ -116,8 +116,37 @@ func GetConfigInt64(key string) (int64, error) {
 	return num, err
 }
 
+// DefaultSqliteDataSourceName is used when "dataSourceName" is empty.
+const DefaultSqliteDataSourceName = "./data/caswaf.db"
+
+func GetConfigDriverName() string {
+	driverName := strings.Trim(GetConfigString("driverName"), `"' `)
+	if driverName == "" {
+		return "sqlite"
+	}
+
+	return driverName
+}
+
+// IsSqliteDriver accepts both spellings: modernc.org/sqlite registers itself as
+// "sqlite" while XORM calls its dialect "sqlite3".
+func IsSqliteDriver(driverName string) bool {
+	return driverName == "sqlite" || driverName == "sqlite3"
+}
+
 func GetConfigDataSourceName() string {
 	dataSourceName := GetConfigString("dataSourceName")
+
+	// A SQLite data source is a file path, so the Docker host rewrite below
+	// does not apply to it.
+	if IsSqliteDriver(GetConfigDriverName()) {
+		dataSourceName = strings.Trim(dataSourceName, `"' `)
+		if dataSourceName == "" {
+			return DefaultSqliteDataSourceName
+		}
+
+		return dataSourceName
+	}
 
 	runningInDocker := os.Getenv("RUNNING_IN_DOCKER")
 	if runningInDocker == "true" {
