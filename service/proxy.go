@@ -324,8 +324,8 @@ func nextHandle(w http.ResponseWriter, r *http.Request) {
 func Start() {
 	serverMux := http.NewServeMux()
 	serverMux.HandleFunc("/", handleRequest)
-	serverMux.HandleFunc("/caswaf-handler", handleAuthCallback)
-	serverMux.HandleFunc("/caswaf-captcha-verify", handleCaptchaCallback)
+	serverMux.HandleFunc("/_sso-callback", handleAuthCallback)
+	serverMux.HandleFunc("/_captcha-verify", handleCaptchaCallback)
 
 	if !conf.IsGatewayEnabled() {
 		fmt.Printf("Casbin Gateway reverse proxy is not enabled (gatewayEnabled = false), so site configurations will not take effect\n")

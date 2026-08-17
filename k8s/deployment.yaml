@@ -2,8 +2,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: caswaf
-  namespace: caswaf
+  name: casbin-gateway
+  namespace: casbin-gateway
 spec:
   replicas: 1
   # The old pod has to release the SQLite file before the new one starts.
@@ -11,11 +11,11 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: caswaf
+      app: casbin-gateway
   template:
     metadata:
       labels:
-        app: caswaf
+        app: casbin-gateway
     spec:
       initContainers:
         - name: setup-config
@@ -48,12 +48,12 @@ spec:
             - name: CASDOOR_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: caswaf-secrets
+                  name: casbin-gateway-secrets
                   key: casdoor-client-id
             - name: CASDOOR_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: caswaf-secrets
+                  name: casbin-gateway-secrets
                   key: casdoor-client-secret
           volumeMounts:
             - name: config-template
@@ -61,7 +61,7 @@ spec:
             - name: config
               mountPath: /conf-out
       containers:
-        - name: caswaf
+        - name: casbin-gateway
           image: casbin/caswaf:latest
           ports:
             - containerPort: 17000
@@ -99,21 +99,21 @@ spec:
       volumes:
         - name: config-template
           configMap:
-            name: caswaf-config
+            name: casbin-gateway-config
         - name: config
           emptyDir: {}
         - name: data
           persistentVolumeClaim:
-            claimName: caswaf-data-pvc
+            claimName: casbin-gateway-data-pvc
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: caswaf
-  namespace: caswaf
+  name: casbin-gateway
+  namespace: casbin-gateway
 spec:
   selector:
-    app: caswaf
+    app: casbin-gateway
   ports:
     - port: 17000
       targetPort: 17000

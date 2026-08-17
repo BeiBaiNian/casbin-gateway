@@ -18,7 +18,7 @@
 *.iml
 
 # Built binaries
-caswaf
+casbin-gateway
 
 tmp/
 tmpFiles/

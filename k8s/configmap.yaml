@@ -2,11 +2,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: caswaf-config
-  namespace: caswaf
+  name: casbin-gateway-config
+  namespace: casbin-gateway
 data:
   app.conf: |
-    appname = caswaf
+    appname = casbin-gateway
     httpport = 17000
     runmode = prod
     SessionOn = true
@@ -14,8 +14,8 @@ data:
     # A SQLite file on the PersistentVolumeClaim. For MySQL, set
     # driverName = mysql and dataSourceName = root:PASSWORD@tcp(host:3306)/
     driverName = sqlite
-    dataSourceName = /data/caswaf.db
-    dbName = caswaf
+    dataSourceName = /data/casbin-gateway.db
+    dbName = casbin_gateway
     redisEndpoint =
     gatewayEnabled = false
     gatewayHttpPort = 80

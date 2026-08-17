@@ -48,7 +48,7 @@ func redirectToCaptcha(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scheme := getScheme(r)
-	callbackUrl := fmt.Sprintf("%s://%s/caswaf-captcha-verify", scheme, r.Host)
+	callbackUrl := fmt.Sprintf("%s://%s/_captcha-verify", scheme, r.Host)
 	captchaUri := fmt.Sprintf(
 		"%s/captcha?client_id=%s&redirect_uri=%s&state=%s",
 		getCasdoorEndpoint(),

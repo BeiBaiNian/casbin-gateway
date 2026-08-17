@@ -27,7 +27,7 @@ func TestCheckNode(t *testing.T) {
 	InitConfig()
 	casdoor.InitCasdoorConfig()
 
-	site, err := getSite("admin", "caswaf_my")
+	site, err := getSite("admin", "casbin-gateway_my")
 	if err != nil {
 		panic(err)
 	}
@@ -41,7 +41,7 @@ func TestCheckNode(t *testing.T) {
 		panic(err)
 	}
 
-	site, err = getSite("admin", "caswaf_my")
+	site, err = getSite("admin", "casbin-gateway_my")
 	if err != nil {
 		panic(err)
 	}

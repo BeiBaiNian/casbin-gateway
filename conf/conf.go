@@ -117,7 +117,7 @@ func GetConfigInt64(key string) (int64, error) {
 }
 
 // DefaultSqliteDataSourceName is used when "dataSourceName" is empty.
-const DefaultSqliteDataSourceName = "./data/caswaf.db"
+const DefaultSqliteDataSourceName = "./data/casbin-gateway.db"
 
 func GetConfigDriverName() string {
 	driverName := strings.Trim(GetConfigString("driverName"), `"' `)

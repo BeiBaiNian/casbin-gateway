@@ -1,6 +1,6 @@
 version: '3.1'
 services:
-  caswaf:
+  casbin-gateway:
     restart: always
     build:
       context: ./
@@ -12,7 +12,7 @@ services:
     volumes:
       - ./conf:/conf/
       # Holds the SQLite database, so the data survives "docker compose down".
-      - caswaf-data:/data
+      - casbin-gateway-data:/data
 
 volumes:
-  caswaf-data:
+  casbin-gateway-data:

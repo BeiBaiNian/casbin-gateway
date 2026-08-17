@@ -1,10 +1,10 @@
 ---
-# Holds the SQLite database at /data/caswaf.db.
+# Holds the SQLite database at /data/casbin-gateway.db.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: caswaf-data-pvc
-  namespace: caswaf
+  name: casbin-gateway-data-pvc
+  namespace: casbin-gateway
 spec:
   accessModes:
     - ReadWriteOnce

@@ -2,7 +2,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: caswaf
+namespace: casbin-gateway
 
 resources:
   - namespace.yaml
@@ -14,8 +14,8 @@ resources:
 
 # You can customize common labels here
 commonLabels:
-  app.kubernetes.io/name: caswaf
-  app.kubernetes.io/part-of: caswaf
+  app.kubernetes.io/name: casbin-gateway
+  app.kubernetes.io/part-of: casbin-gateway
 
 # You can add configuration transformers here
 # For example, to change the namespace:

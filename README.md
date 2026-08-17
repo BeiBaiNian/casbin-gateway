@@ -65,7 +65,7 @@ The reverse-proxy gateway on ports 80 and 443 is disabled by default, so startin
 
 ### Quick start
 
-From nothing to a request flowing through the gateway, in four steps. No database server is needed: Gateway creates `./data/caswaf.db` on first start.
+From nothing to a request flowing through the gateway, in four steps. No database server is needed: Gateway creates `./data/casbin-gateway.db` on first start.
 
 #### 1. Build the web UI
 
@@ -94,7 +94,7 @@ It prints a summary of what it is actually doing — ports, whether the reverse 
 | Reverse proxy  | enabled                                                    |
 | Gateway HTTP   | :8080                                                      |
 | Gateway HTTPS  | :8443                                                      |
-| Database       | sqlite, file "./data/caswaf.db" (connected)                |
+| Database       | sqlite, file "./data/casbin-gateway.db" (connected)        |
 | Sign-in        | built-in user table, Casdoor is not configured             |
 | App dir        | ./data/apps                                                |
 +----------------+-----------------------------------------------------------+
@@ -153,14 +153,14 @@ driverName = sqlite
 dataSourceName =
 ```
 
-An empty `dataSourceName` means `./data/caswaf.db`, relative to the working directory. Set it to another path to move the file.
+An empty `dataSourceName` means `./data/casbin-gateway.db`, relative to the working directory. Set it to another path to move the file.
 
 Casbin Gateway uses XORM to connect to DB, so all DBs supported by XORM can also be used. To use MySQL instead, point it at your server and Gateway creates the database named by `dbName` if it does not exist:
 
 ```ini
 driverName = mysql
 dataSourceName = root:123@tcp(localhost:3306)/
-dbName = caswaf
+dbName = casbin_gateway
 ```
 
 #### Run Casbin Gateway

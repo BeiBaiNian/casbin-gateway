@@ -25,7 +25,7 @@ import (
 
 const (
 	// EnvSupervisorKey is the environment variable key to detect if running under supervisor
-	EnvSupervisorKey = "CASWAF_SUPERVISED"
+	EnvSupervisorKey = "CASBIN_GATEWAY_SUPERVISED"
 	// MaxRestarts is the maximum number of restarts within the restart window
 	MaxRestarts = 5
 	// RestartWindow is the time window for counting restarts

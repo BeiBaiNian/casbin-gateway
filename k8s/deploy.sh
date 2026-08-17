@@ -77,9 +77,9 @@ echo -e "${YELLOW}Step 4: Deploying Casbin Gateway application...${NC}"
 kubectl apply -f deployment.yaml
 
 echo "Waiting for Casbin Gateway to be ready..."
-kubectl wait --for=condition=ready pod -l app=caswaf -n caswaf --timeout=300s || {
+kubectl wait --for=condition=ready pod -l app=casbin-gateway -n casbin-gateway --timeout=300s || {
     echo -e "${RED}Warning: Casbin Gateway took longer than expected to start${NC}"
-    echo "Check logs with: kubectl logs -n caswaf -l app=caswaf"
+    echo "Check logs with: kubectl logs -n casbin-gateway -l app=casbin-gateway"
 }
 echo -e "${GREEN}✓ Casbin Gateway is deployed${NC}"
 echo
@@ -111,21 +111,21 @@ else
     echo -e "${YELLOW}Skipping Ingress deployment${NC}"
     echo
     echo "You can access Casbin Gateway using port-forward:"
-    echo "  kubectl port-forward svc/caswaf 17000:17000 -n caswaf"
+    echo "  kubectl port-forward svc/casbin-gateway 17000:17000 -n casbin-gateway"
     echo "  Then access: http://localhost:17000"
 fi
 
 echo
 echo -e "${GREEN}Deployment Summary:${NC}"
 echo "==================="
-kubectl get all -n caswaf
+kubectl get all -n casbin-gateway
 
 echo
 echo -e "${GREEN}✓ Casbin Gateway deployment completed successfully!${NC}"
 echo
 echo "Useful commands:"
-echo "  View pods:        kubectl get pods -n caswaf"
-echo "  View services:    kubectl get svc -n caswaf"
-echo "  View logs:        kubectl logs -f deployment/caswaf -n caswaf"
-echo "  Port forward:     kubectl port-forward svc/caswaf 17000:17000 -n caswaf"
-echo "  Delete all:       kubectl delete namespace caswaf"
+echo "  View pods:        kubectl get pods -n casbin-gateway"
+echo "  View services:    kubectl get svc -n casbin-gateway"
+echo "  View logs:        kubectl logs -f deployment/casbin-gateway -n casbin-gateway"
+echo "  Port forward:     kubectl port-forward svc/casbin-gateway 17000:17000 -n casbin-gateway"
+echo "  Delete all:       kubectl delete namespace casbin-gateway"

@@ -13,7 +13,7 @@ This guide provides instructions for deploying Casbin Gateway on Kubernetes.
 
 The deployment consists of:
 - **Casbin Gateway Application**: The main WAF application
-- **PersistentVolumeClaim**: Holds the SQLite database at `/data/caswaf.db`. There is no database server to deploy
+- **PersistentVolumeClaim**: Holds the SQLite database at `/data/casbin-gateway.db`. There is no database server to deploy
 - **Secrets**: Stores sensitive credentials (Casdoor client ID/secret)
 - **ConfigMap**: Contains Casbin Gateway configuration template
 - **Service**: Exposes Casbin Gateway within the cluster
@@ -119,13 +119,13 @@ kubectl apply -k k8s/
 
 ```bash
 # Check if pods are running
-kubectl get pods -n caswaf
+kubectl get pods -n casbin-gateway
 
 # Check logs
-kubectl logs -f deployment/caswaf -n caswaf
+kubectl logs -f deployment/casbin-gateway -n casbin-gateway
 
 # Check services
-kubectl get svc -n caswaf
+kubectl get svc -n casbin-gateway
 ```
 
 ### 7. Access Casbin Gateway
@@ -133,12 +133,12 @@ kubectl get svc -n caswaf
 If using Ingress:
 ```bash
 # Update your DNS or /etc/hosts to point to your ingress controller IP
-# Then access: http://caswaf.example.com
+# Then access: http://casbin-gateway.example.com
 ```
 
 If using port-forward for testing:
 ```bash
-kubectl port-forward svc/caswaf 17000:17000 -n caswaf
+kubectl port-forward svc/casbin-gateway 17000:17000 -n casbin-gateway
 # Access: http://localhost:17000
 ```
 
@@ -161,8 +161,8 @@ Key configuration parameters:
 | `httpport` | Casbin Gateway HTTP port | `17000` |
 | `runmode` | Run mode (dev/prod) | `prod` |
 | `driverName` | Database driver | `sqlite` |
-| `dataSourceName` | SQLite file, or the connection string of a database server | `/data/caswaf.db` |
-| `dbName` | Database name (unused by SQLite) | `caswaf` |
+| `dataSourceName` | SQLite file, or the connection string of a database server | `/data/casbin-gateway.db` |
+| `dbName` | Database name (unused by SQLite) | `casbin_gateway` |
 | `casdoorEndpoint` | Casdoor API endpoint | Required |
 | `casdoorInsecureSkipVerify` | Skip TLS verification for Casdoor | `true` |
 | `clientId` | Casdoor application client ID | Uses secrets substitution |
@@ -173,7 +173,7 @@ Key configuration parameters:
 ### Data Volume (`pvc.yaml`)
 
 - 10Gi `ReadWriteOnce` claim mounted at `/data`
-- Holds `caswaf.db`, the SQLite database, plus its `-wal` and `-shm` sidecar files
+- Holds `casbin-gateway.db`, the SQLite database, plus its `-wal` and `-shm` sidecar files
 - Deleting the claim deletes all Gateway data
 
 ### Casbin Gateway Deployment (`deployment.yaml`)
@@ -192,13 +192,13 @@ Features:
 
 #### 1. Pod stuck in `Pending`
 
-**Cause**: The `caswaf-data-pvc` claim is unbound, usually because the cluster has no default storage class.
+**Cause**: The `casbin-gateway-data-pvc` claim is unbound, usually because the cluster has no default storage class.
 
 **Solution**:
 ```bash
 # Check the claim and why it is not bound
-kubectl get pvc -n caswaf
-kubectl describe pvc caswaf-data-pvc -n caswaf
+kubectl get pvc -n casbin-gateway
+kubectl describe pvc casbin-gateway-data-pvc -n casbin-gateway
 
 # List the available storage classes, then set storageClassName in k8s/pvc.yaml
 kubectl get storageclass
@@ -211,7 +211,7 @@ kubectl get storageclass
 **Solution**:
 1. Verify Casdoor is accessible:
    ```bash
-   kubectl run -it --rm debug --image=curlimages/curl --restart=Never -n caswaf -- \
+   kubectl run -it --rm debug --image=curlimages/curl --restart=Never -n casbin-gateway -- \
      curl -v http://casdoor.casdoor-system.svc.cluster.local:8000
    ```
 
@@ -232,10 +232,10 @@ and says whether it answered.
 **Solution**:
 ```bash
 # Confirm the SQLite file is on the volume
-kubectl exec -it deployment/caswaf -n caswaf -- ls -l /data
+kubectl exec -it deployment/casbin-gateway -n casbin-gateway -- ls -l /data
 
 # For an external database server, test that it is reachable from the pod
-kubectl exec -it deployment/caswaf -n caswaf -- sh
+kubectl exec -it deployment/casbin-gateway -n casbin-gateway -- sh
 # Then inside the pod, e.g.:
 # nc -zv mysql.example.com 3306
 ```
@@ -245,20 +245,20 @@ kubectl exec -it deployment/caswaf -n caswaf -- sh
 If the `setup-config` init container never finishes:
 ```bash
 # Check init container logs
-kubectl logs -n caswaf <pod-name> -c setup-config
+kubectl logs -n casbin-gateway <pod-name> -c setup-config
 
 # Force restart
-kubectl rollout restart deployment/caswaf -n caswaf
+kubectl rollout restart deployment/casbin-gateway -n casbin-gateway
 ```
 
 ### Viewing Logs
 
 ```bash
 # Casbin Gateway logs
-kubectl logs -f deployment/caswaf -n caswaf
+kubectl logs -f deployment/casbin-gateway -n casbin-gateway
 
 # All logs in namespace
-kubectl logs -f -n caswaf --all-containers=true
+kubectl logs -f -n casbin-gateway --all-containers=true
 ```
 
 ## Production Recommendations
@@ -291,9 +291,9 @@ kubectl logs -f -n caswaf --all-containers=true
    - Application logs
    - Resource usage
 
-6. **Backup**: Regular backups of the database. For SQLite that is the `caswaf-data-pvc` volume:
+6. **Backup**: Regular backups of the database. For SQLite that is the `casbin-gateway-data-pvc` volume:
    ```bash
-   kubectl exec deployment/caswaf -n caswaf -- tar cf - /data > caswaf-data.tar
+   kubectl exec deployment/casbin-gateway -n casbin-gateway -- tar cf - /data > casbin-gateway-data.tar
    ```
 
 7. **Security**:
@@ -306,13 +306,13 @@ kubectl logs -f -n caswaf --all-containers=true
 
 ```bash
 # Update the image version in deployment.yaml, then:
-kubectl set image deployment/caswaf caswaf=casbin/caswaf:NEW_VERSION -n caswaf
+kubectl set image deployment/casbin-gateway casbin-gateway=casbin/caswaf:NEW_VERSION -n casbin-gateway
 
 # Or apply updated deployment
 kubectl apply -f k8s/deployment.yaml
 
 # Check rollout status
-kubectl rollout status deployment/caswaf -n caswaf
+kubectl rollout status deployment/casbin-gateway -n casbin-gateway
 ```
 
 ## Uninstall
@@ -328,7 +328,7 @@ kubectl delete -f k8s/secret.yaml
 kubectl delete -f k8s/pvc.yaml
 
 # Or delete the entire namespace
-kubectl delete namespace caswaf
+kubectl delete namespace casbin-gateway
 ```
 
 ## Advanced Configuration
@@ -339,7 +339,7 @@ Edit `configmap.yaml`:
 ```yaml
 driverName = mysql
 dataSourceName = root:password@tcp(external-mysql.example.com:3306)/
-dbName = caswaf
+dbName = casbin_gateway
 ```
 
 Gateway creates `dbName` on first start if it does not exist. Once the data no

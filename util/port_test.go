@@ -85,7 +85,7 @@ func TestDescribePortHolder(t *testing.T) {
 // process on purpose. Both halves matter: the message has to name the port, and
 // the exit code has to be the one the supervisor treats as "do not restart".
 func TestFatalListenError(t *testing.T) {
-	if os.Getenv("CASWAF_TEST_FATAL_LISTEN") == "1" {
+	if os.Getenv("CASBIN_GATEWAY_TEST_FATAL_LISTEN") == "1" {
 		listener, err := ListenTcp(0)
 		if err != nil {
 			t.Fatalf("ListenTcp() error: %v", err)
@@ -103,7 +103,7 @@ func TestFatalListenError(t *testing.T) {
 	}
 
 	cmd := exec.Command(os.Args[0], "-test.run=TestFatalListenError")
-	cmd.Env = append(os.Environ(), "CASWAF_TEST_FATAL_LISTEN=1")
+	cmd.Env = append(os.Environ(), "CASBIN_GATEWAY_TEST_FATAL_LISTEN=1")
 	output, err := cmd.CombinedOutput()
 
 	exitErr, ok := err.(*exec.ExitError)
