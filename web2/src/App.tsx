@@ -43,8 +43,9 @@ import SiteEditPage from "@/pages/SiteEditPage";
 import SiteListPage from "@/pages/SiteListPage";
 import type {Account} from "@/types";
 
-// The dashboard is the only page that draws charts, and echarts is by far the
-// largest dependency here, so it is fetched only when that page is opened.
+// The dashboard is the only page that draws charts, and the charting runtime is
+// by far the largest dependency here, so it is fetched only when that page is
+// opened.
 const DashboardPage = React.lazy(() => import("@/pages/DashboardPage"));
 
 Setting.initCasdoorSdk(Conf.AuthConfig);
