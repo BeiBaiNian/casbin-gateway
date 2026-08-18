@@ -37,8 +37,8 @@ export default defineConfig({
     },
   },
   build: {
-    // Mirrors web/build, so the Go side finds the compiled UI in the same
-    // place under either frontend.
+    // The Go side looks for the compiled UI in web/build, so the output goes
+    // there rather than Vite's default "dist".
     outDir: "build",
     sourcemap: false,
   },

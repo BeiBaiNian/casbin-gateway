@@ -14,7 +14,7 @@ module.exports = {
   ],
   ignorePatterns: ["build", "dist", "node_modules", "*.cjs"],
   rules: {
-    // Matches the conventions the antd frontend in web/ is linted with.
+    // The house style the rest of the Casbin projects' frontends are linted with.
     quotes: ["error", "double"],
     semi: ["error", "always"],
     indent: ["error", 2, {SwitchCase: 0}],
