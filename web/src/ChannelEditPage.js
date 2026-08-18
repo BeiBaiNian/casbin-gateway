@@ -24,13 +24,8 @@ const {Option} = Select;
 // Hard-coded presets for milestone 1.1 (per channel type).
 const BASE_URL_PRESETS = {
   openai: ["https://api.openai.com/v1"],
-  claude: ["https://api.anthropic.com/v1"],
-  gemini: ["https://generativelanguage.googleapis.com/v1beta"],
   custom: ["https://oneapi.example.com", "https://api.deepseek.com/v1", "https://api.moonshot.cn/v1"],
 };
-
-// The types the gateway forwards as OpenAI-formatted requests.
-const OPENAI_COMPATIBLE_TYPES = ["openai", "custom"];
 
 // Mirrors object.BuildOpenAiUrl on the server.
 function buildOpenAiUrl(baseUrl, endpoint) {
@@ -58,8 +53,6 @@ function buildOpenAiUrl(baseUrl, endpoint) {
 
 const MODEL_PRESETS = {
   openai: ["gpt-5.5", "gpt-5", "gpt-5-mini", "o3", "o4-mini"],
-  claude: ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"],
-  gemini: ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-pro"],
   custom: ["deepseek-chat", "deepseek-reasoner", "moonshot-v1-8k", "qwen-max"],
 };
 
@@ -135,10 +128,6 @@ class ChannelEditPage extends React.Component {
   }
 
   renderUpstreamUrl(channel) {
-    if (!OPENAI_COMPATIBLE_TYPES.includes(channel.type)) {
-      return null;
-    }
-
     const upstreamUrl = buildOpenAiUrl(channel.baseUrl, "/chat/completions");
     if (upstreamUrl === "") {
       return null;
@@ -224,8 +213,6 @@ class ChannelEditPage extends React.Component {
               }}
             >
               <Option value="openai">OpenAI</Option>
-              <Option value="claude">Claude (Anthropic)</Option>
-              <Option value="gemini">Gemini (Google)</Option>
               <Option value="custom">Custom</Option>
             </Select>
           </Col>

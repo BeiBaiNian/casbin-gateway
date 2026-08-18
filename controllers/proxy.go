@@ -300,8 +300,8 @@ func isRetryableStatus(statusCode int) bool {
 // channelUnusableReason reports why the proxy cannot forward to a channel, or
 // an empty string when it can.
 func channelUnusableReason(channel *object.Channel) string {
-	if !object.IsChannelOpenAiCompatible(channel) {
-		return fmt.Sprintf("the %s channel type is not supported yet in this stage", channel.Type)
+	if !object.IsChannelTypeSupported(channel) {
+		return fmt.Sprintf("the %s channel type is not supported", channel.Type)
 	}
 	if channel.BaseUrl == "" {
 		return "channel base URL is not configured"

@@ -44,18 +44,16 @@ const (
 )
 
 var (
-	channelTypes    = []string{"openai", "claude", "gemini", "custom"}
+	// The OpenAI HTTP API is the only wire format the gateway can talk, so
+	// every supported type is reached with an OpenAI-formatted request.
+	channelTypes    = []string{"openai", "custom"}
 	channelStatuses = []string{"enabled", "disabled"}
-	// openAiCompatibleChannelTypes are the types whose upstream speaks the
-	// OpenAI HTTP API, which is the only wire format the gateway can talk so
-	// far. The claude and gemini types need their own request translation.
-	openAiCompatibleChannelTypes = []string{"openai", "custom"}
 )
 
-// IsChannelOpenAiCompatible reports whether the channel's upstream can be
-// reached with an OpenAI-formatted request.
-func IsChannelOpenAiCompatible(channel *Channel) bool {
-	return containsString(openAiCompatibleChannelTypes, channel.Type)
+// IsChannelTypeSupported reports whether the gateway can talk to the channel's
+// upstream.
+func IsChannelTypeSupported(channel *Channel) bool {
+	return containsString(channelTypes, channel.Type)
 }
 
 func containsString(values []string, value string) bool {
@@ -281,8 +279,8 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 		return false, 0, "the channel does not exist"
 	}
 
-	if !IsChannelOpenAiCompatible(stored) {
-		return false, 0, fmt.Sprintf("the %s channel type is not supported yet in this stage", stored.Type)
+	if !IsChannelTypeSupported(stored) {
+		return false, 0, fmt.Sprintf("the %s channel type is not supported", stored.Type)
 	}
 
 	if stored.BaseUrl == "" {
