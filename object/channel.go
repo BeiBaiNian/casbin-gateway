@@ -44,11 +44,10 @@ const (
 )
 
 var (
-	channelTypes    = []string{"openai", "claude", "gemini", "custom"}
+	channelTypes    = []string{"openai", "custom"}
 	channelStatuses = []string{"enabled", "disabled"}
 	// openAiCompatibleChannelTypes are the types whose upstream speaks the
-	// OpenAI HTTP API, which is the only wire format the gateway can talk so
-	// far. The claude and gemini types need their own request translation.
+	// OpenAI HTTP API, which is the only wire format the gateway can talk.
 	openAiCompatibleChannelTypes = []string{"openai", "custom"}
 )
 

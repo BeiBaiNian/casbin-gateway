@@ -114,6 +114,9 @@
     "Priority": "Priority",
     "Priority hint": "Smaller number means higher priority, 0 is the highest; when multiple channels serve the same model, the one with the smaller value is used first.",
     "Status": "Status",
+    "Unsupported": "Unsupported",
+    "Unsupported channel type": "Unsupported channel type",
+    "This channel type is no longer supported. Change it to a supported type or delete the channel.": "This channel type is no longer supported. Change it to a supported type or delete the channel.",
     "Test Connectivity": "Test Connectivity",
     "Type": "Type"
   },

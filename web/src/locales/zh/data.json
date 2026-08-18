@@ -114,6 +114,9 @@
     "Priority": "优先级",
     "Priority hint": "数字越小优先级越高，0 为最高；同模型多渠道时优先使用数值小的渠道。",
     "Status": "状态",
+    "Unsupported": "不受支持",
+    "Unsupported channel type": "不受支持的渠道类型",
+    "This channel type is no longer supported. Change it to a supported type or delete the channel.": "该渠道类型已不再受支持。请将其改为受支持的类型，或删除该渠道。",
     "Test Connectivity": "测试连接",
     "Type": "类型"
   },

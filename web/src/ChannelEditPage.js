@@ -24,8 +24,6 @@ const {Option} = Select;
 // Hard-coded presets for milestone 1.1 (per channel type).
 const BASE_URL_PRESETS = {
   openai: ["https://api.openai.com/v1"],
-  claude: ["https://api.anthropic.com/v1"],
-  gemini: ["https://generativelanguage.googleapis.com/v1beta"],
   custom: ["https://oneapi.example.com", "https://api.deepseek.com/v1", "https://api.moonshot.cn/v1"],
 };
 
@@ -58,8 +56,6 @@ function buildOpenAiUrl(baseUrl, endpoint) {
 
 const MODEL_PRESETS = {
   openai: ["gpt-5.5", "gpt-5", "gpt-5-mini", "o3", "o4-mini"],
-  claude: ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"],
-  gemini: ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-pro"],
   custom: ["deepseek-chat", "deepseek-reasoner", "moonshot-v1-8k", "qwen-max"],
 };
 
@@ -151,6 +147,22 @@ class ChannelEditPage extends React.Component {
     );
   }
 
+  renderUnsupportedTypeAlert(channel) {
+    if (OPENAI_COMPATIBLE_TYPES.includes(channel.type)) {
+      return null;
+    }
+
+    return (
+      <Alert
+        style={{marginBottom: "20px"}}
+        type="warning"
+        showIcon
+        message={i18next.t("channel:Unsupported channel type")}
+        description={i18next.t("channel:This channel type is no longer supported. Change it to a supported type or delete the channel.")}
+      />
+    );
+  }
+
   render() {
     const channel = this.state.channel;
     if (channel === undefined) {
@@ -187,16 +199,21 @@ class ChannelEditPage extends React.Component {
             >
               {i18next.t("general:Save")}
             </Button>
-            <Button
-              icon={<ThunderboltOutlined />}
-              loading={this.state.testing}
-              onClick={this.test.bind(this)}
-            >
-              {i18next.t("channel:Test Connectivity")}
-            </Button>
+            {
+              OPENAI_COMPATIBLE_TYPES.includes(channel.type) ? (
+                <Button
+                  icon={<ThunderboltOutlined />}
+                  loading={this.state.testing}
+                  onClick={this.test.bind(this)}
+                >
+                  {i18next.t("channel:Test Connectivity")}
+                </Button>
+              ) : null
+            }
           </Space>
         }
       >
+        {this.renderUnsupportedTypeAlert(channel)}
         <Row style={{marginTop: "10px"}}>
           <Col style={{marginTop: "5px"}} span={2}>
             {i18next.t("general:Display name")}:
@@ -223,9 +240,12 @@ class ChannelEditPage extends React.Component {
                 this.setChannelField("type", value);
               }}
             >
+              {
+                !OPENAI_COMPATIBLE_TYPES.includes(channel.type) ? (
+                  <Option value={channel.type} disabled>{`${channel.type} (${i18next.t("channel:Unsupported")})`}</Option>
+                ) : null
+              }
               <Option value="openai">OpenAI</Option>
-              <Option value="claude">Claude (Anthropic)</Option>
-              <Option value="gemini">Gemini (Google)</Option>
               <Option value="custom">Custom</Option>
             </Select>
           </Col>

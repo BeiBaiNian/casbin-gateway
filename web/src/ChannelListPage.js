@@ -105,12 +105,10 @@ class ChannelListPage extends BaseListPage {
   renderTypeTag(type) {
     const colorMap = {
       openai: "#10a37f",
-      claude: "#d97757",
-      gemini: "#4285f4",
       custom: "#8b5cf6",
     };
     return (
-      <Tag color={colorMap[type] || "default"}>{type}</Tag>
+      <Tag color={colorMap[type] || "#595959"}>{colorMap[type] ? type : `${type} (${i18next.t("channel:Unsupported")})`}</Tag>
     );
   }
 
