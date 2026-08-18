@@ -19,6 +19,7 @@ import * as AccountBackend from "@/backend/AccountBackend";
 import * as Conf from "@/Conf";
 import * as Setting from "@/Setting";
 import {Footer} from "@/components/layout/Footer";
+import {Header} from "@/components/layout/Header";
 import {Sidebar} from "@/components/layout/Sidebar";
 import {PageSpinner} from "@/components/ui/spinner";
 import {TooltipProvider} from "@/components/ui/tooltip";
@@ -51,10 +52,23 @@ const DashboardPage = React.lazy(() => import("@/pages/DashboardPage"));
 
 Setting.initCasdoorSdk(Conf.AuthConfig);
 
+const collapsedKey = "sidebarCollapsed";
+
 export default function App() {
   // undefined while the account request is in flight, null when signed out.
   const [account, setAccount] = React.useState<Account | null | undefined>(undefined);
+  const [collapsed, setCollapsed] = React.useState(
+    () => localStorage.getItem(collapsedKey) === "true",
+  );
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
   const location = useLocation();
+
+  const toggleCollapsed = () => {
+    setCollapsed(value => {
+      localStorage.setItem(collapsedKey, String(!value));
+      return !value;
+    });
+  };
 
   const getAccount = React.useCallback(() => {
     AccountBackend.getAccount().then(res => {
@@ -120,10 +134,21 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex min-h-screen">
-        <Sidebar account={account} onSignout={signout} />
-        {/* pt-14 leaves room for the fixed mobile bar the sidebar renders;
-            min-w-0 keeps a wide table from stretching the whole layout. */}
-        <div className="flex min-w-0 flex-1 flex-col pt-14 md:pt-0">
+        <Sidebar
+          account={account}
+          collapsed={collapsed}
+          drawerOpen={drawerOpen}
+          onDrawerOpenChange={setDrawerOpen}
+        />
+        {/* min-w-0 keeps a wide table from stretching the whole layout. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header
+            account={account}
+            collapsed={collapsed}
+            onToggleCollapsed={toggleCollapsed}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onSignout={signout}
+          />
           <main className="flex-1">
             <React.Suspense fallback={<PageSpinner />}>
               <Routes>

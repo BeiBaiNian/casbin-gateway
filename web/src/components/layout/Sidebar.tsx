@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import * as React from "react";
-import {Link, useLocation, useNavigate} from "react-router-dom";
+import {Link, useLocation} from "react-router-dom";
 import {
   Bot,
   ChartColumn,
@@ -23,11 +23,7 @@ import {
   Globe,
   LayoutDashboard,
   ListFilter,
-  LogOut,
-  Menu as MenuIcon,
   MessageSquare,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plug,
   ScrollText,
   Server,
@@ -41,19 +37,9 @@ import {useTranslation} from "react-i18next";
 import * as Setting from "@/Setting";
 import {cn} from "@/lib/utils";
 import type {Account} from "@/types";
-import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
 import {Button} from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {Tooltip} from "@/components/ui/tooltip";
-import {LanguageSelect} from "@/components/layout/LanguageSelect";
 
-const collapsedKey = "sidebarCollapsed";
 const advancedOpenKey = "sidebarAdvancedOpen";
 
 interface MenuEntry {
@@ -116,19 +102,20 @@ function readFlag(key: string, fallback: boolean) {
 
 export function Sidebar({
   account,
-  onSignout,
+  collapsed,
+  drawerOpen,
+  onDrawerOpenChange,
 }: {
   account: Account | null | undefined;
-  onSignout: () => void;
+  collapsed: boolean;
+  drawerOpen: boolean;
+  onDrawerOpenChange: (open: boolean) => void;
 }) {
   // Subscribing to the language keeps the menu labels, which are read eagerly
   // through i18next.t, re-rendering when the language changes.
   useTranslation();
   const location = useLocation();
-  const navigate = useNavigate();
-  const [collapsed, setCollapsed] = React.useState(() => readFlag(collapsedKey, false));
   const [advancedOpen, setAdvancedOpen] = React.useState(() => readFlag(advancedOpenKey, false));
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
 
   const isAdmin = Setting.isAdminUser(account);
   const mainEntries = getMainEntries().filter(entry => !entry.adminOnly || isAdmin);
@@ -137,30 +124,14 @@ export function Sidebar({
   // The drawer covers the page, so leaving it open across a navigation would
   // hide whatever the viewer just asked for.
   React.useEffect(() => {
-    setDrawerOpen(false);
-  }, [location.pathname]);
-
-  const toggleCollapsed = () => {
-    setCollapsed(value => {
-      localStorage.setItem(collapsedKey, String(!value));
-      return !value;
-    });
-  };
+    onDrawerOpenChange(false);
+  }, [location.pathname, onDrawerOpenChange]);
 
   const toggleAdvanced = () => {
     setAdvancedOpen(value => {
       localStorage.setItem(advancedOpenKey, String(!value));
       return !value;
     });
-  };
-
-  const openProfile = () => {
-    const profileUrl = Setting.getMyProfileUrl(account);
-    if (profileUrl === "") {
-      navigate("/account");
-    } else {
-      Setting.openLink(profileUrl);
-    }
   };
 
   /** `iconOnly` is the collapsed desktop rail; the drawer is always full width. */
@@ -230,59 +201,6 @@ export function Sidebar({
     </nav>
   );
 
-  const renderAccount = (iconOnly: boolean) => {
-    if (account === undefined) {
-      return null;
-    }
-    if (account === null) {
-      return (
-        <Button asChild size="sm" className={cn("w-full", iconOnly && "px-0")}>
-          <a href={Setting.getSigninUrl() || "/signin"}>
-            {iconOnly ? <LogOut className="h-4 w-4" /> : i18next.t("account:Sign In")}
-          </a>
-        </Button>
-      );
-    }
-
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent",
-              iconOnly && "justify-center px-0",
-            )}
-          >
-            <Avatar className="h-8 w-8 shrink-0">
-              {account.avatar ? <AvatarImage src={account.avatar} alt={account.name} /> : null}
-              <AvatarFallback style={{backgroundColor: Setting.getAvatarColor(account.name)}}>
-                <span className="text-white">
-                  {Setting.getShortName(account.name).slice(0, 2).toUpperCase()}
-                </span>
-              </AvatarFallback>
-            </Avatar>
-            {iconOnly ? null : (
-              <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
-                {Setting.getShortName(account.displayName || account.name)}
-              </span>
-            )}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top" className="w-48">
-          <DropdownMenuItem onClick={openProfile}>
-            <Settings />
-            {i18next.t("account:My Account")}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onSignout}>
-            <LogOut />
-            {i18next.t("account:Sign Out")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  };
-
   const renderPanel = (iconOnly: boolean) => (
     <>
       <div
@@ -301,26 +219,6 @@ export function Sidebar({
       </div>
 
       {renderNav(iconOnly)}
-
-      <div className={cn("shrink-0 border-t p-2", iconOnly && "flex flex-col items-center gap-1")}>
-        {renderAccount(iconOnly)}
-        <div className={cn("mt-1 flex items-center", iconOnly ? "flex-col" : "justify-between")}>
-          <LanguageSelect />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleCollapsed}
-            aria-label={i18next.t("general:Toggle sidebar")}
-            className="hidden md:inline-flex"
-          >
-            {iconOnly ? (
-              <PanelLeftOpen className="h-5 w-5" />
-            ) : (
-              <PanelLeftClose className="h-5 w-5" />
-            )}
-          </Button>
-        </div>
-      </div>
     </>
   );
 
@@ -335,32 +233,11 @@ export function Sidebar({
         {renderPanel(collapsed)}
       </aside>
 
-      {/* Fixed rather than in flow, so that the flex row this sits in stays a
-          sidebar-plus-content layout at every width. The content column leaves
-          room for it with its own top padding. */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur md:hidden">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Menu"
-          onClick={() => setDrawerOpen(true)}
-        >
-          <MenuIcon className="h-5 w-5" />
-        </Button>
-        <Link to="/" className="flex items-center">
-          <img
-            src={`${Setting.StaticBaseUrl}/img/logo_384x96.png`}
-            alt="Casbin Gateway"
-            className="h-6 w-auto"
-          />
-        </Link>
-      </header>
-
       {drawerOpen ? (
         <div className="fixed inset-0 z-50 md:hidden">
           <div
             className="absolute inset-0 bg-black/50"
-            onClick={() => setDrawerOpen(false)}
+            onClick={() => onDrawerOpenChange(false)}
             aria-hidden
           />
           <div className="absolute inset-y-0 left-0 flex w-64 flex-col border-r bg-background">
@@ -369,7 +246,7 @@ export function Sidebar({
               size="icon"
               aria-label="Close"
               className="absolute right-2 top-2 z-10"
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => onDrawerOpenChange(false)}
             >
               <X className="h-5 w-5" />
             </Button>
