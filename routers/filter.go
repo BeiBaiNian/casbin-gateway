@@ -20,15 +20,10 @@ import (
 
 	"github.com/apache/casbin-gateway/embedsupport"
 	"github.com/apache/casbin-gateway/util"
+	"github.com/apache/casbin-gateway/webui"
 	"github.com/beego/beego"
 	"github.com/beego/beego/context"
 )
-
-// webBuildDir holds the compiled web UI. A build made with -tags embed also
-// carries a copy of it inside the binary, used only when this directory has no
-// index.html. The whole UI comes from one source or the other, so a partial
-// build on disk is never quietly completed with files from the binary.
-const webBuildDir = "web/build"
 
 func TransparentStatic(ctx *context.Context) {
 	urlPath := ctx.Request.URL.Path
@@ -36,12 +31,19 @@ func TransparentStatic(ctx *context.Context) {
 		return
 	}
 
-	indexPath := webBuildDir + "/index.html"
-	if !util.FileExist(indexPath) && embedsupport.HasWeb() {
-		embedsupport.ServeWeb(ctx.ResponseWriter, ctx.Request, urlPath)
-		return
+	webBuildDir := webui.GetBuildDir()
+	if webBuildDir == "" {
+		if embedsupport.HasWeb() {
+			embedsupport.ServeWeb(ctx.ResponseWriter, ctx.Request, urlPath)
+			return
+		}
+
+		// Nothing is built and nothing is embedded. Serving from the preferred
+		// directory anyway turns this into a plain 404 that names it.
+		webBuildDir = webui.BuildDirs[0]
 	}
 
+	indexPath := webBuildDir + "/index.html"
 	path := webBuildDir
 	if urlPath == "/" {
 		path = indexPath

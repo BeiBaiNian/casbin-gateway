@@ -54,7 +54,7 @@ Casbin Gateway contains 2 parts:
 
 | Name     | Description                            | Language               | Source code                                              |
 |----------|----------------------------------------|------------------------|----------------------------------------------------------|
-| Frontend | Web frontend UI for Casbin Gateway     | Javascript + React     | https://github.com/apache/casbin-gateway/tree/master/web |
+| Frontend | Web frontend UI for Casbin Gateway     | TypeScript + React + shadcn/ui | https://github.com/apache/casbin-gateway/tree/master/web2 |
 | Backend  | RESTful API backend for Casbin Gateway | Golang + Beego + XORM  | https://github.com/apache/casbin-gateway                 |
 
 ## Installation
@@ -75,13 +75,15 @@ From nothing to a request flowing through the gateway, in four steps. No databas
 
 #### 1. Build the web UI
 
-The backend serves the compiled frontend from `web/build`, so build it once before starting the backend:
+The backend serves the compiled frontend from `web2/build`, so build it once before starting the backend:
 
 ```bash
-cd web && yarn install && yarn build
+cd web2 && yarn install && yarn build
 ```
 
-For frontend development, run `yarn start` instead. That serves the UI on http://localhost:16001 with hot reload and proxies API calls to the backend on port 17000, so both have to be running.
+For frontend development, run `yarn dev` instead. That serves the UI on http://localhost:16002 with hot reload and proxies API calls to the backend on port 17000, so both have to be running.
+
+`web/` holds the older Ant Design frontend that `web2/` replaces. It still builds and the backend still serves `web/build` when `web2/build` is absent, so either one works while the migration finishes.
 
 #### 2. Run the backend
 
@@ -97,7 +99,7 @@ It prints a summary of what it is actually doing — ports, whether the reverse 
 +----------------+-----------------------------------------------------------+
 | Management UI  | http://localhost:17000                                     |
 | Settings       | conf/app.conf                                              |
-| Web UI files   | web/build                                                  |
+| Web UI files   | web2/build                                                 |
 | Reverse proxy  | enabled                                                    |
 | Gateway HTTP   | :8080                                                      |
 | Gateway HTTPS  | :8443                                                      |
@@ -139,7 +141,7 @@ You should get your backend's response. A `site not found for host` reply means 
 
 ### Single binary
 
-Normally Gateway reads three things from disk when it starts: `conf/app.conf`, the compiled web UI in `web/build`, and the IP location database `ip/17monipdb.dat`. Building with the `embed` tag bakes all three into the executable, so it can be copied somewhere on its own and started from anywhere:
+Normally Gateway reads three things from disk when it starts: `conf/app.conf`, the compiled web UI, and the IP location database `ip/17monipdb.dat`. Building with the `embed` tag bakes all three into the executable, so it can be copied somewhere on its own and started from anywhere. The web UI it bakes in is still the Ant Design build from `web/build`; a `web2/build` on disk takes over whenever it is present:
 
 ```bash
 cd web && yarn install && GENERATE_SOURCEMAP=false yarn build
@@ -156,7 +158,7 @@ Files on disk always win over the embedded copies, so a single binary can still 
 | Embedded asset | Overridden by |
 | --- | --- |
 | `conf/app.conf` | `conf/app.conf` in the working directory, or next to the executable |
-| `web/build` | `web/build/index.html` in the working directory, which then serves the whole UI |
+| `web/build` | `web2/build/index.html` or `web/build/index.html` in the working directory, the first of those found then serving the whole UI |
 | `ip/17monipdb.dat` | `ip/17monipdb.dat` in the working directory |
 
 The startup summary reports which source each one came from:
@@ -225,8 +227,8 @@ dbName = casbin_gateway
 
 #### Run Casbin Gateway
 
-- Build the web UI once with `cd web && yarn install && yarn build`, then run the backend with `go run main.go`. See [Quick start](#quick-start) for the whole path, and the [documentation](https://caswaf.org) for everything else.
-- Open browser: http://localhost:17000/ (the backend serves the compiled UI). During frontend development, `yarn start` serves it on http://localhost:16001/ instead and proxies API calls to port 17000.
+- Build the web UI once with `cd web2 && yarn install && yarn build`, then run the backend with `go run main.go`. See [Quick start](#quick-start) for the whole path, and the [documentation](https://caswaf.org) for everything else.
+- Open browser: http://localhost:17000/ (the backend serves the compiled UI). During frontend development, `yarn dev` serves it on http://localhost:16002/ instead and proxies API calls to port 17000.
 - Sign in as `admin` with the password `123`, then change it from the "My Account" page.
 
 ### Optional configuration

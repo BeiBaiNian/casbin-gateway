@@ -21,11 +21,8 @@ import (
 	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/embedsupport"
 	"github.com/apache/casbin-gateway/object"
-	"github.com/apache/casbin-gateway/util"
+	"github.com/apache/casbin-gateway/webui"
 )
-
-// webBuildDir holds the compiled web UI that beego serves in production.
-const webBuildDir = "web/build"
 
 type summaryRow struct {
 	key   string
@@ -61,15 +58,15 @@ func describeConf() string {
 }
 
 func describeWebBuild() string {
-	if util.FileExist(webBuildDir + "/index.html") {
-		return webBuildDir
+	if buildDir := webui.GetBuildDir(); buildDir != "" {
+		return buildDir
 	}
 
 	if embedsupport.HasWeb() {
 		return "embedded in the binary"
 	}
 
-	return fmt.Sprintf("%s is missing, run \"yarn install && yarn build\" in web/", webBuildDir)
+	return fmt.Sprintf("%s is missing, run \"yarn install && yarn build\" in web2/", webui.BuildDirs[0])
 }
 
 func describeGateway() string {
