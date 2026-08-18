@@ -45,6 +45,6 @@ export function getAgentRecords(agent = "", eventType = "", outcome = "", sessio
   );
 }
 
-export function getAgentSessions() {
-  return request<AgentSession[]>("/api/get-agent-sessions");
+export function getAgentSessions(agent = "") {
+  return request<AgentSession[]>(`/api/get-agent-sessions${query({agent: agent})}`);
 }

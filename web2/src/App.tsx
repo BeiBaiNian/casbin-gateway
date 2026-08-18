@@ -19,10 +19,12 @@ import * as AccountBackend from "@/backend/AccountBackend";
 import * as Conf from "@/Conf";
 import * as Setting from "@/Setting";
 import {Footer} from "@/components/layout/Footer";
-import {Header} from "@/components/layout/Header";
+import {Sidebar} from "@/components/layout/Sidebar";
 import {PageSpinner} from "@/components/ui/spinner";
 import {TooltipProvider} from "@/components/ui/tooltip";
 import AccountPage from "@/pages/AccountPage";
+import AgentDashboardPage from "@/pages/AgentDashboardPage";
+import AgentDetailPage from "@/pages/AgentDetailPage";
 import AgentRecordsPage from "@/pages/AgentRecordsPage";
 import AgentSessionsPage from "@/pages/AgentSessionsPage";
 import AgentsPage from "@/pages/AgentsPage";
@@ -31,7 +33,6 @@ import CertEditPage from "@/pages/CertEditPage";
 import CertListPage from "@/pages/CertListPage";
 import ChannelEditPage from "@/pages/ChannelEditPage";
 import ChannelListPage from "@/pages/ChannelListPage";
-import HomePage from "@/pages/HomePage";
 import NodeEditPage from "@/pages/NodeEditPage";
 import NodeListPage from "@/pages/NodeListPage";
 import RecordEditPage from "@/pages/RecordEditPage";
@@ -43,9 +44,9 @@ import SiteEditPage from "@/pages/SiteEditPage";
 import SiteListPage from "@/pages/SiteListPage";
 import type {Account} from "@/types";
 
-// The dashboard is the only page that draws charts, and the charting runtime is
-// by far the largest dependency here, so it is fetched only when that page is
-// opened.
+// The gateway analytics page is the only one that draws charts, and the
+// charting runtime is by far the largest dependency here, so it is fetched only
+// when that page is opened.
 const DashboardPage = React.lazy(() => import("@/pages/DashboardPage"));
 
 Setting.initCasdoorSdk(Conf.AuthConfig);
@@ -118,57 +119,76 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex min-h-screen flex-col">
-        <Header account={account} onSignout={signout} />
-        <main className="flex-1">
-          <React.Suspense fallback={<PageSpinner />}>
-            <Routes>
-              <Route path="/callback" element={<AuthCallback />} />
-              <Route path="/home" element={<HomePage />} />
-              <Route path="/" element={<Navigate to="/sites" replace />} />
-              <Route path="/signin" element={redirectHomeIfSignedIn(<SigninPage />)} />
-              <Route
-                path="/account"
-                element={requireSignin(user => <AccountPage account={user} />)}
-              />
-              <Route path="/agents" element={requireSignin(user => <AgentsPage account={user} />)} />
-              <Route
-                path="/agent-records"
-                element={requireSignin(user => <AgentRecordsPage account={user} />)}
-              />
-              <Route
-                path="/agent-sessions"
-                element={requireSignin(user => <AgentSessionsPage account={user} />)}
-              />
-              <Route path="/nodes" element={requireSignin(user => <NodeListPage account={user} />)} />
-              <Route path="/nodes/:owner/:nodeName" element={requireSignin(() => <NodeEditPage />)} />
-              <Route path="/sites" element={requireSignin(user => <SiteListPage account={user} />)} />
-              <Route
-                path="/sites/:owner/:siteName"
-                element={requireSignin(user => <SiteEditPage account={user} />)}
-              />
-              <Route path="/certs" element={requireSignin(user => <CertListPage account={user} />)} />
-              <Route path="/certs/:owner/:certName" element={requireSignin(() => <CertEditPage />)} />
-              <Route
-                path="/records"
-                element={requireSignin(user => <RecordListPage account={user} />)}
-              />
-              <Route path="/records/:owner/:id" element={requireSignin(() => <RecordEditPage />)} />
-              <Route path="/rules" element={requireSignin(user => <RuleListPage account={user} />)} />
-              <Route path="/rules/:owner/:ruleName" element={requireSignin(() => <RuleEditPage />)} />
-              <Route
-                path="/channels"
-                element={requireSignin(user => <ChannelListPage account={user} />)}
-              />
-              <Route
-                path="/channels/:owner/:channelName"
-                element={requireSignin(() => <ChannelEditPage />)}
-              />
-              <Route path="/dashboard" element={requireSignin(() => <DashboardPage />)} />
-            </Routes>
-          </React.Suspense>
-        </main>
-        <Footer />
+      <div className="flex min-h-screen">
+        <Sidebar account={account} onSignout={signout} />
+        {/* pt-14 leaves room for the fixed mobile bar the sidebar renders;
+            min-w-0 keeps a wide table from stretching the whole layout. */}
+        <div className="flex min-w-0 flex-1 flex-col pt-14 md:pt-0">
+          <main className="flex-1">
+            <React.Suspense fallback={<PageSpinner />}>
+              <Routes>
+                <Route path="/callback" element={<AuthCallback />} />
+                <Route
+                  path="/"
+                  element={requireSignin(user =>
+                    Setting.isAdminUser(user) ? (
+                      <AgentDashboardPage account={user} />
+                    ) : (
+                      // The dashboard is about the agents on this host, which
+                      // only an admin may see, so everyone else lands on the
+                      // first page they can actually use.
+                      <Navigate to="/sites" replace />
+                    ),
+                  )}
+                />
+                <Route path="/signin" element={redirectHomeIfSignedIn(<SigninPage />)} />
+                <Route
+                  path="/account"
+                  element={requireSignin(user => <AccountPage account={user} />)}
+                />
+                <Route path="/agents" element={requireSignin(user => <AgentsPage account={user} />)} />
+                <Route
+                  path="/agents/:agentId"
+                  element={requireSignin(user => <AgentDetailPage account={user} />)}
+                />
+                <Route
+                  path="/agent-records"
+                  element={requireSignin(user => <AgentRecordsPage account={user} />)}
+                />
+                <Route
+                  path="/agent-sessions"
+                  element={requireSignin(user => <AgentSessionsPage account={user} />)}
+                />
+                <Route path="/nodes" element={requireSignin(user => <NodeListPage account={user} />)} />
+                <Route path="/nodes/:owner/:nodeName" element={requireSignin(() => <NodeEditPage />)} />
+                <Route path="/sites" element={requireSignin(user => <SiteListPage account={user} />)} />
+                <Route
+                  path="/sites/:owner/:siteName"
+                  element={requireSignin(user => <SiteEditPage account={user} />)}
+                />
+                <Route path="/certs" element={requireSignin(user => <CertListPage account={user} />)} />
+                <Route path="/certs/:owner/:certName" element={requireSignin(() => <CertEditPage />)} />
+                <Route
+                  path="/records"
+                  element={requireSignin(user => <RecordListPage account={user} />)}
+                />
+                <Route path="/records/:owner/:id" element={requireSignin(() => <RecordEditPage />)} />
+                <Route path="/rules" element={requireSignin(user => <RuleListPage account={user} />)} />
+                <Route path="/rules/:owner/:ruleName" element={requireSignin(() => <RuleEditPage />)} />
+                <Route
+                  path="/channels"
+                  element={requireSignin(user => <ChannelListPage account={user} />)}
+                />
+                <Route
+                  path="/channels/:owner/:channelName"
+                  element={requireSignin(() => <ChannelEditPage />)}
+                />
+                <Route path="/dashboard" element={requireSignin(() => <DashboardPage />)} />
+              </Routes>
+            </React.Suspense>
+          </main>
+          <Footer />
+        </div>
       </div>
     </TooltipProvider>
   );

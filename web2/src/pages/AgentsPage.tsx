@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as React from "react";
 import {Link} from "react-router-dom";
 import {Bot, CircleX, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
-import * as AgentBackend from "@/backend/AgentBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
 import {DataTable, type Column} from "@/components/DataTable";
@@ -29,72 +27,12 @@ import {Button} from "@/components/ui/button";
 import {ConfirmButton} from "@/components/ui/confirm-button";
 import {Spinner} from "@/components/ui/spinner";
 import {Tooltip} from "@/components/ui/tooltip";
+import {agentDetailPath, agentKey, monitorAgentId, useAgents} from "@/lib/agents";
 import type {Account, Agent} from "@/types";
 
-const rowKey = (record: Agent) => `${record.owner}:${record.path}`;
-
-/** The monitor keys the two Codex front ends under one agent id. */
-function monitorAgentId(agentId: string) {
-  return agentId === "codex_vscode" || agentId === "codex-vscode" ? "codex-cli" : agentId;
-}
-
 export default function AgentsPage({account}: {account: Account}) {
-  const [agents, setAgents] = React.useState<Agent[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState("");
-  const [busyKey, setBusyKey] = React.useState("");
   const isAdmin = Setting.isAdminUser(account);
-
-  const scan = React.useCallback(
-    (forceRefresh = false) => {
-      if (!isAdmin) {
-        return;
-      }
-
-      setLoading(true);
-      setError("");
-      AgentBackend.getAgents(forceRefresh)
-        .then(res => {
-          if (res.status === "ok") {
-            setAgents(res.data ?? []);
-          } else {
-            setError(res.msg || i18next.t("agent:Failed to scan agents"));
-          }
-        })
-        .catch(err => setError(err.message || String(err)))
-        .then(() => setLoading(false));
-    },
-    [isAdmin],
-  );
-
-  React.useEffect(() => {
-    scan();
-  }, [scan]);
-
-  const togglePatch = (record: Agent) => {
-    const target = {agentId: record.agentId, path: record.path, owner: record.owner};
-    const patched = record.patched;
-
-    setBusyKey(rowKey(record));
-    (patched ? AgentBackend.unpatchAgent(target) : AgentBackend.patchAgent(target))
-      .then(res => {
-        if (res.status === "ok") {
-          const done = patched
-            ? i18next.t("agent:Monitoring disabled")
-            : i18next.t("agent:Monitoring enabled");
-          const followup = res.data?.followup || record.followup;
-          Setting.showMessage(
-            "success",
-            followup ? `${done}: ${record.name}. ${followup}` : `${done}: ${record.name}`,
-          );
-          scan();
-        } else {
-          Setting.showMessage("error", res.msg || i18next.t("agent:Failed to update agent patch"));
-        }
-      })
-      .catch(err => Setting.showMessage("error", err.message || String(err)))
-      .then(() => setBusyKey(""));
-  };
+  const {agents, loading, error, busyKey, scan, togglePatch} = useAgents(isAdmin);
 
   if (!isAdmin) {
     return <UnauthorizedResult />;
@@ -106,13 +44,13 @@ export default function AgentsPage({account}: {account: Account}) {
       key: "name",
       dataIndex: "name",
       render: (value: string, record) => (
-        <span className="flex items-center gap-2">
+        <Link to={agentDetailPath(record)} className="flex items-center gap-2 hover:text-primary">
           <AgentIcon
             agent={record.agentId || value}
             fallback={<Bot className="h-[18px] w-[18px] text-muted-foreground" />}
           />
-          {value}
-        </span>
+          <span className="hover:underline">{value}</span>
+        </Link>
       ),
     },
     {
@@ -194,9 +132,9 @@ export default function AgentsPage({account}: {account: Account}) {
             <Button
               size="sm"
               variant={record.patched ? "outline" : "default"}
-              disabled={busyKey === rowKey(record)}
+              disabled={busyKey === agentKey(record)}
             >
-              {busyKey === rowKey(record) ? <Spinner /> : null}
+              {busyKey === agentKey(record) ? <Spinner /> : null}
               {action}
             </Button>
           </ConfirmButton>
@@ -224,7 +162,7 @@ export default function AgentsPage({account}: {account: Account}) {
       <DataTable
         columns={columns}
         data={agents}
-        rowKey={rowKey}
+        rowKey={agentKey}
         loading={loading}
         pageSize={0}
         emptyText={i18next.t("agent:No supported agents found")}
