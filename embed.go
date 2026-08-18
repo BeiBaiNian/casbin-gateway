@@ -19,13 +19,14 @@
 // the binary runs on its own with no files next to it. Files on disk still win
 // over the embedded copies at runtime — see the embedsupport package.
 //
-// web/build must exist before building with this tag, or go:embed fails to
+// web2/build must exist before building with this tag, or go:embed fails to
 // compile: build the frontend first with
 //
-//	cd web && yarn install && GENERATE_SOURCEMAP=false yarn build
+//	cd web2 && yarn install && yarn build
 //
-// Source maps are worth turning off because everything under web/build ends up
-// inside the binary, and they are several times the size of the code they map.
+// Everything under web2/build ends up inside the binary, which is why the Vite
+// config turns source maps off: they are several times the size of the code
+// they map.
 
 package main
 
@@ -45,14 +46,14 @@ import (
 //go:embed conf/app.conf
 var embeddedAppConf string
 
-//go:embed web/build
+//go:embed web2/build
 var embeddedWeb embed.FS
 
 //go:embed ip/17monipdb.dat
 var embeddedIpDb []byte
 
 func init() {
-	webFS, err := fs.Sub(embeddedWeb, "web/build")
+	webFS, err := fs.Sub(embeddedWeb, "web2/build")
 	if err != nil {
 		panic(err)
 	}

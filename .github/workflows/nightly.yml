@@ -38,19 +38,19 @@ jobs:
         with:
           node-version: 20
           cache: 'yarn'
-          cache-dependency-path: ./web/yarn.lock
+          cache-dependency-path: ./web2/yarn.lock
 
-      # Source maps are left out on purpose: everything under web/build ends up
-      # inside every one of the three binaries below.
+      # Everything under web2/build ends up inside every one of the three
+      # binaries below, which is why the Vite config leaves source maps out.
       - name: Build
-        run: yarn install && CI=false GENERATE_SOURCEMAP=false yarn run build
-        working-directory: ./web
+        run: yarn install && yarn build
+        working-directory: ./web2
 
       - name: Upload web build
         uses: actions/upload-artifact@v4
         with:
           name: web-build-${{ github.run_id }}
-          path: ./web/build
+          path: ./web2/build
           retention-days: 1
 
   nightly:
@@ -68,12 +68,12 @@ jobs:
           cache-dependency-path: ./go.mod
 
       # The binaries are built with -tags embed, which bakes conf/app.conf, the
-      # web UI and the IP database in, so web/build has to be in place first.
+      # web UI and the IP database in, so web2/build has to be in place first.
       - name: Download web build
         uses: actions/download-artifact@v4
         with:
           name: web-build-${{ github.run_id }}
-          path: ./web/build
+          path: ./web2/build
 
       - name: Build the platform archives
         run: |

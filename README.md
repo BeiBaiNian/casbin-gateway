@@ -141,24 +141,24 @@ You should get your backend's response. A `site not found for host` reply means 
 
 ### Single binary
 
-Normally Gateway reads three things from disk when it starts: `conf/app.conf`, the compiled web UI, and the IP location database `ip/17monipdb.dat`. Building with the `embed` tag bakes all three into the executable, so it can be copied somewhere on its own and started from anywhere. The web UI it bakes in is still the Ant Design build from `web/build`; a `web2/build` on disk takes over whenever it is present:
+Normally Gateway reads three things from disk when it starts: `conf/app.conf`, the compiled web UI in `web2/build`, and the IP location database `ip/17monipdb.dat`. Building with the `embed` tag bakes all three into the executable, so it can be copied somewhere on its own and started from anywhere:
 
 ```bash
-cd web && yarn install && GENERATE_SOURCEMAP=false yarn build
+cd web2 && yarn install && yarn build
 ```
 
 ```bash
 go build -tags embed -o casbin-gateway .
 ```
 
-Build the frontend first: everything under `web/build` goes into the binary, so `go build -tags embed` fails to compile while that directory is missing. Turning source maps off keeps them out of the binary, where they would cost several times what the code they map costs.
+Build the frontend first: everything under `web2/build` goes into the binary, so `go build -tags embed` fails to compile while that directory is missing. The Vite config leaves source maps out, which keeps them out of the binary too, where they would cost several times what the code they map costs.
 
 Files on disk always win over the embedded copies, so a single binary can still be configured and developed against without rebuilding it:
 
 | Embedded asset | Overridden by |
 | --- | --- |
 | `conf/app.conf` | `conf/app.conf` in the working directory, or next to the executable |
-| `web/build` | `web2/build/index.html` or `web/build/index.html` in the working directory, the first of those found then serving the whole UI |
+| `web2/build` | `web2/build/index.html` or `web/build/index.html` in the working directory, the first of those found then serving the whole UI |
 | `ip/17monipdb.dat` | `ip/17monipdb.dat` in the working directory |
 
 The startup summary reports which source each one came from:
