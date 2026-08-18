@@ -17,6 +17,7 @@ package object
 import (
 	"crypto"
 	"fmt"
+	"net/http"
 
 	"github.com/apache/casbin-gateway/proxy"
 	"github.com/beego/beego"
@@ -70,7 +71,7 @@ func getLegoClientAndAccount(email string, privateKey string, devMode bool, useP
 	if useProxy {
 		config.HTTPClient = proxy.ProxyHttpClient
 	} else {
-		config.HTTPClient = proxy.DefaultHttpClient
+		config.HTTPClient = http.DefaultClient
 	}
 
 	client, err := lego.NewClient(config)

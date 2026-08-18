@@ -12,83 +12,80 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package proxy routes every outbound request through the proxy configured as
+// httpProxy in conf/app.conf, falling back to the HTTP_PROXY / HTTPS_PROXY
+// environment variables when that setting is empty.
 package proxy
 
 import (
 	"fmt"
-	"net"
 	"net/http"
-	"time"
+	"net/url"
+	"strings"
+	"sync"
 
 	"github.com/beego/beego"
-	"golang.org/x/net/proxy"
 )
 
-var DefaultHttpClient *http.Client
+// ProxyHttpClient sends its requests through the configured proxy.
 var ProxyHttpClient *http.Client
 
+var (
+	proxyUrlOnce sync.Once
+	proxyUrl     *url.URL
+
+	transportOnce sync.Once
+	transport     *http.Transport
+)
+
 func InitHttpClient() {
-	// not use proxy
-	DefaultHttpClient = http.DefaultClient
-
-	// use proxy
-	ProxyHttpClient = getProxyHttpClient()
+	proxyUrlOnce.Do(initProxyUrl)
+	ProxyHttpClient = &http.Client{Transport: Transport()}
 }
 
-func isAddressOpen(address string) bool {
-	timeout := time.Millisecond * 100
-	conn, err := net.DialTimeout("tcp", address, timeout)
-	if err != nil {
-		// cannot connect to address, proxy is not active
-		return false
+// Proxy picks the proxy to reach req through. It is meant to be assigned to
+// http.Transport.Proxy, which calls it per request, so the httpProxy setting is
+// read on first use instead of at package initialization: in -tags embed builds
+// the embedded conf/app.conf is only loaded once main's init() runs, after every
+// imported package has already initialized its own variables.
+func Proxy(req *http.Request) (*url.URL, error) {
+	proxyUrlOnce.Do(initProxyUrl)
+	if proxyUrl == nil {
+		return http.ProxyFromEnvironment(req)
 	}
-
-	if conn != nil {
-		defer conn.Close()
-		fmt.Printf("Socks5 proxy enabled: %s\n", address)
-		return true
-	}
-
-	return false
+	return proxyUrl, nil
 }
 
-func getProxyHttpClient() *http.Client {
-	httpProxy := beego.AppConfig.String("httpProxy")
+// Transport returns the shared transport for outbound requests. Sharing one
+// instance keeps the connection pool shared as well.
+func Transport() *http.Transport {
+	transportOnce.Do(func() {
+		transport = http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = Proxy
+	})
+	return transport
+}
+
+// initProxyUrl parses the httpProxy setting. A bare "host:port" means SOCKS5,
+// which is what the setting has always been taken to mean; "socks5://",
+// "socks5h://", "http://" and "https://" addresses are honoured as written, and
+// may carry credentials.
+func initProxyUrl() {
+	httpProxy := strings.TrimSpace(beego.AppConfig.String("httpProxy"))
 	if httpProxy == "" {
-		return &http.Client{}
+		return
 	}
 
-	if !isAddressOpen(httpProxy) {
-		return &http.Client{}
+	if !strings.Contains(httpProxy, "://") {
+		httpProxy = "socks5://" + httpProxy
 	}
 
-	// https://stackoverflow.com/questions/33585587/creating-a-go-socks5-client
-	dialer, err := proxy.SOCKS5("tcp", httpProxy, nil, proxy.Direct)
-	if err != nil {
-		panic(err)
+	parsedUrl, err := url.Parse(httpProxy)
+	if err != nil || parsedUrl.Host == "" {
+		fmt.Printf("httpProxy is not a valid proxy address, outbound traffic is left unproxied: %s\n", httpProxy)
+		return
 	}
 
-	tr := &http.Transport{Dial: dialer.Dial}
-	return &http.Client{
-		Transport: tr,
-	}
-}
-
-func GetProxyDialer() *net.Dialer {
-	httpProxy := beego.AppConfig.String("httpProxy")
-	if httpProxy == "" {
-		return nil
-	}
-
-	if !isAddressOpen(httpProxy) {
-		return nil
-	}
-
-	// https://stackoverflow.com/questions/33585587/creating-a-go-socks5-client
-	dialer, err := proxy.SOCKS5("tcp", httpProxy, nil, proxy.Direct)
-	if err != nil {
-		panic(err)
-	}
-
-	return dialer.(*net.Dialer)
+	proxyUrl = parsedUrl
+	fmt.Printf("Proxy enabled for outbound traffic: %s\n", proxyUrl.Redacted())
 }

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/proxy"
 	"github.com/beego/beego"
 )
 
@@ -77,7 +78,7 @@ type openaiErrorDetail struct {
 var proxyClient = &http.Client{
 	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
+		Proxy: proxy.Proxy,
 		DialContext: (&net.Dialer{
 			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,

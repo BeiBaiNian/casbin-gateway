@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apache/casbin-gateway/proxy"
 	"github.com/apache/casbin-gateway/util"
 	"github.com/xorm-io/core"
 )
@@ -304,7 +305,8 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 	}
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout:   10 * time.Second,
+		Transport: proxy.Transport(),
 		// Do not follow redirects, so the reported status is the one the
 		// configured base URL actually returns.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
