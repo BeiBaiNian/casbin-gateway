@@ -24,9 +24,11 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/proxy"
 	"github.com/beego/beego"
 )
 
@@ -71,13 +73,22 @@ type openaiErrorDetail struct {
 	Type    string `json:"type"`
 }
 
-// proxyClient is a shared HTTP client for upstream requests.
-// Reusing a single instance allows TCP connection pooling across requests.
-// It has no overall Timeout on purpose, see proxyResponseHeaderTimeout.
-var proxyClient = &http.Client{
-	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
+var (
+	proxyClient     *http.Client
+	proxyClientOnce sync.Once
+)
+
+// getProxyClient creates the shared client after application configuration is
+// loaded, including when the embedded binary supplies app.conf at startup.
+func getProxyClient() *http.Client {
+	proxyClientOnce.Do(func() {
+		proxyClient = newProxyClient()
+	})
+	return proxyClient
+}
+
+func newProxyClient() *http.Client {
+	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -88,7 +99,12 @@ var proxyClient = &http.Client{
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		ResponseHeaderTimeout: proxyResponseHeaderTimeout,
-	},
+	}
+	proxy.ConfigureTransport(transport)
+	return &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		Transport:     transport,
+	}
 }
 
 // ChatCompletions is the OpenAI-compatible chat completions proxy endpoint.
@@ -187,7 +203,7 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Authorization", "Bearer "+channel.ApiKey)
 
-	upstreamResp, err := proxyClient.Do(upstreamReq)
+	upstreamResp, err := getProxyClient().Do(upstreamReq)
 	if err != nil {
 		if c.Ctx.Request.Context().Err() != nil {
 			// The client hung up mid-request, there is nothing left to answer.

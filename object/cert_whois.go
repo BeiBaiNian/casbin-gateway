@@ -47,12 +47,6 @@ func getDomainExpireTime(domainName string) (string, error) {
 	}
 
 	client := whois.NewClient()
-	//if server != "whois.cnnic.cn" && server != "grs-whois.hichina.com" {
-	//	dialer := proxy.GetProxyDialer()
-	//	if dialer != nil {
-	//		client.SetDialer(dialer)
-	//	}
-	//}
 
 	data, err := client.Whois(domainName, server)
 	if err != nil {

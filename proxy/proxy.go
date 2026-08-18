@@ -15,80 +15,34 @@
 package proxy
 
 import (
-	"fmt"
-	"net"
 	"net/http"
-	"time"
+	"net/url"
 
 	"github.com/beego/beego"
-	"golang.org/x/net/proxy"
 )
 
-var DefaultHttpClient *http.Client
 var ProxyHttpClient *http.Client
 
 func InitHttpClient() {
-	// not use proxy
-	DefaultHttpClient = http.DefaultClient
-
-	// use proxy
-	ProxyHttpClient = getProxyHttpClient()
+	ProxyHttpClient = &http.Client{Transport: NewTransport()}
 }
 
-func isAddressOpen(address string) bool {
-	timeout := time.Millisecond * 100
-	conn, err := net.DialTimeout("tcp", address, timeout)
-	if err != nil {
-		// cannot connect to address, proxy is not active
-		return false
-	}
-
-	if conn != nil {
-		defer conn.Close()
-		fmt.Printf("Socks5 proxy enabled: %s\n", address)
-		return true
-	}
-
-	return false
+// NewTransport returns a standard transport configured for outbound traffic.
+// An app.conf SOCKS5 proxy takes precedence over environment proxy variables.
+func NewTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	ConfigureTransport(transport)
+	return transport
 }
 
-func getProxyHttpClient() *http.Client {
+// ConfigureTransport applies the outbound proxy policy to transport.
+func ConfigureTransport(transport *http.Transport) {
 	httpProxy := beego.AppConfig.String("httpProxy")
 	if httpProxy == "" {
-		return &http.Client{}
+		transport.Proxy = http.ProxyFromEnvironment
+		return
 	}
 
-	if !isAddressOpen(httpProxy) {
-		return &http.Client{}
-	}
-
-	// https://stackoverflow.com/questions/33585587/creating-a-go-socks5-client
-	dialer, err := proxy.SOCKS5("tcp", httpProxy, nil, proxy.Direct)
-	if err != nil {
-		panic(err)
-	}
-
-	tr := &http.Transport{Dial: dialer.Dial}
-	return &http.Client{
-		Transport: tr,
-	}
-}
-
-func GetProxyDialer() *net.Dialer {
-	httpProxy := beego.AppConfig.String("httpProxy")
-	if httpProxy == "" {
-		return nil
-	}
-
-	if !isAddressOpen(httpProxy) {
-		return nil
-	}
-
-	// https://stackoverflow.com/questions/33585587/creating-a-go-socks5-client
-	dialer, err := proxy.SOCKS5("tcp", httpProxy, nil, proxy.Direct)
-	if err != nil {
-		panic(err)
-	}
-
-	return dialer.(*net.Dialer)
+	transport.Proxy = http.ProxyURL(&url.URL{Scheme: "socks5", Host: httpProxy})
+	beego.Trace("using SOCKS5 proxy for outbound traffic:", httpProxy)
 }
