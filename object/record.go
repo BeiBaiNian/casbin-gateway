@@ -15,9 +15,11 @@
 package object
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/apache/casbin-gateway/util"
 	"github.com/xorm-io/core"
 )
 
@@ -105,9 +107,9 @@ type DataCount struct {
 func GetMetrics(dataType string, startAt time.Time, top int) (*[]DataCount, error) {
 	var dataCounts []DataCount
 	err := ormer.Engine.Table("record").
-		Where("UNIX_TIMESTAMP(created_time) > ?", startAt.Unix()).
+		Where("created_time > ?", util.FormatTime(startAt)).
 		Select(dataType + " as data, COUNT(*) as count").
-		GroupBy("data").
+		GroupBy(dataType).
 		Desc("count").
 		Limit(top).
 		Find(&dataCounts)
@@ -119,9 +121,9 @@ func GetMetrics(dataType string, startAt time.Time, top int) (*[]DataCount, erro
 
 func GetMetricsOverTime(startAt time.Time, timeType string) (*[]DataCount, error) {
 	var dataCounts []DataCount
-	createdTime := "DATE_FORMAT(created_time, '" + timeType2Format(timeType) + "')"
+	createdTime := getCreatedTimeBucket(ormer.driverName, timeType)
 	err := ormer.Engine.Table("record").
-		Where("UNIX_TIMESTAMP(created_time) > ?", startAt.Unix()).
+		Where("created_time > ?", util.FormatTime(startAt)).
 		GroupBy(createdTime).
 		Select(createdTime + " as data, COUNT(*) as count").
 		Asc("data").
@@ -132,16 +134,21 @@ func GetMetricsOverTime(startAt time.Time, timeType string) (*[]DataCount, error
 	return &dataCounts, nil
 }
 
-func timeType2Format(timeType string) string {
+func getCreatedTimeBucket(driverName string, timeType string) string {
+	length := 13
 	switch timeType {
-	case "hour":
-		return "%Y-%m-%d %H"
 	case "day":
-		return "%Y-%m-%d"
+		length = 10
 	case "month":
-		return "%Y-%m"
+		length = 7
 	}
-	return "%Y-%m-%d %H"
+
+	substr := "SUBSTR"
+	if driverName == "mssql" {
+		substr = "SUBSTRING"
+	}
+
+	return fmt.Sprintf("REPLACE(%s(created_time, 1, %d), 'T', ' ')", substr, length)
 }
 
 func GetRecordCount(owner, field, value string) (int64, error) {

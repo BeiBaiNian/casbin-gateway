@@ -16,13 +16,15 @@ package util
 
 import "time"
 
-func GetCurrentTime() string {
+func FormatTime(t time.Time) string {
 	location, err := time.LoadLocation("Asia/Singapore")
 	if err != nil {
 		panic(err)
 	}
 
-	timestamp := time.Now().Unix()
-	tm := time.Unix(timestamp, 0)
-	return tm.In(location).Format(time.RFC3339)
+	return t.In(location).Format(time.RFC3339)
+}
+
+func GetCurrentTime() string {
+	return FormatTime(time.Now())
 }
