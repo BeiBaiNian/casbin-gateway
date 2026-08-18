@@ -92,6 +92,22 @@ func main() {
 
 	port := conf.GetHttpPort()
 
+	// A previous run still holding one of these ports would keep this one from
+	// starting, so it is stopped first. The gateway ports come before the
+	// management port because service.Start() binds them first.
+	stopPorts := []int{}
+	if conf.IsGatewayEnabled() {
+		stopPorts = append(stopPorts, conf.GetGatewayHttpPort(), conf.GetGatewayHttpsPort())
+	}
+	stopPorts = append(stopPorts, port)
+	for _, stopPort := range stopPorts {
+		if err := util.StopOldInstance(stopPort); err != nil {
+			// The bind below reports the conflict in full, so a failed kill only
+			// needs a note here and never stops the startup by itself.
+			fmt.Printf("Casbin Gateway: could not free port %d: %v\n", stopPort, err)
+		}
+	}
+
 	service.PrintStartupSummary()
 
 	// beego.Run() binds the management port itself and reports a conflict as a
