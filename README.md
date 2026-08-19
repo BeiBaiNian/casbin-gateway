@@ -69,6 +69,12 @@ Casbin Gateway runs standalone out of the box: it stores its data in a local SQL
 
 The reverse-proxy gateway on ports 80 and 443 is disabled by default, so starting the management application does not take over those ports. Set `gatewayEnabled = true` in `conf/app.conf` when you are ready to use the WAF proxy. On Linux and macOS those ports also need root, so for a first try it is easier to point `gatewayHttpPort` at a high port such as `8080`.
 
+### Agent monitoring
+
+Gateway also watches the AI coding agents installed on the machine it runs on: it discovers installations of agents such as Claude Code, Codex CLI and Cursor, patches the supported ones with a command hook, and tails their local audit logs into a live activity view under **Agents** in the web UI.
+
+Discovery reads that machine's user accounts, home directories and package install paths, so it only ever sees the host Gateway itself runs on. Inside a container — `docker compose up`, `docker run`, or Podman — Gateway scans the container's own filesystem, finds nothing, and the **Agents** page stays empty even though agents are installed on the host. Run Gateway from source or as a [single binary](#single-binary) on the host to use these features; every other part of Gateway, the WAF proxy included, behaves the same in Docker.
+
 ### Quick start
 
 From nothing to a request flowing through the gateway, in four steps. No database server is needed: Gateway creates `./data/casbin-gateway.db` on first start.
