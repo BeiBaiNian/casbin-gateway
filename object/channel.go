@@ -21,8 +21,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/proxy"
 	"github.com/apache/casbin-gateway/util"
 	"github.com/xorm-io/core"
@@ -38,6 +40,85 @@ var ErrNoChannelAvailable = errors.New("no available channel")
 // back in an update means "keep the existing key"; sending anything else
 // (including an empty string) overwrites the stored key.
 const ApiKeyMask = "***"
+
+// apiKeyEncryptionSecret is empty when encryption is off, which keeps keys
+// stored as plaintext like before.
+func apiKeyEncryptionSecret() string {
+	return conf.GetConfigString("apiKeyEncryptionKey")
+}
+
+// apiKeyAad binds the ciphertext to its own row, so a value copied into another
+// channel's api_key column no longer decrypts.
+func apiKeyAad(channel *Channel) string {
+	return channel.GetId()
+}
+
+// encryptApiKey needs channel.Owner and channel.Name to be set already.
+func encryptApiKey(channel *Channel) error {
+	encrypted, err := util.EncryptWithKey(apiKeyEncryptionSecret(), channel.ApiKey, apiKeyAad(channel))
+	if err != nil {
+		return err
+	}
+	channel.ApiKey = encrypted
+	return nil
+}
+
+// decryptChannel restores the plaintext ApiKey on a channel just read from the
+// database. A failure leaves the stored value in place rather than dropping the
+// channel, but is logged: otherwise a changed key looks exactly like a healthy
+// channel whose upstream answers 401.
+func decryptChannel(channel *Channel) {
+	if channel == nil {
+		return
+	}
+
+	secret := apiKeyEncryptionSecret()
+	stored := channel.ApiKey
+
+	plain, err := util.DecryptWithKey(secret, stored, apiKeyAad(channel))
+	if err != nil {
+		fmt.Printf("decryptChannel(): channel [%s]: %v\n", channel.GetId(), err)
+		return
+	}
+	channel.ApiKey = plain
+
+	if util.NeedsReEncryption(secret, stored) {
+		upgradeStoredApiKey(channel)
+	}
+}
+
+// apiKeyUpgrades collapses concurrent upgrades of the same row: GetChannelsByModel()
+// runs on every proxied request.
+var apiKeyUpgrades sync.Map
+
+// upgradeStoredApiKey rewrites a plaintext or older-format key in the current
+// format. Only api_key is touched, so UpdatedTime keeps reflecting the last real
+// edit. A failure is logged and ignored, and retried on the next read.
+func upgradeStoredApiKey(channel *Channel) {
+	id := channel.GetId()
+	if _, busy := apiKeyUpgrades.LoadOrStore(id, struct{}{}); busy {
+		return
+	}
+	defer apiKeyUpgrades.Delete(id)
+
+	encrypted, err := util.EncryptWithKey(apiKeyEncryptionSecret(), channel.ApiKey, apiKeyAad(channel))
+	if err != nil {
+		fmt.Printf("upgradeStoredApiKey(): channel [%s]: %v\n", id, err)
+		return
+	}
+
+	_, err = ormer.Engine.ID(core.PK{channel.Owner, channel.Name}).
+		Cols("api_key").Update(&Channel{ApiKey: encrypted})
+	if err != nil {
+		fmt.Printf("upgradeStoredApiKey(): channel [%s]: %v\n", id, err)
+	}
+}
+
+func decryptChannels(channels []*Channel) {
+	for _, channel := range channels {
+		decryptChannel(channel)
+	}
+}
 
 const (
 	maxChannelModels     = 200
@@ -76,8 +157,9 @@ type Channel struct {
 	DisplayName string `xorm:"varchar(100)" json:"displayName"`
 	Type        string `xorm:"varchar(100)" json:"type"`
 	BaseUrl     string `xorm:"varchar(255)" json:"baseUrl"`
-	// TODO(1.3): ApiKey is stored as plaintext; AES encryption will be added in milestone 1.3.
-	ApiKey string `xorm:"varchar(500)" json:"apiKey"`
+	// ApiKey holds base64 ciphertext, not the bare key, when
+	// "apiKeyEncryptionKey" is set in app.conf, hence the wider column.
+	ApiKey string `xorm:"varchar(1000)" json:"apiKey"`
 	// Models is JSON-serialized by xorm, so it needs a text column rather than
 	// a varchar: the serialized form is longer than the joined model names.
 	Models []string `xorm:"mediumtext" json:"models"`
@@ -94,6 +176,7 @@ func GetChannels(owner string) ([]*Channel, error) {
 	channels := []*Channel{}
 	session := GetSession(owner, -1, -1, "", "", "", "")
 	err := session.Find(&channels)
+	decryptChannels(channels)
 	return channels, err
 }
 
@@ -106,6 +189,7 @@ func GetPaginationChannels(owner string, offset, limit int, field, value, sortFi
 	channels := []*Channel{}
 	session := GetSession(owner, offset, limit, field, value, sortField, sortOrder)
 	err := session.Find(&channels)
+	decryptChannels(channels)
 	return channels, err
 }
 
@@ -118,6 +202,7 @@ func getChannel(owner, name string) (*Channel, error) {
 	if !existed {
 		return nil, nil
 	}
+	decryptChannel(channel)
 	return channel, nil
 }
 
@@ -231,6 +316,10 @@ func AddChannel(channel *Channel) (bool, error) {
 	}
 	channel.UpdatedTime = now
 
+	if err := encryptApiKey(channel); err != nil {
+		return false, err
+	}
+
 	affected, err := ormer.Engine.Insert(channel)
 	return affected != 0, err
 }
@@ -257,6 +346,8 @@ func UpdateChannel(id string, channel *Channel) (bool, error) {
 	// is what makes clearing a key possible.
 	if channel.ApiKey == ApiKeyMask {
 		session = session.Omit("api_key")
+	} else if err := encryptApiKey(channel); err != nil {
+		return false, err
 	}
 
 	affected, err := session.AllCols().Update(channel)
@@ -350,6 +441,8 @@ func GetChannelsByModel(model string) ([]*Channel, error) {
 			}
 		}
 	}
+
+	decryptChannels(matchedChannels)
 
 	if len(matchedChannels) == 0 {
 		return nil, fmt.Errorf("%w: %s", ErrNoChannelAvailable, model)
