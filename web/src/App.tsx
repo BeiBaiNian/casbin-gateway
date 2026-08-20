@@ -36,6 +36,7 @@ import CertEditPage from "@/pages/CertEditPage";
 import CertListPage from "@/pages/CertListPage";
 import ChannelEditPage from "@/pages/ChannelEditPage";
 import ChannelListPage from "@/pages/ChannelListPage";
+import LlmRequestAuditsPage from "@/pages/LlmRequestAuditsPage";
 import NodeEditPage from "@/pages/NodeEditPage";
 import NodeListPage from "@/pages/NodeListPage";
 import RecordEditPage from "@/pages/RecordEditPage";
@@ -211,6 +212,10 @@ export default function App() {
                 <Route
                   path="/channels/:owner/:channelName"
                   element={requireSignin(() => <ChannelEditPage />)}
+                />
+                <Route
+                  path="/llm-request-audits"
+                  element={requireSignin(user => <LlmRequestAuditsPage account={user} />)}
                 />
                 <Route path="/dashboard" element={requireSignin(() => <DashboardPage />)} />
               </Routes>

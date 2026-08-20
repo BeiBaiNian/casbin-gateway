@@ -210,6 +210,17 @@
   "node": {
     "Edit Node": "编辑节点"
   },
+  "llm": {
+    "Channel": "渠道",
+    "Complete": "完整",
+    "Failed to get request audits": "获取请求审计失败",
+    "Mode": "模式",
+    "No request audits yet": "暂无请求审计记录——请启用 llmRequestAuditEnabled，并通过 LLM 网关发送请求。",
+    "Request Audits": "LLM 请求审计",
+    "Request audit notice": "仅保留经由 Gateway 发送的、已脱敏的模型请求；本功能不采集模型响应。",
+    "Stored": "保存状态",
+    "Truncated": "已截断"
+  },
   "rule": {
     "Allow": "允许",
     "Block": "阻止",

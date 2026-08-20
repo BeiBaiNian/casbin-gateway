@@ -207,6 +207,18 @@ export interface AgentSession {
   lastTime: string;
 }
 
+export interface LlmRequestAudit {
+  id: number;
+  createdTime: string;
+  model: string;
+  channel: string;
+  clientIp: string;
+  stream: boolean;
+  payload: string;
+  truncated: boolean;
+  originalBytes: number;
+}
+
 export interface MetricPoint {
   data: string;
   count: number;

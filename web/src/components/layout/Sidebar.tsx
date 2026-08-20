@@ -67,6 +67,7 @@ function getMainEntries(): MenuEntry[] {
       adminOnly: true,
     },
     {key: "/channels", label: i18next.t("channel:Channels"), icon: <Plug />},
+    {key: "/llm-request-audits", label: i18next.t("llm:Request Audits"), icon: <FileSearch />, adminOnly: true},
   ];
 }
 
