@@ -21,10 +21,13 @@ import * as MiscBackend from "@/backend/MiscBackend";
 import * as SiteBackend from "@/backend/SiteBackend";
 import * as Setting from "@/Setting";
 import {DataTable, type Column} from "@/components/DataTable";
+import {Field, FormDialog} from "@/components/FormDialog";
 import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {ConfirmButton} from "@/components/ui/confirm-button";
+import {Input} from "@/components/ui/input";
+import {NumberInput} from "@/components/ui/number-input";
 import {Tooltip} from "@/components/ui/tooltip";
 import type {Account, Site} from "@/types";
 
@@ -64,6 +67,10 @@ export default function SiteListPage({account}: {account: Account}) {
   const [data, setData] = React.useState<Site[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [gatewayEnabled, setGatewayEnabled] = React.useState<boolean | null>(null);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+  const [form, setForm] = React.useState<Site>(() => newSite(account.name));
+  const [nameError, setNameError] = React.useState("");
 
   const fetchSites = React.useCallback(() => {
     setLoading(true);
@@ -89,18 +96,34 @@ export default function SiteListPage({account}: {account: Account}) {
     });
   }, [fetchSites]);
 
+  const openAddDialog = () => {
+    setForm(newSite(account.name));
+    setNameError("");
+    setAddOpen(true);
+  };
+
   const addSite = () => {
-    const site = newSite(account.name);
-    SiteBackend.addSite(site)
+    const name = form.name.trim();
+    if (name === "") {
+      setNameError(i18next.t("general:Name cannot be empty"));
+      return;
+    }
+    setAdding(true);
+    SiteBackend.addSite({...form, name: name})
       .then(res => {
+        setAdding(false);
         if (res.status === "error") {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
         } else {
           Setting.showMessage("success", i18next.t("general:Added successfully"));
+          setAddOpen(false);
           fetchSites();
         }
       })
-      .catch(error => Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`));
+      .catch(error => {
+        setAdding(false);
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+      });
   };
 
   const deleteSite = (site: Site) => {
@@ -323,11 +346,60 @@ export default function SiteListPage({account}: {account: Account}) {
         pageSize={20}
         title={i18next.t("general:Sites")}
         toolbar={
-          <Button size="sm" onClick={addSite}>
+          <Button size="sm" onClick={openAddDialog}>
             {i18next.t("general:Add")}
           </Button>
         }
       />
+
+      <FormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title={i18next.t("site:New Site")}
+        submitting={adding}
+        onSubmit={addSite}
+      >
+        <Field label={i18next.t("general:Name")} htmlFor="site-name" required error={nameError}>
+          <Input
+            id="site-name"
+            value={form.name}
+            onChange={event => {
+              setForm({...form, name: event.target.value});
+              setNameError("");
+            }}
+          />
+        </Field>
+        <Field label={i18next.t("general:Display name")} htmlFor="site-display-name">
+          <Input
+            id="site-display-name"
+            value={form.displayName}
+            onChange={event => setForm({...form, displayName: event.target.value})}
+          />
+        </Field>
+        <Field label={i18next.t("site:Domain")} htmlFor="site-domain">
+          <Input
+            id="site-domain"
+            value={form.domain}
+            onChange={event => setForm({...form, domain: event.target.value})}
+          />
+        </Field>
+        <Field label={i18next.t("site:Host")} htmlFor="site-host">
+          <Input
+            id="site-host"
+            value={form.host}
+            onChange={event => setForm({...form, host: event.target.value})}
+          />
+        </Field>
+        <Field label={i18next.t("site:Port")}>
+          <NumberInput
+            min={0}
+            max={65535}
+            className="max-w-xs"
+            value={form.port}
+            onChange={value => setForm({...form, port: value})}
+          />
+        </Field>
+      </FormDialog>
     </div>
   );
 }

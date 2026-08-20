@@ -19,9 +19,19 @@ import i18next from "i18next";
 import * as RuleBackend from "@/backend/RuleBackend";
 import * as Setting from "@/Setting";
 import {DataTable, type Column} from "@/components/DataTable";
+import {Field, FormDialog} from "@/components/FormDialog";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {ConfirmButton} from "@/components/ui/confirm-button";
+import {Input} from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {getRuleActions, getRuleTypes} from "@/lib/rules";
 import type {Account, Rule} from "@/types";
 
 function newRule(owner: string): Rule {
@@ -47,6 +57,10 @@ export default function RuleListPage({account}: {account: Account}) {
   const [loading, setLoading] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+  const [form, setForm] = React.useState<Rule>(() => newRule(account.name));
+  const [nameError, setNameError] = React.useState("");
 
   const fetchRules = React.useCallback(
     (nextPage = page, nextPageSize = pageSize) => {
@@ -71,12 +85,26 @@ export default function RuleListPage({account}: {account: Account}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.name]);
 
+  const openAddDialog = () => {
+    setForm(newRule(account.name));
+    setNameError("");
+    setAddOpen(true);
+  };
+
   const addRule = () => {
-    RuleBackend.addRule(newRule(account.name)).then(res => {
+    const name = form.name.trim();
+    if (name === "") {
+      setNameError(i18next.t("general:Name cannot be empty"));
+      return;
+    }
+    setAdding(true);
+    RuleBackend.addRule({...form, name: name}).then(res => {
+      setAdding(false);
       if (res.status === "error") {
         Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
       } else {
         Setting.showMessage("success", i18next.t("general:Added successfully"));
+        setAddOpen(false);
         fetchRules();
       }
     });
@@ -92,6 +120,9 @@ export default function RuleListPage({account}: {account: Account}) {
       }
     });
   };
+
+  const types = getRuleTypes();
+  const actions = getRuleActions();
 
   const columns: Column<Rule>[] = [
     {
@@ -209,11 +240,60 @@ export default function RuleListPage({account}: {account: Account}) {
         }}
         title={i18next.t("general:Rules")}
         toolbar={
-          <Button size="sm" onClick={addRule}>
+          <Button size="sm" onClick={openAddDialog}>
             {i18next.t("general:Add")}
           </Button>
         }
       />
+
+      <FormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title={i18next.t("rule:New Rule")}
+        submitting={adding}
+        onSubmit={addRule}
+      >
+        <Field label={i18next.t("general:Name")} htmlFor="rule-name" required error={nameError}>
+          <Input
+            id="rule-name"
+            value={form.name}
+            onChange={event => {
+              setForm({...form, name: event.target.value});
+              setNameError("");
+            }}
+          />
+        </Field>
+        <Field label={i18next.t("rule:Type")}>
+          <Select value={form.type} onValueChange={value => setForm({...form, type: value})}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {types.map(type => (
+                <SelectItem key={type.value} value={type.value}>
+                  {type.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        {form.type !== "WAF" && (
+          <Field label={i18next.t("general:Action")}>
+            <Select value={form.action} onValueChange={value => setForm({...form, action: value})}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {actions.map(action => (
+                  <SelectItem key={action.value} value={action.value}>
+                    {action.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
+      </FormDialog>
     </div>
   );
 }

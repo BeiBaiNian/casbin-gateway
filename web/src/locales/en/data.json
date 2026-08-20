@@ -107,6 +107,7 @@
     "Edit Cert": "Edit Cert",
     "Expire time": "Expire time",
     "Failed to refresh domain expire": "Failed to refresh domain expire",
+    "New Cert": "New Cert",
     "Private key": "Private key",
     "Private key copied to clipboard successfully": "Private key copied to clipboard successfully",
     "Provider": "Provider",
@@ -181,6 +182,8 @@
     "Login Error": "Login Error",
     "Method": "Method",
     "Name": "Name",
+    "Name cannot be empty": "Name cannot be empty",
+    "New Record": "New Record",
     "No Upgrade": "No Upgrade",
     "No data": "No data",
     "Nodes": "Nodes",
@@ -217,7 +220,8 @@
     "{total} in total": "{total} in total"
   },
   "node": {
-    "Edit Node": "Edit Node"
+    "Edit Node": "Edit Node",
+    "New Node": "New Node"
   },
   "rule": {
     "Allow": "Allow",
@@ -232,6 +236,7 @@
     "IP Rate Limiting": "IP Rate Limiting",
     "IPs": "IPs",
     "Logic": "Logic",
+    "New Rule": "New Rule",
     "Operator": "Operator",
     "Rate": "Rate",
     "Reason": "Reason",
@@ -269,6 +274,7 @@
     "Hosts": "Hosts",
     "Mode": "Mode",
     "Need redirect": "Need redirect",
+    "New Site": "New Site",
     "Node": "Node",
     "Nodes": "Nodes",
     "Other domains": "Other domains",

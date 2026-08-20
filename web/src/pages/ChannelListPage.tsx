@@ -20,9 +20,20 @@ import i18next from "i18next";
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {DataTable, type Column, type SortOrder} from "@/components/DataTable";
+import {Field, FormDialog} from "@/components/FormDialog";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {ConfirmButton} from "@/components/ui/confirm-button";
+import {Input} from "@/components/ui/input";
+import {PasswordInput} from "@/components/ui/password-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {TagsInput} from "@/components/ui/tags-input";
 import {Tooltip} from "@/components/ui/tooltip";
 import type {Account, Channel} from "@/types";
 
@@ -52,6 +63,10 @@ export default function ChannelListPage({account}: {account: Account}) {
     field: "",
     order: undefined,
   });
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+  const [form, setForm] = React.useState<Channel>(() => newChannel(account.name));
+  const [nameError, setNameError] = React.useState("");
 
   const fetchChannels = React.useCallback(
     (nextPage = page, nextPageSize = pageSize, nextSort = sort) => {
@@ -88,17 +103,38 @@ export default function ChannelListPage({account}: {account: Account}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.name]);
 
+  const openAddDialog = () => {
+    setForm(newChannel(account.name));
+    setNameError("");
+    setAddOpen(true);
+  };
+
+  const setFormField = <K extends keyof Channel>(key: K, value: Channel[K]) => {
+    setForm(prev => ({...prev, [key]: value}));
+  };
+
   const addChannel = () => {
-    ChannelBackend.addChannel(newChannel(account.name))
+    const name = form.name.trim();
+    if (name === "") {
+      setNameError(i18next.t("general:Name cannot be empty"));
+      return;
+    }
+    setAdding(true);
+    ChannelBackend.addChannel({...form, name: name})
       .then(res => {
+        setAdding(false);
         if (res.status === "error") {
           Setting.showMessage("error", `${i18next.t("channel:Failed to add")}: ${res.msg}`);
         } else {
           Setting.showMessage("success", i18next.t("channel:Channel added successfully"));
+          setAddOpen(false);
           fetchChannels();
         }
       })
-      .catch(error => Setting.showMessage("error", `${i18next.t("channel:Failed to add")}: ${error}`));
+      .catch(error => {
+        setAdding(false);
+        Setting.showMessage("error", `${i18next.t("channel:Failed to add")}: ${error}`);
+      });
   };
 
   const deleteChannel = (channel: Channel) => {
@@ -251,12 +287,73 @@ export default function ChannelListPage({account}: {account: Account}) {
         }}
         title={i18next.t("channel:Channels")}
         toolbar={
-          <Button size="sm" onClick={addChannel}>
+          <Button size="sm" onClick={openAddDialog}>
             <Plus />
             {i18next.t("channel:New Channel")}
           </Button>
         }
       />
+
+      <FormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title={i18next.t("channel:New Channel")}
+        submitting={adding}
+        onSubmit={addChannel}
+      >
+        <Field label={i18next.t("general:Name")} htmlFor="channel-name" required error={nameError}>
+          <Input
+            id="channel-name"
+            value={form.name}
+            onChange={event => {
+              setFormField("name", event.target.value);
+              setNameError("");
+            }}
+          />
+        </Field>
+        <Field label={i18next.t("general:Display name")} htmlFor="channel-display-name">
+          <Input
+            id="channel-display-name"
+            value={form.displayName}
+            onChange={event => setFormField("displayName", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("channel:Type")}>
+          <Select value={form.type} onValueChange={value => setFormField("type", value)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="anthropic">Anthropic</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label={i18next.t("channel:Base URL")} htmlFor="channel-base-url">
+          <Input
+            id="channel-base-url"
+            value={form.baseUrl}
+            placeholder={form.type === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"}
+            onChange={event => setFormField("baseUrl", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("channel:API Key")} htmlFor="channel-api-key">
+          <PasswordInput
+            id="channel-api-key"
+            placeholder="sk-..."
+            value={form.apiKey}
+            onChange={event => setFormField("apiKey", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("channel:Models")}>
+          <TagsInput
+            value={form.models}
+            placeholder={form.type === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini"}
+            onChange={value => setFormField("models", value)}
+          />
+        </Field>
+      </FormDialog>
     </div>
   );
 }

@@ -19,9 +19,33 @@ import i18next from "i18next";
 import * as RecordBackend from "@/backend/RecordBackend";
 import * as Setting from "@/Setting";
 import {DataTable, type Column} from "@/components/DataTable";
+import {Field, FormDialog} from "@/components/FormDialog";
 import {Button} from "@/components/ui/button";
 import {ConfirmButton} from "@/components/ui/confirm-button";
+import {Input} from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type {Account, Record as GatewayRecord} from "@/types";
+
+const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+
+function newRecord(owner: string): Partial<GatewayRecord> {
+  const randomName = Setting.getRandomName();
+  return {
+    owner: owner,
+    name: `record_${randomName}`,
+    createdTime: new Date().toISOString(),
+    method: "GET",
+    host: "door.casdoor.com",
+    path: "/",
+    userAgent: "",
+  };
+}
 
 export default function RecordListPage({account}: {account: Account}) {
   const navigate = useNavigate();
@@ -30,6 +54,9 @@ export default function RecordListPage({account}: {account: Account}) {
   const [loading, setLoading] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+  const [form, setForm] = React.useState<Partial<GatewayRecord>>(() => newRecord(account.name));
 
   const fetchRecords = React.useCallback(
     (nextPage = page, nextPageSize = pageSize) => {
@@ -54,26 +81,28 @@ export default function RecordListPage({account}: {account: Account}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.name]);
 
+  const openAddDialog = () => {
+    setForm(newRecord(account.name));
+    setAddOpen(true);
+  };
+
   const addRecord = () => {
-    const randomName = Setting.getRandomName();
-    RecordBackend.addRecord({
-      owner: account.name,
-      name: `record_${randomName}`,
-      createdTime: new Date().toISOString(),
-      method: "GET",
-      host: "door.casdoor.com",
-      path: "/",
-      userAgent: "",
-    })
+    setAdding(true);
+    RecordBackend.addRecord(form)
       .then(res => {
+        setAdding(false);
         if (res.status === "error") {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
         } else {
           Setting.showMessage("success", i18next.t("general:Added successfully"));
+          setAddOpen(false);
           fetchRecords();
         }
       })
-      .catch(error => Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`));
+      .catch(error => {
+        setAdding(false);
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+      });
   };
 
   const deleteRecord = (record: GatewayRecord) => {
@@ -185,11 +214,55 @@ export default function RecordListPage({account}: {account: Account}) {
         }}
         title={i18next.t("general:Records")}
         toolbar={
-          <Button size="sm" onClick={addRecord}>
+          <Button size="sm" onClick={openAddDialog}>
             {i18next.t("general:Add")}
           </Button>
         }
       />
+
+      <FormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title={i18next.t("general:New Record")}
+        submitting={adding}
+        onSubmit={addRecord}
+      >
+        <Field label={i18next.t("general:Method")}>
+          <Select value={form.method} onValueChange={value => setForm({...form, method: value})}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {METHODS.map(method => (
+                <SelectItem key={method} value={method}>
+                  {method}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label={i18next.t("general:Host")} htmlFor="record-host">
+          <Input
+            id="record-host"
+            value={form.host}
+            onChange={event => setForm({...form, host: event.target.value})}
+          />
+        </Field>
+        <Field label={i18next.t("general:Path")} htmlFor="record-path">
+          <Input
+            id="record-path"
+            value={form.path}
+            onChange={event => setForm({...form, path: event.target.value})}
+          />
+        </Field>
+        <Field label={i18next.t("general:User-Agent")} htmlFor="record-user-agent">
+          <Input
+            id="record-user-agent"
+            value={form.userAgent}
+            onChange={event => setForm({...form, userAgent: event.target.value})}
+          />
+        </Field>
+      </FormDialog>
     </div>
   );
 }

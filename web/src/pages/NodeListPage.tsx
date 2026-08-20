@@ -19,9 +19,11 @@ import i18next from "i18next";
 import * as NodeBackend from "@/backend/NodeBackend";
 import * as Setting from "@/Setting";
 import {DataTable, type Column} from "@/components/DataTable";
+import {Field, FormDialog} from "@/components/FormDialog";
 import {UnauthorizedResult} from "@/components/Result";
 import {Button} from "@/components/ui/button";
 import {ConfirmButton} from "@/components/ui/confirm-button";
+import {Input} from "@/components/ui/input";
 import type {Account, Node} from "@/types";
 
 function newNode(owner: string): Node {
@@ -42,6 +44,10 @@ export default function NodeListPage({account}: {account: Account}) {
   const [data, setData] = React.useState<Node[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [authorized, setAuthorized] = React.useState(true);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+  const [form, setForm] = React.useState<Node>(() => newNode(account.name));
+  const [nameError, setNameError] = React.useState("");
 
   const fetchNodes = React.useCallback(() => {
     setLoading(true);
@@ -61,17 +67,34 @@ export default function NodeListPage({account}: {account: Account}) {
     fetchNodes();
   }, [fetchNodes]);
 
+  const openAddDialog = () => {
+    setForm(newNode(account.name));
+    setNameError("");
+    setAddOpen(true);
+  };
+
   const addNode = () => {
-    NodeBackend.addNode(newNode(account.name))
+    const name = form.name.trim();
+    if (name === "") {
+      setNameError(i18next.t("general:Name cannot be empty"));
+      return;
+    }
+    setAdding(true);
+    NodeBackend.addNode({...form, name: name})
       .then(res => {
+        setAdding(false);
         if (res.status === "error") {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
         } else {
           Setting.showMessage("success", i18next.t("general:Added successfully"));
+          setAddOpen(false);
           fetchNodes();
         }
       })
-      .catch(error => Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`));
+      .catch(error => {
+        setAdding(false);
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+      });
   };
 
   const deleteNode = (node: Node) => {
@@ -178,11 +201,44 @@ export default function NodeListPage({account}: {account: Account}) {
         pageSize={20}
         title={i18next.t("general:Nodes")}
         toolbar={
-          <Button size="sm" onClick={addNode}>
+          <Button size="sm" onClick={openAddDialog}>
             {i18next.t("general:Add")}
           </Button>
         }
       />
+
+      <FormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title={i18next.t("node:New Node")}
+        submitting={adding}
+        onSubmit={addNode}
+      >
+        <Field label={i18next.t("general:Name")} htmlFor="node-name" required error={nameError}>
+          <Input
+            id="node-name"
+            value={form.name}
+            onChange={event => {
+              setForm({...form, name: event.target.value});
+              setNameError("");
+            }}
+          />
+        </Field>
+        <Field label={i18next.t("general:Display name")} htmlFor="node-display-name">
+          <Input
+            id="node-display-name"
+            value={form.displayName}
+            onChange={event => setForm({...form, displayName: event.target.value})}
+          />
+        </Field>
+        <Field label={i18next.t("general:Tag")} htmlFor="node-tag">
+          <Input
+            id="node-tag"
+            value={form.tag}
+            onChange={event => setForm({...form, tag: event.target.value})}
+          />
+        </Field>
+      </FormDialog>
     </div>
   );
 }

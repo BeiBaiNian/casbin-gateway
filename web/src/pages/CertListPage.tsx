@@ -20,8 +20,17 @@ import i18next from "i18next";
 import * as CertBackend from "@/backend/CertBackend";
 import * as Setting from "@/Setting";
 import {DataTable, type Column} from "@/components/DataTable";
+import {Field, FormDialog} from "@/components/FormDialog";
 import {Button} from "@/components/ui/button";
 import {ConfirmButton} from "@/components/ui/confirm-button";
+import {Input} from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type {Account, Cert} from "@/types";
 
 function newCert(owner: string): Cert {
@@ -51,6 +60,10 @@ export default function CertListPage({account}: {account: Account}) {
   const [loading, setLoading] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(20);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+  const [form, setForm] = React.useState<Cert>(() => newCert(account.name));
+  const [nameError, setNameError] = React.useState("");
 
   const fetchCerts = React.useCallback(
     (nextPage = page, nextPageSize = pageSize) => {
@@ -76,17 +89,34 @@ export default function CertListPage({account}: {account: Account}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.name]);
 
+  const openAddDialog = () => {
+    setForm(newCert(account.name));
+    setNameError("");
+    setAddOpen(true);
+  };
+
   const addCert = () => {
-    CertBackend.addCert(newCert(account.name))
+    const name = form.name.trim();
+    if (name === "") {
+      setNameError(i18next.t("general:Name cannot be empty"));
+      return;
+    }
+    setAdding(true);
+    CertBackend.addCert({...form, name: name})
       .then(res => {
+        setAdding(false);
         if (res.status === "error") {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
         } else {
           Setting.showMessage("success", i18next.t("general:Added successfully"));
+          setAddOpen(false);
           fetchCerts();
         }
       })
-      .catch(error => Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`));
+      .catch(error => {
+        setAdding(false);
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+      });
   };
 
   const deleteCert = (cert: Cert) => {
@@ -251,11 +281,51 @@ export default function CertListPage({account}: {account: Account}) {
         }}
         title={i18next.t("general:Certs")}
         toolbar={
-          <Button size="sm" onClick={addCert}>
+          <Button size="sm" onClick={openAddDialog}>
             {i18next.t("general:Add")}
           </Button>
         }
       />
+
+      <FormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title={i18next.t("cert:New Cert")}
+        submitting={adding}
+        onSubmit={addCert}
+      >
+        <Field label={i18next.t("general:Name")} htmlFor="cert-name" required error={nameError}>
+          <Input
+            id="cert-name"
+            value={form.name}
+            onChange={event => {
+              setForm({...form, name: event.target.value});
+              setNameError("");
+            }}
+          />
+        </Field>
+        <Field label={i18next.t("general:Display name")} htmlFor="cert-display-name">
+          <Input
+            id="cert-display-name"
+            value={form.displayName}
+            onChange={event => setForm({...form, displayName: event.target.value})}
+          />
+        </Field>
+        <Field label={i18next.t("cert:Crypto algorithm")}>
+          <Select
+            value={form.cryptoAlgorithm}
+            onValueChange={value => setForm({...form, cryptoAlgorithm: value})}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="RSA">RSA</SelectItem>
+              <SelectItem value="ECC">ECC</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+      </FormDialog>
     </div>
   );
 }

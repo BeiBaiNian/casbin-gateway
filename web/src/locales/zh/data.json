@@ -107,6 +107,7 @@
     "Edit Cert": "编辑证书",
     "Expire time": "到期时间",
     "Failed to refresh domain expire": "刷新域名到期时间失败",
+    "New Cert": "新建证书",
     "Private key": "私钥",
     "Private key copied to clipboard successfully": "私钥成功复制到剪贴板",
     "Provider": "提供者",
@@ -181,6 +182,8 @@
     "Login Error": "登录失败",
     "Method": "方法",
     "Name": "名称",
+    "Name cannot be empty": "名称不能为空",
+    "New Record": "新建记录",
     "No Upgrade": "不升级",
     "No data": "暂无数据",
     "Nodes": "节点",
@@ -217,7 +220,8 @@
     "{total} in total": "共 {total} 条"
   },
   "node": {
-    "Edit Node": "编辑节点"
+    "Edit Node": "编辑节点",
+    "New Node": "新建节点"
   },
   "rule": {
     "Allow": "允许",
@@ -232,6 +236,7 @@
     "IP Rate Limiting": "IP 速率限制",
     "IPs": "IP 列表",
     "Logic": "逻辑",
+    "New Rule": "新建规则",
     "Operator": "操作符",
     "Rate": "速率",
     "Reason": "原因",
@@ -269,6 +274,7 @@
     "Hosts": "主机列表",
     "Mode": "模式",
     "Need redirect": "需要重定向",
+    "New Site": "新建站点",
     "Node": "节点",
     "Nodes": "节点",
     "Other domains": "其他域名",

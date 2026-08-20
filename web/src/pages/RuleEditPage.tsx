@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import {PageSpinner} from "@/components/ui/spinner";
 import {Switch} from "@/components/ui/switch";
+import {getRuleActions, getRuleTypes} from "@/lib/rules";
 import type {Rule, RuleExpression} from "@/types";
 
 export default function RuleEditPage() {
@@ -137,20 +138,8 @@ export default function RuleEditPage() {
     }
   };
 
-  const types = [
-    {value: "WAF", label: "WAF"},
-    {value: "IP", label: "IP"},
-    {value: "User-Agent", label: "User-Agent"},
-    {value: "URL Path", label: "URL Path"},
-    {value: "IP Rate Limiting", label: i18next.t("rule:IP Rate Limiting")},
-    {value: "Compound", label: i18next.t("rule:Compound")},
-  ];
-
-  const actions = [
-    {value: "Allow", label: i18next.t("rule:Allow")},
-    {value: "Block", label: i18next.t("rule:Block")},
-    {value: "CAPTCHA", label: i18next.t("rule:Captcha")},
-  ];
+  const types = getRuleTypes();
+  const actions = getRuleActions();
 
   return (
     <div className="p-4 md:p-6">
