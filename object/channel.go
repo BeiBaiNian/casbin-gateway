@@ -41,6 +41,10 @@ var ErrNoChannelAvailable = errors.New("no available channel")
 // (including an empty string) overwrites the stored key.
 const ApiKeyMask = "***"
 
+// AnthropicVersion is the API version sent upstream when the client did not
+// pick one. The Anthropic API rejects a request without it.
+const AnthropicVersion = "2023-06-01"
+
 // apiKeyEncryptionSecret is empty when encryption is off, which keeps keys
 // stored as plaintext like before.
 func apiKeyEncryptionSecret() string {
@@ -126,16 +130,30 @@ const (
 )
 
 var (
-	// The OpenAI HTTP API is the only wire format the gateway can talk, so
-	// every supported type is reached with an OpenAI-formatted request.
-	channelTypes    = []string{"openai", "custom"}
+	channelTypes    = []string{"openai", "custom", "anthropic"}
 	channelStatuses = []string{"enabled", "disabled"}
+)
+
+// The wire formats the gateway can speak. A request in one of them can only be
+// forwarded to a channel whose upstream speaks the same one.
+const (
+	ProtocolOpenAi    = "openai"
+	ProtocolAnthropic = "anthropic"
 )
 
 // IsChannelTypeSupported reports whether the gateway can talk to the channel's
 // upstream.
 func IsChannelTypeSupported(channel *Channel) bool {
 	return containsString(channelTypes, channel.Type)
+}
+
+// ChannelProtocol is the wire format a channel's upstream speaks. Everything
+// that is not Anthropic is reached with an OpenAI-formatted request.
+func ChannelProtocol(channel *Channel) string {
+	if channel.Type == "anthropic" {
+		return ProtocolAnthropic
+	}
+	return ProtocolOpenAi
 }
 
 func containsString(values []string, value string) bool {
@@ -305,6 +323,42 @@ func BuildOpenAiUrl(baseUrl string, endpoint string) (string, error) {
 	return u.String(), nil
 }
 
+// BuildAnthropicUrl joins an Anthropic endpoint onto a channel base URL. Unlike
+// an OpenAI base URL, an Anthropic one is bare and the endpoint carries the /v1
+// prefix; a base URL that already has one is not doubled.
+func BuildAnthropicUrl(baseUrl string, endpoint string) (string, error) {
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return "", fmt.Errorf("invalid base URL: %s", err.Error())
+	}
+
+	path := strings.TrimSuffix(strings.TrimRight(u.Path, "/"), endpoint)
+	path = strings.TrimSuffix(strings.TrimRight(path, "/"), "/v1")
+
+	u.Path = path + endpoint
+	u.RawPath = ""
+	return u.String(), nil
+}
+
+// BuildChannelUrl is the upstream URL a request in the given protocol is sent
+// to. The endpoint is the protocol's own, not a shared one.
+func BuildChannelUrl(baseUrl string, protocol string, endpoint string) (string, error) {
+	if protocol == ProtocolAnthropic {
+		return BuildAnthropicUrl(baseUrl, endpoint)
+	}
+	return BuildOpenAiUrl(baseUrl, endpoint)
+}
+
+// SetChannelAuth puts the channel's credentials on an upstream request, in the
+// header the channel's protocol authenticates with.
+func SetChannelAuth(header http.Header, channel *Channel) {
+	if ChannelProtocol(channel) == ProtocolAnthropic {
+		header.Set("X-Api-Key", channel.ApiKey)
+		return
+	}
+	header.Set("Authorization", "Bearer "+channel.ApiKey)
+}
+
 func AddChannel(channel *Channel) (bool, error) {
 	if err := validateChannel(channel); err != nil {
 		return false, err
@@ -382,7 +436,13 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 		return false, 0, err.Error()
 	}
 
-	probeUrl, err := BuildOpenAiUrl(stored.BaseUrl, "/models")
+	protocol := ChannelProtocol(stored)
+	probeEndpoint := "/models"
+	if protocol == ProtocolAnthropic {
+		probeEndpoint = "/v1/models"
+	}
+
+	probeUrl, err := BuildChannelUrl(stored.BaseUrl, protocol, probeEndpoint)
 	if err != nil {
 		return false, 0, err.Error()
 	}
@@ -391,8 +451,11 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 	if err != nil {
 		return false, 0, err.Error()
 	}
+	if protocol == ProtocolAnthropic {
+		req.Header.Set("Anthropic-Version", AnthropicVersion)
+	}
 	if stored.ApiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+stored.ApiKey)
+		SetChannelAuth(req.Header, stored)
 	}
 
 	client := &http.Client{

@@ -23,6 +23,7 @@ import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
 import {DataTable, type Column} from "@/components/DataTable";
+import {EnvSnippet} from "@/components/EnvSnippet";
 import {Result, UnauthorizedResult} from "@/components/Result";
 import {Alert, AlertDescription} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
@@ -42,11 +43,13 @@ import {cn} from "@/lib/utils";
 import {
   agentKey,
   agentProxyBaseUrl,
+  agentSetupNoteKey,
   getOutcomeVariant,
   monitorAgentId,
   useAgents,
   useAgentSessions,
 } from "@/lib/agents";
+import {channelProtocol, shellForPath} from "@/lib/channels";
 import type {Account, Agent, AgentRecord, AgentSession, Channel} from "@/types";
 
 /** Radix rejects an empty item value, so "unbound" needs a stand-in. */
@@ -121,7 +124,7 @@ function MonitoringCard({
   );
 }
 
-/** Which upstream this agent's requests go to, and the base URL that sends them there. */
+/** Which upstream this agent's requests go to, and how to point it at them. */
 function ChannelCard({
   agent,
   channels,
@@ -133,7 +136,10 @@ function ChannelCard({
   busy: boolean;
   onChange: (channel: string) => void;
 }) {
-  const baseUrl = agentProxyBaseUrl(agent.agentId);
+  // The bound channel decides the wire format, and with it the variable names
+  // the agent has to be given. It is undefined while the channels load.
+  const bound = channels.find(channel => `${channel.owner}/${channel.name}` === agent.channel);
+  const noteKey = agentSetupNoteKey(agent.agentId);
 
   return (
     <Card>
@@ -156,6 +162,8 @@ function ChannelCard({
             {channels.map(channel => (
               <SelectItem key={`${channel.owner}/${channel.name}`} value={`${channel.owner}/${channel.name}`}>
                 {channel.displayName || channel.name}
+                {/* The type is the wire format, which has to match the one the agent speaks. */}
+                <span className="ml-2 text-xs text-muted-foreground">{channel.type}</span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -163,26 +171,18 @@ function ChannelCard({
 
         {agent.channel === "" ? (
           <p className="text-sm text-muted-foreground">{i18next.t("agent:Channel hint")}</p>
-        ) : (
+        ) : bound === undefined ? null : (
           <>
             <p className="text-sm text-muted-foreground">{i18next.t("agent:Base URL hint")}</p>
-            <div className="flex items-start gap-1">
-              <code className="min-w-0 flex-1 break-all text-xs">{baseUrl}</code>
-              <Tooltip title={i18next.t("agent:Copy base URL")}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  aria-label={i18next.t("agent:Copy base URL")}
-                  onClick={() => {
-                    copy(baseUrl);
-                    Setting.showMessage("success", i18next.t("agent:Base URL copied to clipboard"));
-                  }}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              </Tooltip>
-            </div>
+            <EnvSnippet
+              protocol={channelProtocol(bound.type)}
+              baseUrl={agentProxyBaseUrl(agent.agentId)}
+              defaultShell={shellForPath(agent.path)}
+            />
+            <p className="text-sm text-muted-foreground">{i18next.t("agent:Token hint")}</p>
+            {noteKey === "" ? null : (
+              <p className="text-sm text-muted-foreground">{i18next.t(noteKey)}</p>
+            )}
           </>
         )}
       </CardContent>

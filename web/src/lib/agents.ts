@@ -33,9 +33,28 @@ export function agentKey(agent: Pick<Agent, "owner" | "path">) {
   return `${agent.owner}:${agent.path}`;
 }
 
-/** The base URL an agent is pointed at to reach its own channel. */
+/**
+ * The base URL an agent is pointed at to reach its own channel. One URL serves
+ * both wire formats: an OpenAI client appends /chat/completions to it, an
+ * Anthropic one appends /v1/messages.
+ */
 export function agentProxyBaseUrl(agentId: string) {
   return `${Setting.ServerUrl || window.location.origin}/v1/agents/${encodeURIComponent(agentId)}`;
+}
+
+/**
+ * A config file that carries the same setting for good, for the agents that
+ * have one. Empty when only the environment is known to work.
+ */
+export function agentSetupNoteKey(agentId: string) {
+  switch (agentId) {
+  case "claude-code":
+    return "agent:Claude Code config hint";
+  case "codex-cli":
+    return "agent:Codex CLI config hint";
+  default:
+    return "";
+  }
 }
 
 /** The detail page route for one installation, disambiguated by its path. */

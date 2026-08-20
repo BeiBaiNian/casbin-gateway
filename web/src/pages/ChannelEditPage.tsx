@@ -19,6 +19,7 @@ import i18next from "i18next";
 
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
+import {EnvSnippet} from "@/components/EnvSnippet";
 import {FormRow, PageHeader} from "@/components/FormRow";
 import {Result} from "@/components/Result";
 import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
@@ -37,16 +38,19 @@ import {
 } from "@/components/ui/select";
 import {PageSpinner, Spinner} from "@/components/ui/spinner";
 import {TagsInput} from "@/components/ui/tags-input";
+import {channelProtocol, gatewayBaseUrl, localShell} from "@/lib/channels";
 import type {Channel, ChannelTestResult} from "@/types";
 
 // Hard-coded presets for milestone 1.1 (per channel type).
 const BASE_URL_PRESETS: Record<string, string[]> = {
   openai: ["https://api.openai.com/v1"],
+  anthropic: ["https://api.anthropic.com"],
   custom: ["https://oneapi.example.com", "https://api.deepseek.com/v1", "https://api.moonshot.cn/v1"],
 };
 
 const MODEL_PRESETS: Record<string, string[]> = {
   openai: ["gpt-5.5", "gpt-5", "gpt-5-mini", "o3", "o4-mini"],
+  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
   custom: ["deepseek-chat", "deepseek-reasoner", "moonshot-v1-8k", "qwen-max"],
 };
 
@@ -72,6 +76,36 @@ function buildOpenAiUrl(baseUrl: string, endpoint: string) {
 
   url.pathname = path + endpoint;
   return url.toString();
+}
+
+// Mirrors object.BuildAnthropicUrl: the base URL is bare and the endpoint
+// carries the /v1 prefix, the opposite of the OpenAI convention.
+function buildAnthropicUrl(baseUrl: string, endpoint: string) {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return "";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "";
+  }
+
+  let path = url.pathname.replace(/\/+$/, "");
+  if (path.endsWith(endpoint)) {
+    path = path.slice(0, path.length - endpoint.length);
+  }
+  path = path.replace(/\/+$/, "").replace(/\/v1$/, "");
+
+  url.pathname = path + endpoint;
+  return url.toString();
+}
+
+/** The upstream URL requests to a channel of this type end up at. */
+function buildUpstreamUrl(baseUrl: string, type: string) {
+  return channelProtocol(type) === "anthropic"
+    ? buildAnthropicUrl(baseUrl, "/v1/messages")
+    : buildOpenAiUrl(baseUrl, "/chat/completions");
 }
 
 export default function ChannelEditPage() {
@@ -161,7 +195,7 @@ export default function ChannelEditPage() {
     );
   }
 
-  const upstreamUrl = buildOpenAiUrl(channel.baseUrl, "/chat/completions");
+  const upstreamUrl = buildUpstreamUrl(channel.baseUrl, channel.type);
 
   return (
     <div className="p-4 md:p-6">
@@ -191,6 +225,7 @@ export default function ChannelEditPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="anthropic">Anthropic</SelectItem>
                 <SelectItem value="custom">Custom</SelectItem>
               </SelectContent>
             </Select>
@@ -209,7 +244,7 @@ export default function ChannelEditPage() {
             <Combobox
               allowCustomValue
               value={channel.baseUrl}
-              placeholder="https://api.openai.com/v1"
+              placeholder={channel.type === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"}
               options={(BASE_URL_PRESETS[channel.type] ?? []).map(url => ({value: url}))}
               onChange={value => setField("baseUrl", value)}
             />
@@ -224,7 +259,7 @@ export default function ChannelEditPage() {
           <FormRow label={i18next.t("channel:Models")}>
             <TagsInput
               value={channel.models}
-              placeholder="gpt-5, gpt-5-mini"
+              placeholder={channel.type === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini"}
               suggestions={MODEL_PRESETS[channel.type] ?? []}
               onChange={value => setField("models", value)}
             />
@@ -258,6 +293,19 @@ export default function ChannelEditPage() {
               </SelectContent>
             </Select>
           </FormRow>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardContent className="space-y-3 p-4">
+          <div className="text-base font-medium">{i18next.t("channel:Usage")}</div>
+          <p className="text-sm text-muted-foreground">{i18next.t("channel:Usage hint")}</p>
+          <EnvSnippet
+            protocol={channelProtocol(channel.type)}
+            baseUrl={gatewayBaseUrl(channelProtocol(channel.type))}
+            defaultShell={localShell()}
+          />
+          <p className="text-sm text-muted-foreground">{i18next.t("channel:Model routing hint")}</p>
         </CardContent>
       </Card>
 

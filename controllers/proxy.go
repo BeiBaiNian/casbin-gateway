@@ -55,21 +55,54 @@ var hopByHopHeaders = []string{
 	"Upgrade",
 }
 
-// chatCompletionsRequest contains only the fields needed for routing.
-// All other fields (messages, temperature, etc.) are forwarded as-is to the upstream.
-type chatCompletionsRequest struct {
+// proxyTarget is one upstream API this proxy relays to: the wire format it
+// speaks and the endpoint the request lands on.
+type proxyTarget struct {
+	protocol string
+	endpoint string
+}
+
+var (
+	openAiChat           = proxyTarget{object.ProtocolOpenAi, "/chat/completions"}
+	anthropicMessages    = proxyTarget{object.ProtocolAnthropic, "/v1/messages"}
+	anthropicCountTokens = proxyTarget{object.ProtocolAnthropic, "/v1/messages/count_tokens"}
+)
+
+// proxyRoute is one client request being relayed. Everything except model and
+// stream (messages, temperature, ...) is forwarded as-is to the upstream.
+type proxyRoute struct {
+	target proxyTarget
+	body   []byte
+	model  string
+	stream bool
+	// source describes how the channels were chosen, for the error a client
+	// sees when none of them can be used.
+	source string
+}
+
+// routingFields are the only fields read out of the request body. Both the
+// OpenAI and the Anthropic body carry them under the same names.
+type routingFields struct {
 	Model  string `json:"model"`
 	Stream bool   `json:"stream"`
 }
 
-// openaiErrorResponse follows the OpenAI API error format.
-type openaiErrorResponse struct {
-	Error openaiErrorDetail `json:"error"`
-}
-
-type openaiErrorDetail struct {
+// proxyErrorDetail is the {message, type} object both APIs report errors in.
+type proxyErrorDetail struct {
 	Message string `json:"message"`
 	Type    string `json:"type"`
+}
+
+// openaiErrorResponse follows the OpenAI API error format.
+type openaiErrorResponse struct {
+	Error proxyErrorDetail `json:"error"`
+}
+
+// anthropicErrorResponse follows the Anthropic API error format, which wraps
+// the same detail in a typed envelope.
+type anthropicErrorResponse struct {
+	Type  string           `json:"type"`
+	Error proxyErrorDetail `json:"error"`
 }
 
 // proxyClient is a shared HTTP client for upstream requests.
@@ -99,77 +132,110 @@ var proxyClient = &http.Client{
 // request body.
 // This endpoint does NOT require Casdoor authentication (auth deferred to milestone 1.3).
 func (c *ApiController) ChatCompletions() {
-	rawBody := c.Ctx.Input.RequestBody
-	req, ok := c.readChatCompletionsRequest(rawBody)
-	if !ok {
-		return
-	}
+	c.proxyByModel(openAiChat)
+}
 
-	// Match the channels globally, without an owner filter.
-	channels, err := object.GetChannelsByModel(req.Model)
-	if err != nil {
-		if errors.Is(err, object.ErrNoChannelAvailable) {
-			c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", err.Error())
-		} else {
-			beego.Error("channel lookup failed:", err)
-			c.writeOpenAIError(http.StatusBadGateway, "server_error", "channel lookup failed")
-		}
-		return
-	}
+// Messages is the Anthropic-compatible counterpart of ChatCompletions, for the
+// agents that speak that API rather than OpenAI's.
+func (c *ApiController) Messages() {
+	c.proxyByModel(anthropicMessages)
+}
 
-	c.forwardChatCompletions(channels, rawBody, req.Stream, "model: "+req.Model)
+// CountTokens relays the Anthropic token-counting endpoint, which clients call
+// alongside Messages to size their context.
+func (c *ApiController) CountTokens() {
+	c.proxyByModel(anthropicCountTokens)
 }
 
 // AgentChatCompletions is the per-agent entry point of the same proxy: an agent
 // pointed at ".../v1/agents/<agentId>" reaches the channel bound to it rather
 // than one chosen by model name.
 func (c *ApiController) AgentChatCompletions() {
-	agentId := c.Ctx.Input.Param(":agentId")
-	rawBody := c.Ctx.Input.RequestBody
-	req, ok := c.readChatCompletionsRequest(rawBody)
+	c.proxyByAgent(openAiChat)
+}
+
+// AgentMessages is the per-agent entry point for Anthropic clients. One base URL
+// serves both APIs: an OpenAI client appends /chat/completions to it, while an
+// Anthropic one appends /v1/messages.
+func (c *ApiController) AgentMessages() {
+	c.proxyByAgent(anthropicMessages)
+}
+
+// AgentCountTokens is the per-agent Anthropic token-counting endpoint.
+func (c *ApiController) AgentCountTokens() {
+	c.proxyByAgent(anthropicCountTokens)
+}
+
+// proxyByModel forwards to the channels that serve the model the request names.
+func (c *ApiController) proxyByModel(target proxyTarget) {
+	route, ok := c.readProxyRoute(target)
 	if !ok {
 		return
 	}
+	route.source = "model: " + route.model
 
-	channel, err := object.GetChannelByAgent(agentId)
+	// Match the channels globally, without an owner filter.
+	channels, err := object.GetChannelsByModel(route.model)
 	if err != nil {
-		if errors.Is(err, object.ErrAgentNoChannel) {
-			c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", err.Error())
+		if errors.Is(err, object.ErrNoChannelAvailable) {
+			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
 		} else {
-			beego.Error("agent channel lookup failed:", err)
-			c.writeOpenAIError(http.StatusBadGateway, "server_error", err.Error())
+			beego.Error("channel lookup failed:", err)
+			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", "channel lookup failed")
 		}
 		return
 	}
 
-	c.forwardChatCompletions([]*object.Channel{channel}, rawBody, req.Stream, "agent: "+agentId)
+	c.forwardToChannels(channels, route)
 }
 
-// readChatCompletionsRequest parses only model and stream; everything else
-// (messages, temperature, ...) is forwarded as-is.
-func (c *ApiController) readChatCompletionsRequest(rawBody []byte) (chatCompletionsRequest, bool) {
-	var req chatCompletionsRequest
-	if err := json.Unmarshal(rawBody, &req); err != nil {
-		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", "invalid request body")
-		return req, false
+// proxyByAgent forwards to the single channel bound to the agent in the path.
+func (c *ApiController) proxyByAgent(target proxyTarget) {
+	route, ok := c.readProxyRoute(target)
+	if !ok {
+		return
 	}
-	if req.Model == "" {
-		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", "model is required")
-		return req, false
+	agentId := c.Ctx.Input.Param(":agentId")
+	route.source = "agent: " + agentId
+
+	channel, err := object.GetChannelByAgent(agentId)
+	if err != nil {
+		if errors.Is(err, object.ErrAgentNoChannel) {
+			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
+		} else {
+			beego.Error("agent channel lookup failed:", err)
+			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", err.Error())
+		}
+		return
 	}
-	return req, true
+
+	c.forwardToChannels([]*object.Channel{channel}, route)
 }
 
-// forwardChatCompletions relays the request to the first channel that answers.
-// route describes how the channels were chosen, for the error a caller sees
-// when none of them can be used.
-func (c *ApiController) forwardChatCompletions(channels []*object.Channel, rawBody []byte, stream bool, route string) {
+func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
+	rawBody := c.Ctx.Input.RequestBody
+
+	var fields routingFields
+	if err := json.Unmarshal(rawBody, &fields); err != nil {
+		c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", "invalid request body")
+		return nil, false
+	}
+	if fields.Model == "" {
+		c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", "model is required")
+		return nil, false
+	}
+
+	return &proxyRoute{target: target, body: rawBody, model: fields.Model, stream: fields.Stream}, true
+}
+
+// forwardToChannels relays the request to the first channel that answers.
+func (c *ApiController) forwardToChannels(channels []*object.Channel, route *proxyRoute) {
 	// Drop the channels this proxy cannot talk to before forwarding, so that
 	// the last usable channel is known and its response can be relayed as-is.
 	usableChannels := []*object.Channel{}
 	skipReason := ""
 	for _, channel := range channels {
-		if reason := channelUnusableReason(channel); reason != "" {
+		if reason := channelUnusableReason(channel, route.target.protocol); reason != "" {
 			beego.Error("skipped channel", channel.GetId()+":", reason)
 			skipReason = reason
 			continue
@@ -177,11 +243,11 @@ func (c *ApiController) forwardChatCompletions(channels []*object.Channel, rawBo
 		usableChannels = append(usableChannels, channel)
 	}
 	if len(usableChannels) == 0 {
-		message := fmt.Sprintf("no usable channel for %s", route)
+		message := fmt.Sprintf("no usable channel for %s", route.source)
 		if skipReason != "" {
 			message = skipReason
 		}
-		c.writeOpenAIError(http.StatusBadGateway, "server_error", message)
+		c.writeProxyError(route.target.protocol, http.StatusBadGateway, "server_error", message)
 		return
 	}
 
@@ -195,14 +261,14 @@ func (c *ApiController) forwardChatCompletions(channels []*object.Channel, rawBo
 			return
 		}
 
-		status, message, written := c.forwardToChannel(channel, rawBody, stream, i == len(usableChannels)-1)
+		status, message, written := c.forwardToChannel(channel, route, i == len(usableChannels)-1)
 		if written {
 			return
 		}
 		lastStatus, lastMessage = status, message
 	}
 
-	c.writeOpenAIError(lastStatus, "server_error", lastMessage)
+	c.writeProxyError(route.target.protocol, lastStatus, "server_error", lastMessage)
 }
 
 // forwardToChannel sends the request to a single channel's upstream. It reports
@@ -210,8 +276,8 @@ func (c *ApiController) forwardChatCompletions(channels []*object.Channel, rawBo
 // status and message describing the failure so that the caller can fail over to
 // the next channel. The response of the last channel is always relayed, even
 // when its status would otherwise be retried.
-func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte, stream bool, isLast bool) (int, string, bool) {
-	upstreamUrl, err := object.BuildOpenAiUrl(channel.BaseUrl, "/chat/completions")
+func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRoute, isLast bool) (int, string, bool) {
+	upstreamUrl, err := object.BuildChannelUrl(channel.BaseUrl, route.target.protocol, route.target.endpoint)
 	if err != nil {
 		return http.StatusBadGateway, err.Error(), false
 	}
@@ -221,12 +287,15 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte
 	ctx, cancel := context.WithCancel(c.Ctx.Request.Context())
 	defer cancel()
 
-	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamUrl, bytes.NewReader(rawBody))
+	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamUrl, bytes.NewReader(route.body))
 	if err != nil {
 		return http.StatusBadGateway, "upstream connection failed", false
 	}
 	upstreamReq.Header.Set("Content-Type", "application/json")
-	upstreamReq.Header.Set("Authorization", "Bearer "+channel.ApiKey)
+	object.SetChannelAuth(upstreamReq.Header, channel)
+	if route.target.protocol == object.ProtocolAnthropic {
+		c.copyAnthropicHeaders(upstreamReq.Header)
+	}
 
 	upstreamResp, err := proxyClient.Do(upstreamReq)
 	if err != nil {
@@ -256,8 +325,23 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte
 	body := newIdleTimeoutReader(upstreamResp.Body, proxyIdleTimeout, cancel)
 	defer body.Stop()
 
-	c.relayResponse(upstreamResp, body, stream && isEventStream(upstreamResp))
+	c.relayResponse(upstreamResp, body, route.stream && isEventStream(upstreamResp))
 	return 0, "", true
+}
+
+// copyAnthropicHeaders passes the client's API version and beta opt-ins on to
+// the upstream: they select response features, so dropping them would answer a
+// different request than the one that was made.
+func (c *ApiController) copyAnthropicHeaders(dst http.Header) {
+	version := c.Ctx.Request.Header.Get("Anthropic-Version")
+	if version == "" {
+		version = object.AnthropicVersion
+	}
+	dst.Set("Anthropic-Version", version)
+
+	for _, beta := range c.Ctx.Request.Header.Values("Anthropic-Beta") {
+		dst.Add("Anthropic-Beta", beta)
+	}
 }
 
 // relayResponse copies the upstream status code, headers and body to the client
@@ -340,9 +424,12 @@ func isRetryableStatus(statusCode int) bool {
 
 // channelUnusableReason reports why the proxy cannot forward to a channel, or
 // an empty string when it can.
-func channelUnusableReason(channel *object.Channel) string {
+func channelUnusableReason(channel *object.Channel, protocol string) string {
 	if !object.IsChannelTypeSupported(channel) {
 		return fmt.Sprintf("the %s channel type is not supported", channel.Type)
+	}
+	if object.ChannelProtocol(channel) != protocol {
+		return fmt.Sprintf("channel %s does not speak the %s API", channel.GetId(), protocol)
 	}
 	if channel.BaseUrl == "" {
 		return "channel base URL is not configured"
@@ -379,15 +466,16 @@ func (r *idleTimeoutReader) Stop() {
 	r.timer.Stop()
 }
 
-// writeOpenAIError writes an OpenAI-compatible JSON error response
-// with the given HTTP status code, error type, and message.
-func (c *ApiController) writeOpenAIError(statusCode int, errType, message string) {
-	resp := openaiErrorResponse{
-		Error: openaiErrorDetail{
-			Message: message,
-			Type:    errType,
-		},
+// writeProxyError writes a JSON error response in the format the client that
+// made the request expects.
+func (c *ApiController) writeProxyError(protocol string, statusCode int, errType, message string) {
+	detail := proxyErrorDetail{Message: message, Type: errType}
+
+	var resp any = openaiErrorResponse{Error: detail}
+	if protocol == object.ProtocolAnthropic {
+		resp = anthropicErrorResponse{Type: "error", Error: detail}
 	}
+
 	c.Ctx.ResponseWriter.Header().Set("Content-Type", "application/json")
 	c.Ctx.ResponseWriter.WriteHeader(statusCode)
 	if err := json.NewEncoder(c.Ctx.ResponseWriter).Encode(resp); err != nil {

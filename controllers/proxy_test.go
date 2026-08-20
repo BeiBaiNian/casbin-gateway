@@ -73,14 +73,30 @@ func TestIsRetryableStatus(t *testing.T) {
 }
 
 func TestChannelUnusableReason(t *testing.T) {
-	if reason := channelUnusableReason(&object.Channel{Type: "claude", BaseUrl: "https://example.com"}); !strings.Contains(reason, "not supported") {
+	openAi := object.ProtocolOpenAi
+	anthropic := object.ProtocolAnthropic
+
+	if reason := channelUnusableReason(&object.Channel{Type: "claude", BaseUrl: "https://example.com"}, openAi); !strings.Contains(reason, "not supported") {
 		t.Errorf("the claude channel type should be rejected, got: %s", reason)
 	}
-	if reason := channelUnusableReason(&object.Channel{Type: "openai", BaseUrl: ""}); !strings.Contains(reason, "base URL") {
+	if reason := channelUnusableReason(&object.Channel{Type: "openai", BaseUrl: ""}, openAi); !strings.Contains(reason, "base URL") {
 		t.Errorf("an empty base URL should be rejected, got: %s", reason)
 	}
-	if reason := channelUnusableReason(&object.Channel{Type: "custom", BaseUrl: "https://example.com"}); reason != "" {
+	if reason := channelUnusableReason(&object.Channel{Type: "custom", BaseUrl: "https://example.com"}, openAi); reason != "" {
 		t.Errorf("the custom channel type should be usable, got: %s", reason)
+	}
+
+	// An OpenAI body cannot be forwarded to an Anthropic upstream, or the other
+	// way around, however healthy the channel is.
+	mismatched := &object.Channel{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: "https://api.anthropic.com"}
+	if reason := channelUnusableReason(mismatched, openAi); !strings.Contains(reason, "does not speak") {
+		t.Errorf("an anthropic channel should be rejected for an openai request, got: %s", reason)
+	}
+	if reason := channelUnusableReason(mismatched, anthropic); reason != "" {
+		t.Errorf("an anthropic channel should be usable for an anthropic request, got: %s", reason)
+	}
+	if reason := channelUnusableReason(&object.Channel{Owner: "admin", Name: "gpt", Type: "openai", BaseUrl: "https://api.openai.com/v1"}, anthropic); !strings.Contains(reason, "does not speak") {
+		t.Errorf("an openai channel should be rejected for an anthropic request, got: %s", reason)
 	}
 }
 
@@ -222,9 +238,11 @@ func TestForwardToChannel(t *testing.T) {
 	healthyChannel := &object.Channel{Owner: "admin", Name: "healthy", Type: "openai", BaseUrl: healthyServer.URL + "/", ApiKey: "sk-good"}
 	rawBody := []byte(`{"model":"gpt-4","messages":[]}`)
 
+	route := &proxyRoute{target: openAiChat, body: rawBody}
+
 	// A retryable status fails over instead of reaching the client.
 	c, recorder := newTestApiController()
-	statusCode, message, written := c.forwardToChannel(overloadedChannel, rawBody, false, false)
+	statusCode, message, written := c.forwardToChannel(overloadedChannel, route, false)
 	if written {
 		t.Fatal("a retryable status was relayed instead of failing over")
 	}
@@ -238,14 +256,14 @@ func TestForwardToChannel(t *testing.T) {
 	// The last channel is relayed as-is, even with a retryable status, so that
 	// the client sees the real upstream answer.
 	c, recorder = newTestApiController()
-	_, _, written = c.forwardToChannel(overloadedChannel, rawBody, false, true)
+	_, _, written = c.forwardToChannel(overloadedChannel, route, true)
 	if !written || recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "overloaded") {
 		t.Errorf("the last channel was not relayed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
 	}
 
 	// A healthy channel, with a trailing slash in its base URL.
 	c, recorder = newTestApiController()
-	_, _, written = c.forwardToChannel(healthyChannel, rawBody, false, true)
+	_, _, written = c.forwardToChannel(healthyChannel, route, true)
 	if !written || recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "choices") {
 		t.Errorf("the healthy channel failed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
 	}
@@ -253,8 +271,67 @@ func TestForwardToChannel(t *testing.T) {
 	// stream=true, but the upstream rejected the request: the JSON error must
 	// not be dressed up as an SSE stream.
 	c, recorder = newTestApiController()
-	c.forwardToChannel(overloadedChannel, rawBody, true, true)
+	c.forwardToChannel(overloadedChannel, &proxyRoute{target: openAiChat, body: rawBody, stream: true}, true)
 	if header := recorder.Header().Get("Content-Type"); header != "application/json" {
 		t.Errorf("Content-Type = %s, expected application/json", header)
+	}
+}
+
+func TestForwardToChannelAnthropic(t *testing.T) {
+	var gotPath, gotKey, gotVersion, gotAuth string
+	var gotBeta []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotKey = r.Header.Get("X-Api-Key")
+		gotVersion = r.Header.Get("Anthropic-Version")
+		gotBeta = r.Header.Values("Anthropic-Beta")
+		gotAuth = r.Header.Get("Authorization")
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"content":[]}`))
+	}))
+	defer server.Close()
+
+	channel := &object.Channel{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: server.URL, ApiKey: "sk-ant-test"}
+	route := &proxyRoute{target: anthropicMessages, body: []byte(`{"model":"claude-opus-5","messages":[]}`)}
+
+	c, recorder := newTestApiController()
+	c.Ctx.Request.Header.Add("Anthropic-Beta", "fine-grained-tool-streaming-2025-05-14")
+	if _, _, written := c.forwardToChannel(channel, route, true); !written {
+		t.Fatal("the anthropic channel was not relayed")
+	}
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "content") {
+		t.Errorf("statusCode = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if gotPath != "/v1/messages" {
+		t.Errorf("upstream path = %s, expected /v1/messages", gotPath)
+	}
+	if gotKey != "sk-ant-test" {
+		t.Errorf("X-Api-Key = %s", gotKey)
+	}
+	if gotAuth != "" {
+		t.Errorf("the OpenAI Authorization header was sent to an anthropic upstream: %s", gotAuth)
+	}
+	if gotVersion != object.AnthropicVersion {
+		t.Errorf("Anthropic-Version = %s, expected %s", gotVersion, object.AnthropicVersion)
+	}
+	if len(gotBeta) != 1 || gotBeta[0] != "fine-grained-tool-streaming-2025-05-14" {
+		t.Errorf("Anthropic-Beta = %v, expected the client value to be passed on", gotBeta)
+	}
+}
+
+func TestWriteProxyError(t *testing.T) {
+	c, recorder := newTestApiController()
+	c.writeProxyError(object.ProtocolOpenAi, http.StatusBadRequest, "invalid_request_error", "nope")
+	if body := recorder.Body.String(); !strings.Contains(body, `"error":{"message":"nope"`) || strings.Contains(body, `"type":"error"`) {
+		t.Errorf("openai error body = %s", body)
+	}
+
+	c, recorder = newTestApiController()
+	c.writeProxyError(object.ProtocolAnthropic, http.StatusBadRequest, "invalid_request_error", "nope")
+	if body := recorder.Body.String(); !strings.Contains(body, `"type":"error"`) {
+		t.Errorf("anthropic error body = %s", body)
 	}
 }
