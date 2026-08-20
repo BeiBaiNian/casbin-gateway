@@ -77,6 +77,19 @@ export default function AgentsPage({account}: {account: Account}) {
       render: (value: string) => <code className="text-xs">{value}</code>,
     },
     {
+      title: i18next.t("agent:Channel"),
+      key: "channel",
+      dataIndex: "channel",
+      render: (value: string) =>
+        value ? (
+          <Link to={`/channels/${value}`} className="text-primary hover:underline">
+            {value}
+          </Link>
+        ) : (
+          <span className="text-muted-foreground">{i18next.t("agent:No channel")}</span>
+        ),
+    },
+    {
       title: i18next.t("agent:Patch Status"),
       key: "patched",
       render: (_value, record) => {

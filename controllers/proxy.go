@@ -100,15 +100,8 @@ var proxyClient = &http.Client{
 // This endpoint does NOT require Casdoor authentication (auth deferred to milestone 1.3).
 func (c *ApiController) ChatCompletions() {
 	rawBody := c.Ctx.Input.RequestBody
-
-	// Parse only model and stream; forward everything else as-is.
-	var req chatCompletionsRequest
-	if err := json.Unmarshal(rawBody, &req); err != nil {
-		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", "invalid request body")
-		return
-	}
-	if req.Model == "" {
-		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", "model is required")
+	req, ok := c.readChatCompletionsRequest(rawBody)
+	if !ok {
 		return
 	}
 
@@ -124,6 +117,53 @@ func (c *ApiController) ChatCompletions() {
 		return
 	}
 
+	c.forwardChatCompletions(channels, rawBody, req.Stream, "model: "+req.Model)
+}
+
+// AgentChatCompletions is the per-agent entry point of the same proxy: an agent
+// pointed at ".../v1/agents/<agentId>" reaches the channel bound to it rather
+// than one chosen by model name.
+func (c *ApiController) AgentChatCompletions() {
+	agentId := c.Ctx.Input.Param(":agentId")
+	rawBody := c.Ctx.Input.RequestBody
+	req, ok := c.readChatCompletionsRequest(rawBody)
+	if !ok {
+		return
+	}
+
+	channel, err := object.GetChannelByAgent(agentId)
+	if err != nil {
+		if errors.Is(err, object.ErrAgentNoChannel) {
+			c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", err.Error())
+		} else {
+			beego.Error("agent channel lookup failed:", err)
+			c.writeOpenAIError(http.StatusBadGateway, "server_error", err.Error())
+		}
+		return
+	}
+
+	c.forwardChatCompletions([]*object.Channel{channel}, rawBody, req.Stream, "agent: "+agentId)
+}
+
+// readChatCompletionsRequest parses only model and stream; everything else
+// (messages, temperature, ...) is forwarded as-is.
+func (c *ApiController) readChatCompletionsRequest(rawBody []byte) (chatCompletionsRequest, bool) {
+	var req chatCompletionsRequest
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", "invalid request body")
+		return req, false
+	}
+	if req.Model == "" {
+		c.writeOpenAIError(http.StatusBadRequest, "invalid_request_error", "model is required")
+		return req, false
+	}
+	return req, true
+}
+
+// forwardChatCompletions relays the request to the first channel that answers.
+// route describes how the channels were chosen, for the error a caller sees
+// when none of them can be used.
+func (c *ApiController) forwardChatCompletions(channels []*object.Channel, rawBody []byte, stream bool, route string) {
 	// Drop the channels this proxy cannot talk to before forwarding, so that
 	// the last usable channel is known and its response can be relayed as-is.
 	usableChannels := []*object.Channel{}
@@ -137,7 +177,7 @@ func (c *ApiController) ChatCompletions() {
 		usableChannels = append(usableChannels, channel)
 	}
 	if len(usableChannels) == 0 {
-		message := fmt.Sprintf("no usable channel for model: %s", req.Model)
+		message := fmt.Sprintf("no usable channel for %s", route)
 		if skipReason != "" {
 			message = skipReason
 		}
@@ -155,7 +195,7 @@ func (c *ApiController) ChatCompletions() {
 			return
 		}
 
-		status, message, written := c.forwardToChannel(channel, rawBody, req.Stream, i == len(usableChannels)-1)
+		status, message, written := c.forwardToChannel(channel, rawBody, stream, i == len(usableChannels)-1)
 		if written {
 			return
 		}

@@ -24,11 +24,16 @@ import (
 	"github.com/apache/casbin-gateway/agent"
 	"github.com/apache/casbin-gateway/agentmonitor"
 	"github.com/apache/casbin-gateway/agentpatch"
+	"github.com/apache/casbin-gateway/object"
 )
 
 type discoveredAgent struct {
 	agent.Installation
 	agentpatch.Status
+
+	// Channel is the "owner/name" id of the bound channel. Installations are
+	// discovered per host and the binding is stored per agent id, so they merge here.
+	Channel string `json:"channel"`
 }
 
 // GetAgents scans known installation locations and returns the AI agents
@@ -44,14 +49,48 @@ func (c *ApiController) GetAgents() {
 		return
 	}
 
+	channels, err := object.GetAgentChannels()
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
 	result := make([]*discoveredAgent, 0, len(installations))
 	for _, installation := range installations {
 		result = append(result, &discoveredAgent{
 			Installation: installation,
 			Status:       agentpatch.StatusOf(targetOf(installation)),
+			Channel:      channels[installation.AgentId],
 		})
 	}
 	c.ResponseOk(result)
+}
+
+// UpdateAgentChannel binds one agent to the channel its requests are forwarded
+// to, or unbinds it when the channel is empty. The binding is per agent id.
+func (c *ApiController) UpdateAgentChannel() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	var form struct {
+		AgentId string `json:"agentId"`
+		Channel string `json:"channel"`
+	}
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &form); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if !agent.IsKnownAgentId(form.AgentId) {
+		c.ResponseError("unknown agent: " + form.AgentId)
+		return
+	}
+
+	if err := object.SetAgentChannel(form.AgentId, form.Channel); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(form.Channel)
 }
 
 // PatchAgent enables monitoring for one discovered installation.

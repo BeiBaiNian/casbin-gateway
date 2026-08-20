@@ -173,6 +173,8 @@ export interface Agent {
   detail?: string;
   notice?: string;
   followup?: string;
+  /** The "owner/name" id of the channel this agent's requests are sent to. */
+  channel: string;
 }
 
 export interface AgentRecord {

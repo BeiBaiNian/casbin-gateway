@@ -33,6 +33,11 @@ export function agentKey(agent: Pick<Agent, "owner" | "path">) {
   return `${agent.owner}:${agent.path}`;
 }
 
+/** The base URL an agent is pointed at to reach its own channel. */
+export function agentProxyBaseUrl(agentId: string) {
+  return `${Setting.ServerUrl || window.location.origin}/v1/agents/${encodeURIComponent(agentId)}`;
+}
+
 /** The detail page route for one installation, disambiguated by its path. */
 export function agentDetailPath(agent: Agent) {
   return `/agents/${encodeURIComponent(agent.agentId)}?path=${encodeURIComponent(agent.path)}`;
@@ -108,7 +113,33 @@ export function useAgents(enabled = true) {
     [scan],
   );
 
-  return {agents, loading, error, busyKey, scanned, scan, togglePatch};
+  const setChannel = React.useCallback(
+    (agent: Agent, channel: string) => {
+      setBusyKey(agentKey(agent));
+      AgentBackend.updateAgentChannel(agent.agentId, channel)
+        .then(res => {
+          if (res.status === "ok") {
+            Setting.showMessage(
+              "success",
+              channel === ""
+                ? i18next.t("agent:Channel cleared")
+                : `${i18next.t("agent:Channel saved")}: ${channel}`,
+            );
+            scan();
+          } else {
+            Setting.showMessage(
+              "error",
+              res.msg || i18next.t("agent:Failed to update agent channel"),
+            );
+          }
+        })
+        .catch(err => Setting.showMessage("error", err.message || String(err)))
+        .then(() => setBusyKey(""));
+    },
+    [scan],
+  );
+
+  return {agents, loading, error, busyKey, scanned, scan, togglePatch, setChannel};
 }
 
 /** What one agent has been up to, derived from its monitoring sessions. */

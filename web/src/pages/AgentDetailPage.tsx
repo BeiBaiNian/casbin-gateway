@@ -19,6 +19,7 @@ import copy from "copy-to-clipboard";
 import i18next from "i18next";
 
 import * as AgentBackend from "@/backend/AgentBackend";
+import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
 import {DataTable, type Column} from "@/components/DataTable";
@@ -28,17 +29,28 @@ import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {ConfirmButton} from "@/components/ui/confirm-button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {Spinner} from "@/components/ui/spinner";
 import {Tooltip} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import {
   agentKey,
+  agentProxyBaseUrl,
   getOutcomeVariant,
   monitorAgentId,
   useAgents,
   useAgentSessions,
 } from "@/lib/agents";
-import type {Account, Agent, AgentRecord, AgentSession} from "@/types";
+import type {Account, Agent, AgentRecord, AgentSession, Channel} from "@/types";
+
+/** Radix rejects an empty item value, so "unbound" needs a stand-in. */
+const noChannel = "-";
 
 const tabs = ["Agent Sessions", "Agent Records"] as const;
 type Tab = (typeof tabs)[number];
@@ -109,14 +121,84 @@ function MonitoringCard({
   );
 }
 
+/** Which upstream this agent's requests go to, and the base URL that sends them there. */
+function ChannelCard({
+  agent,
+  channels,
+  busy,
+  onChange,
+}: {
+  agent: Agent;
+  channels: Channel[];
+  busy: boolean;
+  onChange: (channel: string) => void;
+}) {
+  const baseUrl = agentProxyBaseUrl(agent.agentId);
+
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="text-base">{i18next.t("agent:Channel")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
+        <Select
+          value={agent.channel === "" ? noChannel : agent.channel}
+          disabled={busy}
+          onValueChange={value => onChange(value === noChannel ? "" : value)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={noChannel}>
+              <span className="text-muted-foreground">{i18next.t("agent:No channel")}</span>
+            </SelectItem>
+            {channels.map(channel => (
+              <SelectItem key={`${channel.owner}/${channel.name}`} value={`${channel.owner}/${channel.name}`}>
+                {channel.displayName || channel.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {agent.channel === "" ? (
+          <p className="text-sm text-muted-foreground">{i18next.t("agent:Channel hint")}</p>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">{i18next.t("agent:Base URL hint")}</p>
+            <div className="flex items-start gap-1">
+              <code className="min-w-0 flex-1 break-all text-xs">{baseUrl}</code>
+              <Tooltip title={i18next.t("agent:Copy base URL")}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  aria-label={i18next.t("agent:Copy base URL")}
+                  onClick={() => {
+                    copy(baseUrl);
+                    Setting.showMessage("success", i18next.t("agent:Base URL copied to clipboard"));
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </Tooltip>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AgentDetailPage({account}: {account: Account}) {
   const params = useParams();
   const [searchParams] = useSearchParams();
   const isAdmin = Setting.isAdminUser(account);
-  const {agents, error, busyKey, scanned, scan, togglePatch} = useAgents(isAdmin);
+  const {agents, error, busyKey, scanned, scan, togglePatch, setChannel} = useAgents(isAdmin);
   const [tab, setTab] = React.useState<Tab>("Agent Sessions");
   const [records, setRecords] = React.useState<AgentRecord[]>([]);
   const [recordError, setRecordError] = React.useState("");
+  const [channels, setChannels] = React.useState<Channel[]>([]);
 
   const agentId = params.agentId ?? "";
   const path = searchParams.get("path") ?? "";
@@ -127,6 +209,19 @@ export default function AgentDetailPage({account}: {account: Account}) {
     candidate =>
       candidate.agentId === agentId && (path === "" || candidate.path === path),
   );
+
+  React.useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+    ChannelBackend.getChannels(account.name)
+      .then(res => {
+        if (res.status === "ok") {
+          setChannels(res.data ?? []);
+        }
+      })
+      .catch(() => setChannels([]));
+  }, [isAdmin, account.name]);
 
   const monitorId = agent ? monitorAgentId(agent.agentId) : "";
   const watching = Boolean(agent?.patched);
@@ -291,6 +386,13 @@ export default function AgentDetailPage({account}: {account: Account}) {
           agent={agent}
           busy={busyKey === agentKey(agent)}
           onToggle={() => togglePatch(agent)}
+        />
+
+        <ChannelCard
+          agent={agent}
+          channels={channels}
+          busy={busyKey === agentKey(agent)}
+          onChange={value => setChannel(agent, value)}
         />
 
         <Card>

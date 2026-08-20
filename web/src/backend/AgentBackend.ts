@@ -33,6 +33,10 @@ export function unpatchAgent(target: PatchTarget) {
   return request<{followup?: string}>("/api/unpatch-agent", "POST", target);
 }
 
+export function updateAgentChannel(agentId: string, channel: string) {
+  return request("/api/update-agent-channel", "POST", {agentId: agentId, channel: channel});
+}
+
 export function getAgentRecords(agent = "", eventType = "", outcome = "", session = "", limit = 200) {
   return request<AgentRecord[]>(
     `/api/get-agent-records${query({

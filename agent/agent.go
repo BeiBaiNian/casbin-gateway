@@ -24,3 +24,14 @@ type Installation struct {
 	InstallMethod string `json:"installMethod"`
 	Owner         string `json:"owner"`
 }
+
+// IsKnownAgentId reads the fingerprints rather than a host scan, so an agent
+// stays configurable while it is not installed.
+func IsKnownAgentId(id string) bool {
+	for i := range fingerprints {
+		if fingerprints[i].ID == id {
+			return true
+		}
+	}
+	return false
+}
