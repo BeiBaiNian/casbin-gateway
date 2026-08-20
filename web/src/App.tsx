@@ -285,8 +285,7 @@ export default function App() {
             </React.Suspense>
           </main>
 
-          <footer className="text-muted-foreground flex items-center justify-center gap-2 border-t py-5 text-sm">
-            {i18next.t("general:Powered by")}
+          <footer className="flex items-center justify-center border-t py-5">
             <a target="_blank" rel="noreferrer" href="https://github.com/apache/casbin-gateway">
               <img
                 className="h-[30px] w-auto"
