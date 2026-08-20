@@ -28,6 +28,7 @@ import (
 
 	"github.com/apache/casbin-gateway/object"
 	"github.com/apache/casbin-gateway/proxy"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
 )
 
@@ -78,6 +79,10 @@ type proxyRoute struct {
 	// source describes how the channels were chosen, for the error a client
 	// sees when none of them can be used.
 	source string
+	start  time.Time
+	// record accumulates what is written to the LLM record of this request. It
+	// is nil while recording is off.
+	record *object.LlmRecord
 }
 
 // routingFields are the only fields read out of the request body. Both the
@@ -173,14 +178,19 @@ func (c *ApiController) proxyByModel(target proxyTarget) {
 		return
 	}
 	route.source = "model: " + route.model
+	// Every way out of a proxy entry point ends the client request, which is
+	// what a record describes, so this is the only place one is written.
+	defer c.finishLlmRecord(route)
 
 	// Match the channels globally, without an owner filter.
 	channels, err := object.GetChannelsByModel(route.model)
 	if err != nil {
 		if errors.Is(err, object.ErrNoChannelAvailable) {
+			route.recordOutcome(http.StatusBadRequest, err.Error())
 			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
 		} else {
 			beego.Error("channel lookup failed:", err)
+			route.recordOutcome(http.StatusBadGateway, "channel lookup failed")
 			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", "channel lookup failed")
 		}
 		return
@@ -197,13 +207,19 @@ func (c *ApiController) proxyByAgent(target proxyTarget) {
 	}
 	agentId := c.Ctx.Input.Param(":agentId")
 	route.source = "agent: " + agentId
+	if route.record != nil {
+		route.record.Agent = agentId
+	}
+	defer c.finishLlmRecord(route)
 
 	channel, err := object.GetChannelByAgent(agentId)
 	if err != nil {
 		if errors.Is(err, object.ErrAgentNoChannel) {
+			route.recordOutcome(http.StatusBadRequest, err.Error())
 			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
 		} else {
 			beego.Error("agent channel lookup failed:", err)
+			route.recordOutcome(http.StatusBadGateway, err.Error())
 			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", err.Error())
 		}
 		return
@@ -225,7 +241,17 @@ func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
 		return nil, false
 	}
 
-	return &proxyRoute{target: target, body: rawBody, model: fields.Model, stream: fields.Stream}, true
+	route := &proxyRoute{target: target, body: rawBody, model: fields.Model, stream: fields.Stream, start: time.Now()}
+	if object.IsLlmRecording() {
+		route.record = &object.LlmRecord{
+			Protocol: target.protocol,
+			Endpoint: target.endpoint,
+			Model:    fields.Model,
+			ClientIp: util.GetClientIp(c.Ctx.Request),
+			Stream:   fields.Stream,
+		}
+	}
+	return route, true
 }
 
 // forwardToChannels relays the request to the first channel that answers.
@@ -247,6 +273,7 @@ func (c *ApiController) forwardToChannels(channels []*object.Channel, route *pro
 		if skipReason != "" {
 			message = skipReason
 		}
+		route.recordOutcome(http.StatusBadGateway, message)
 		c.writeProxyError(route.target.protocol, http.StatusBadGateway, "server_error", message)
 		return
 	}
@@ -258,6 +285,7 @@ func (c *ApiController) forwardToChannels(channels []*object.Channel, route *pro
 	for i, channel := range usableChannels {
 		if c.Ctx.Request.Context().Err() != nil {
 			// The client hung up, there is nobody left to fail over for.
+			route.recordOutcome(0, "client disconnected")
 			return
 		}
 
@@ -268,6 +296,7 @@ func (c *ApiController) forwardToChannels(channels []*object.Channel, route *pro
 		lastStatus, lastMessage = status, message
 	}
 
+	route.recordOutcome(lastStatus, lastMessage)
 	c.writeProxyError(route.target.protocol, lastStatus, "server_error", lastMessage)
 }
 
@@ -277,6 +306,8 @@ func (c *ApiController) forwardToChannels(channels []*object.Channel, route *pro
 // the next channel. The response of the last channel is always relayed, even
 // when its status would otherwise be retried.
 func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRoute, isLast bool) (int, string, bool) {
+	route.recordAttempt(channel.GetId())
+
 	upstreamUrl, err := object.BuildChannelUrl(channel.BaseUrl, route.target.protocol, route.target.endpoint)
 	if err != nil {
 		return http.StatusBadGateway, err.Error(), false
@@ -301,6 +332,7 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 	if err != nil {
 		if c.Ctx.Request.Context().Err() != nil {
 			// The client hung up mid-request, there is nothing left to answer.
+			route.recordOutcome(0, "client disconnected")
 			return 0, "", true
 		}
 
@@ -325,7 +357,15 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 	body := newIdleTimeoutReader(upstreamResp.Body, proxyIdleTimeout, cancel)
 	defer body.Stop()
 
-	c.relayResponse(upstreamResp, body, route.stream && isEventStream(upstreamResp))
+	route.recordOutcome(upstreamResp.StatusCode, "")
+	if route.record == nil {
+		c.relayResponse(upstreamResp, body, route.stream && isEventStream(upstreamResp))
+		return 0, "", true
+	}
+
+	tap := &usageTap{reader: body}
+	c.relayResponse(upstreamResp, tap, route.stream && isEventStream(upstreamResp))
+	route.recordUsage(tap.tail)
 	return 0, "", true
 }
 

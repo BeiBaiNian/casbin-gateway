@@ -212,6 +212,39 @@ export interface AgentSession {
   lastTime: string;
 }
 
+export interface LlmRecord {
+  id: number;
+  createdTime: string;
+  protocol: string;
+  endpoint: string;
+  model: string;
+  channel: string;
+  agent: string;
+  clientIp: string;
+  stream: boolean;
+  status: number;
+  durationMs: number;
+  attempts: number;
+  error: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  summary: string;
+  /** Only returned by getLlmRecord, the list endpoint leaves it out. */
+  payload: string;
+  redactions: number;
+  truncated: boolean;
+  bytes: number;
+}
+
+export interface LlmRecordStatus {
+  mode: "off" | "metadata" | "full";
+  retentionDays: number;
+  maxRecords: number;
+  dropped: number;
+  count: number;
+}
+
 export interface MetricPoint {
   data: string;
   count: number;

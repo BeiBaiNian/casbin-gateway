@@ -225,6 +225,55 @@ func GetAgentMonitorPollSeconds() int {
 	return res
 }
 
+// How much of an LLM request Gateway retains.
+const (
+	LlmRecordOff      = "off"
+	LlmRecordMetadata = "metadata"
+	LlmRecordFull     = "full"
+)
+
+// GetLlmRecordMode reports whether LLM requests are recorded, and whether the
+// request body is kept along with the metadata. Prompts are sensitive, so the
+// default is to keep nothing.
+func GetLlmRecordMode() string {
+	switch strings.ToLower(strings.Trim(GetConfigString("llmRecordMode"), `"' `)) {
+	case LlmRecordMetadata:
+		return LlmRecordMetadata
+	case LlmRecordFull:
+		return LlmRecordFull
+	default:
+		return LlmRecordOff
+	}
+}
+
+// GetLlmRecordQueueCapacity bounds the records waiting to be written. A full
+// queue drops records rather than slowing the proxy down.
+func GetLlmRecordQueueCapacity() int {
+	res := GetConfigIntDefault("llmRecordQueueCapacity", 1000)
+	if res <= 0 {
+		res = 1000
+	}
+	return res
+}
+
+// GetLlmRecordRetentionDays is how long a recorded request is kept.
+func GetLlmRecordRetentionDays() int {
+	res := GetConfigIntDefault("llmRecordRetentionDays", 30)
+	if res <= 0 {
+		res = 30
+	}
+	return res
+}
+
+// GetLlmRecordMaxRecords caps the table regardless of the retention window.
+func GetLlmRecordMaxRecords() int {
+	res := GetConfigIntDefault("llmRecordMaxRecords", 10000)
+	if res <= 0 {
+		res = 10000
+	}
+	return res
+}
+
 func GetConfigRealDataSourceName(driverName string) string {
 	var dataSourceName string
 	if driverName != "mysql" {

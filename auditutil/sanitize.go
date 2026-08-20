@@ -58,11 +58,23 @@ func SanitizeValue(key string, value any) any {
 	}
 }
 
+// tokenCountKeys carry the "token" marker below but are ordinary model
+// parameters and usage counters, not credentials.
+var tokenCountKeys = map[string]bool{
+	"maxtokens": true, "maxcompletiontokens": true, "maxtokenstosample": true, "maxoutputtokens": true,
+	"prompttokens": true, "completiontokens": true, "totaltokens": true, "reasoningtokens": true,
+	"inputtokens": true, "outputtokens": true, "tokencount": true, "numtokens": true, "tokens": true,
+	"cachecreationinputtokens": true, "cachereadinputtokens": true, "cachedtokens": true,
+}
+
 // SensitiveKey recognizes common credential-bearing field names after
 // punctuation and case normalization.
 func SensitiveKey(key string) bool {
 	normalized := strings.ToLower(key)
 	normalized = strings.NewReplacer("_", "", "-", "", ".", "").Replace(normalized)
+	if tokenCountKeys[normalized] {
+		return false
+	}
 	if normalized == "token" || normalized == "accesstoken" || normalized == "refreshtoken" || normalized == "idtoken" {
 		return true
 	}

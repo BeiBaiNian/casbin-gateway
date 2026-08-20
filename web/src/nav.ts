@@ -19,6 +19,7 @@ import {
   Globe,
   LayoutDashboard,
   ListFilter,
+  Logs,
   MessageSquare,
   Plug,
   ScrollText,
@@ -67,6 +68,7 @@ export const navGroups: NavGroup[] = [
   },
   {key: "/agent-records", label: "agent:Agent Records", icon: FileSearch, path: "/agent-records", adminOnly: true},
   {key: "/channels", label: "channel:Channels", icon: Plug, path: "/channels"},
+  {key: "/llm-records", label: "llm:LLM Records", icon: Logs, path: "/llm-records", adminOnly: true},
   {
     key: "/advanced",
     label: "general:Advanced",

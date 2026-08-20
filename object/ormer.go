@@ -287,4 +287,9 @@ func (a *Ormer) createTable() {
 	if err != nil {
 		panic(err)
 	}
+
+	err = a.Engine.Sync2(new(LlmRecord))
+	if err != nil {
+		panic(err)
+	}
 }

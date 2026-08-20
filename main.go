@@ -45,6 +45,8 @@ func main() {
 	object.InitFlag()
 	object.InitAdapter()
 	object.CreateTables()
+	object.StartLlmRecordWriter()
+	defer object.StopLlmRecordWriter()
 	casdoor.InitCasdoorConfig()
 	object.InitUsers()
 	proxy.InitHttpClient()
