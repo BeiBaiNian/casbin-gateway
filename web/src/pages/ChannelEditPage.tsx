@@ -104,26 +104,35 @@ export default function ChannelEditPage() {
 
   const save = () => {
     if (!channel) {
-      return;
+      return Promise.resolve(false);
     }
 
-    ChannelBackend.updateChannel(owner, channelName, channel)
+    return ChannelBackend.updateChannel(owner, channelName, channel)
       .then(res => {
         if (res.status === "error") {
           Setting.showMessage("error", `${i18next.t("channel:Failed to save")}: ${res.msg}`);
-          return;
+          return false;
         }
         Setting.showMessage("success", i18next.t("channel:Channel saved"));
+        return true;
       })
-      .catch(error => Setting.showMessage("error", `${i18next.t("channel:Failed to save")}: ${error}`));
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("channel:Failed to save")}: ${error}`);
+        return false;
+      });
   };
 
+  // The test probes the stored channel, so the edits have to be saved first.
   const test = () => {
     setTesting(true);
     setResult(null);
-    ChannelBackend.testChannel(owner, channelName)
+    save()
+      .then(saved => (saved ? ChannelBackend.testChannel(owner, channelName) : null))
       .then(res => {
         setTesting(false);
+        if (res === null) {
+          return;
+        }
         if (res.status === "error") {
           Setting.showMessage("error", `${i18next.t("channel:Failed to test")}: ${res.msg}`);
           return;
