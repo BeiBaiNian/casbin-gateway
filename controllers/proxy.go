@@ -26,8 +26,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/object"
 	"github.com/apache/casbin-gateway/proxy"
+	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
 )
 
@@ -155,7 +157,7 @@ func (c *ApiController) ChatCompletions() {
 			return
 		}
 
-		status, message, written := c.forwardToChannel(channel, rawBody, req.Stream, i == len(usableChannels)-1)
+		status, message, written := c.forwardToChannel(channel, rawBody, req.Model, req.Stream, i == len(usableChannels)-1)
 		if written {
 			return
 		}
@@ -165,12 +167,19 @@ func (c *ApiController) ChatCompletions() {
 	c.writeOpenAIError(lastStatus, "server_error", lastMessage)
 }
 
+func (c *ApiController) enqueueChatRequestAudit(rawBody []byte, model string, stream bool, channel *object.Channel) {
+	if channel == nil || !conf.IsLlmRequestAuditEnabled() {
+		return
+	}
+	object.EnqueueLlmRequestAudit(rawBody, model, channel.GetId(), util.GetClientIp(c.Ctx.Request), stream)
+}
+
 // forwardToChannel sends the request to a single channel's upstream. It reports
 // whether the client response was already written, and when it was not, the
 // status and message describing the failure so that the caller can fail over to
 // the next channel. The response of the last channel is always relayed, even
 // when its status would otherwise be retried.
-func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte, stream bool, isLast bool) (int, string, bool) {
+func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte, model string, stream bool, isLast bool) (int, string, bool) {
 	upstreamUrl, err := object.BuildOpenAiUrl(channel.BaseUrl, "/chat/completions")
 	if err != nil {
 		return http.StatusBadGateway, err.Error(), false
@@ -203,6 +212,11 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, rawBody []byte
 		return http.StatusBadGateway, "upstream connection failed", false
 	}
 	defer upstreamResp.Body.Close()
+
+	// An HTTP response proves this channel received the request. Recording here
+	// preserves the real channel for each failover attempt without waiting for
+	// disk I/O or transforming the payload on the forwarding goroutine.
+	c.enqueueChatRequestAudit(rawBody, model, stream, channel)
 
 	if !isLast && isRetryableStatus(upstreamResp.StatusCode) {
 		beego.Error("channel", channel.GetId(), "returned a retryable status:", upstreamResp.Status)

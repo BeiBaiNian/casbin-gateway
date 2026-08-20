@@ -224,7 +224,7 @@ func TestForwardToChannel(t *testing.T) {
 
 	// A retryable status fails over instead of reaching the client.
 	c, recorder := newTestApiController()
-	statusCode, message, written := c.forwardToChannel(overloadedChannel, rawBody, false, false)
+	statusCode, message, written := c.forwardToChannel(overloadedChannel, rawBody, "gpt-4", false, false)
 	if written {
 		t.Fatal("a retryable status was relayed instead of failing over")
 	}
@@ -238,14 +238,14 @@ func TestForwardToChannel(t *testing.T) {
 	// The last channel is relayed as-is, even with a retryable status, so that
 	// the client sees the real upstream answer.
 	c, recorder = newTestApiController()
-	_, _, written = c.forwardToChannel(overloadedChannel, rawBody, false, true)
+	_, _, written = c.forwardToChannel(overloadedChannel, rawBody, "gpt-4", false, true)
 	if !written || recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "overloaded") {
 		t.Errorf("the last channel was not relayed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
 	}
 
 	// A healthy channel, with a trailing slash in its base URL.
 	c, recorder = newTestApiController()
-	_, _, written = c.forwardToChannel(healthyChannel, rawBody, false, true)
+	_, _, written = c.forwardToChannel(healthyChannel, rawBody, "gpt-4", false, true)
 	if !written || recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "choices") {
 		t.Errorf("the healthy channel failed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
 	}
@@ -253,7 +253,7 @@ func TestForwardToChannel(t *testing.T) {
 	// stream=true, but the upstream rejected the request: the JSON error must
 	// not be dressed up as an SSE stream.
 	c, recorder = newTestApiController()
-	c.forwardToChannel(overloadedChannel, rawBody, true, true)
+	c.forwardToChannel(overloadedChannel, rawBody, "gpt-4", true, true)
 	if header := recorder.Header().Get("Content-Type"); header != "application/json" {
 		t.Errorf("Content-Type = %s, expected application/json", header)
 	}

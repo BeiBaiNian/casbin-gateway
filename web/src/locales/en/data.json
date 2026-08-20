@@ -189,6 +189,17 @@
   "node": {
     "Edit Node": "Edit Node"
   },
+  "llm": {
+    "Channel": "Channel",
+    "Complete": "Complete",
+    "Failed to get request audits": "Failed to get request audits",
+    "Mode": "Mode",
+    "No request audits yet": "No request audits yet — enable llmRequestAuditEnabled and send a request through the LLM gateway.",
+    "Request Audits": "LLM Request Audits",
+    "Request audit notice": "Only sanitized model requests sent through Gateway are retained. Responses are not captured by this feature.",
+    "Stored": "Stored",
+    "Truncated": "Truncated"
+  },
   "rule": {
     "Allow": "Allow",
     "Block": "Block",

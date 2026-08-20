@@ -225,6 +225,34 @@ func GetAgentMonitorPollSeconds() int {
 	return res
 }
 
+func IsLlmRequestAuditEnabled() bool {
+	return strings.EqualFold(strings.Trim(GetConfigString("llmRequestAuditEnabled"), `"' `), "true")
+}
+
+func GetLlmRequestAuditQueueCapacity() int {
+	capacity := GetConfigIntDefault("llmRequestAuditQueueCapacity", 1000)
+	if capacity <= 0 {
+		return 1000
+	}
+	return capacity
+}
+
+func GetLlmRequestAuditRetentionDays() int {
+	days := GetConfigIntDefault("llmRequestAuditRetentionDays", 30)
+	if days <= 0 {
+		return 30
+	}
+	return days
+}
+
+func GetLlmRequestAuditMaxRecords() int {
+	maximum := GetConfigIntDefault("llmRequestAuditMaxRecords", 10000)
+	if maximum <= 0 {
+		return 10000
+	}
+	return maximum
+}
+
 func GetConfigRealDataSourceName(driverName string) string {
 	var dataSourceName string
 	if driverName != "mysql" {
