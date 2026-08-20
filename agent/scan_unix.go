@@ -73,7 +73,7 @@ func userNpmPatterns(fingerprint *Fingerprint, home string) []string {
 	for _, dir := range fingerprint.ExtraUnixNpmDirs {
 		patterns = append(patterns, filepath.Join(home, filepath.FromSlash(dir), "node_modules", pkg, "package.json"))
 	}
-	return patterns
+	return append(patterns, npmPrefixPatterns(fingerprint, home)...)
 }
 
 func fileOwner(path string) string {

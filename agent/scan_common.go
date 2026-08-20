@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -30,6 +31,12 @@ import (
 
 // maxPackageJSONSize limits reads from glob-matched manifests.
 const maxPackageJSONSize = 1024 * 1024
+
+// maxNpmrcSize limits reads from npmrc files.
+const maxNpmrcSize = 64 * 1024
+
+// npmrcEnvRef matches the ${VAR} references npm expands in npmrc values.
+var npmrcEnvRef = regexp.MustCompile(`\$\{([^{}]+)\}`)
 
 // scanNpmPatterns validates npm packages found by known glob patterns.
 func scanNpmPatterns(ctx context.Context, fingerprint *Fingerprint, patterns []string, owner string, ownerFor func(string) string) []Installation {
@@ -77,6 +84,79 @@ func scanNpmPatterns(ctx context.Context, fingerprint *Fingerprint, patterns []s
 
 func (f *Fingerprint) npmPackagePath() string {
 	return filepath.FromSlash(f.NpmPackage)
+}
+
+// isCurrentHome reports whether path is the home of the user this process runs
+// as, the only profile the environment describes.
+func isCurrentHome(path string) bool {
+	current, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	current, path = filepath.Clean(current), filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(current, path)
+	}
+	return current == path
+}
+
+// npmrcPrefix returns the "prefix" setting of an npmrc file, later keys winning
+// as in npm's own ini parsing.
+func npmrcPrefix(path string) string {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxNpmrcSize {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	prefix := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) != "prefix" {
+			continue
+		}
+		prefix = strings.Trim(strings.TrimSpace(value), `"'`)
+	}
+	return npmrcEnvRef.ReplaceAllStringFunc(prefix, func(ref string) string {
+		return os.Getenv(ref[2 : len(ref)-1])
+	})
+}
+
+// npmPrefixPatterns cover a global root relocated with "npm config set prefix",
+// which falls outside every fixed layout. Windows keeps the packages directly
+// under the prefix, Unix under lib/.
+func npmPrefixPatterns(fingerprint *Fingerprint, home string) []string {
+	var prefixes []string
+	if isCurrentHome(home) {
+		// npm accepts either case for its environment config.
+		prefixes = append(prefixes, os.Getenv("npm_config_prefix"), os.Getenv("NPM_CONFIG_PREFIX"))
+	}
+	prefixes = append(prefixes, npmrcPrefix(filepath.Join(home, ".npmrc")))
+
+	pkg := fingerprint.npmPackagePath()
+	seen := map[string]bool{}
+	var patterns []string
+	for _, prefix := range prefixes {
+		prefix = filepath.Clean(strings.TrimSpace(prefix))
+		if !filepath.IsAbs(prefix) {
+			continue
+		}
+		key := prefix
+		if runtime.GOOS == "windows" {
+			key = strings.ToLower(key)
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		patterns = append(patterns,
+			filepath.Join(prefix, "node_modules", pkg, "package.json"),
+			filepath.Join(prefix, "lib", "node_modules", pkg, "package.json"),
+		)
+	}
+	return patterns
 }
 
 func stampAgentId(installations []Installation, mark int, agentId string) {

@@ -147,7 +147,7 @@ func windowsHomes(ctx context.Context) []homeDir {
 
 // appDataDir respects relocated AppData paths for the current user.
 func appDataDir(home homeDir, kind, variable string) string {
-	if current, err := os.UserHomeDir(); err == nil && strings.EqualFold(filepath.Clean(current), filepath.Clean(home.path)) {
+	if isCurrentHome(home.path) {
 		if configured := os.Getenv(variable); configured != "" {
 			return configured
 		}
@@ -160,8 +160,7 @@ func roamingAppData(home homeDir) string { return appDataDir(home, "Roaming", "A
 
 func scanHermesWindows(home homeDir) []Installation {
 	hermesHome := filepath.Join(localAppData(home), "hermes")
-	if current, err := os.UserHomeDir(); err == nil &&
-		strings.EqualFold(filepath.Clean(current), filepath.Clean(home.path)) {
+	if isCurrentHome(home.path) {
 		if configured := os.Getenv("HERMES_HOME"); configured != "" {
 			hermesHome = configured
 		}
@@ -329,5 +328,6 @@ func scanWindowsNpm(ctx context.Context, fingerprint *Fingerprint, home homeDir)
 	for _, dir := range fingerprint.ExtraWindowsNpmDirs {
 		patterns = append(patterns, filepath.Join(local, filepath.FromSlash(dir), "node_modules", pkg, "package.json"))
 	}
+	patterns = append(patterns, npmPrefixPatterns(fingerprint, home.path)...)
 	return scanNpmPatterns(ctx, fingerprint, patterns, home.owner, nil)
 }
