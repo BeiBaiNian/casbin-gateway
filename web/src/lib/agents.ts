@@ -17,6 +17,7 @@ import i18next from "i18next";
 
 import * as AgentBackend from "@/backend/AgentBackend";
 import * as Setting from "@/Setting";
+import type {BadgeVariant} from "@/components/ui/badge";
 import type {Agent, AgentSession} from "@/types";
 
 /** The monitor keys the two Codex front ends under one agent id. */
@@ -234,13 +235,13 @@ export function activityOf(activity: Record<string, AgentActivity>, agent: Agent
 }
 
 /** The badge colour every record table paints an outcome with. */
-export function getOutcomeVariant(outcome: string | undefined) {
+export function getOutcomeVariant(outcome: string | undefined): BadgeVariant {
   return (
     {
-      attempted: "processing",
+      attempted: "info",
       denied: "warning",
-      failure: "error",
+      failure: "danger",
       success: "success",
     } as const
-  )[outcome as "attempted" | "denied" | "failure" | "success"];
+  )[outcome as "attempted" | "denied" | "failure" | "success"] ?? "muted";
 }

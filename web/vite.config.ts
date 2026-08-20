@@ -14,6 +14,7 @@
 
 import path from "path";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import {defineConfig} from "vite";
 
 // The dev server proxies the API to the Go backend instead of calling it at an
@@ -23,7 +24,7 @@ import {defineConfig} from "vite";
 const backend = process.env.VITE_BACKEND_URL || "http://localhost:17000";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -41,5 +42,14 @@ export default defineConfig({
     // there rather than Vite's default "dist".
     outDir: "build",
     sourcemap: false,
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          recharts: ["recharts"],
+          vendor: ["react", "react-dom", "react-router-dom"],
+        },
+      },
+    },
   },
 });

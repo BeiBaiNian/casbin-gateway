@@ -19,11 +19,12 @@ import i18next from "i18next";
 import * as AccountBackend from "@/backend/AccountBackend";
 import * as Conf from "@/Conf";
 import * as Setting from "@/Setting";
-import {Result} from "@/components/Result";
+import {Loading} from "@/components/shared/loading";
+import {ResultScreen} from "@/components/shared/misc";
+import {PasswordInput} from "@/components/shared/password-input";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
-import {PasswordInput} from "@/components/ui/password-input";
-import {PageSpinner} from "@/components/ui/spinner";
+import {Label} from "@/components/ui/label";
 
 // Signing in goes one of two ways: redirect to Casdoor when app.conf configures
 // it, otherwise show the built-in username/password form.
@@ -76,48 +77,71 @@ export default function SigninPage() {
   };
 
   if (loading) {
-    return <PageSpinner tip={i18next.t("general:Signing in...")} />;
+    return <Loading type="page" tip={i18next.t("general:Signing in...")} />;
   }
 
   if (!showSignin) {
     return (
-      <Result
-        status="warning"
-        title={i18next.t("general:Login Error")}
-        subTitle={errorMessage || i18next.t("account:Sign in is unavailable")}
-      />
+      <div className="bg-muted/30 flex min-h-screen items-center justify-center">
+        <ResultScreen
+          status="!"
+          title={i18next.t("general:Login Error")}
+          subTitle={errorMessage || i18next.t("account:Sign in is unavailable")}
+        />
+      </div>
     );
   }
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-4">
-      <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4">
-        <div className="mb-8 text-center text-2xl font-semibold">{i18next.t("account:Sign In")}</div>
-        <div className="relative">
-          <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-11 pl-9"
-            required
-            value={username}
-            placeholder={i18next.t("account:Username")}
-            onChange={event => setUsername(event.target.value)}
+    <div className="bg-muted/30 flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-sm">
+        <div className="mb-9 flex justify-center">
+          <img
+            src={`${Setting.StaticBaseUrl}/img/logo_384x96.png`}
+            alt="Casbin Gateway"
+            className="h-10 w-auto max-w-[260px] object-contain"
           />
         </div>
-        <div className="relative">
-          <Lock className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <PasswordInput
-            className="h-11 pl-9"
-            required
-            autoFocus
-            value={password}
-            placeholder={i18next.t("general:Password")}
-            onChange={event => setPassword(event.target.value)}
-          />
-        </div>
-        <Button type="submit" className="h-11 w-full">
-          {i18next.t("account:Sign In")}
-        </Button>
-      </form>
+
+        <form onSubmit={onSubmit} className="bg-card grid gap-4 rounded-xl border p-6 shadow-sm">
+          <div className="grid gap-2">
+            <Label htmlFor="signin-username">{i18next.t("account:Username")}</Label>
+            <div className="relative">
+              <User className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+              <Input
+                id="signin-username"
+                className="pl-9"
+                required
+                autoComplete="username"
+                value={username}
+                placeholder={i18next.t("account:Username")}
+                onChange={event => setUsername(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="signin-password">{i18next.t("general:Password")}</Label>
+            <div className="relative">
+              <Lock className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2" />
+              <PasswordInput
+                id="signin-password"
+                className="pl-9"
+                required
+                autoFocus
+                autoComplete="current-password"
+                value={password}
+                placeholder={i18next.t("general:Password")}
+                onChange={event => setPassword(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <Button type="submit" className="mt-2 w-full">
+            {i18next.t("account:Sign In")}
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

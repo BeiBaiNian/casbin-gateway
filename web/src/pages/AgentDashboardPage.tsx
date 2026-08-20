@@ -14,23 +14,23 @@
 
 import * as React from "react";
 import {Link} from "react-router-dom";
-import {Bot, ChevronRight, CircleX, Copy, RefreshCw} from "lucide-react";
-import copy from "copy-to-clipboard";
+import {Bot, ChevronRight, FileSearch, MessageSquare, RefreshCw, ShieldCheck} from "lucide-react";
 import i18next from "i18next";
 
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
-import {PageHeader} from "@/components/FormRow";
-import {UnauthorizedResult} from "@/components/Result";
-import {StatisticCard} from "@/components/charts/ChartCards";
-import {Alert, AlertDescription} from "@/components/ui/alert";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
+import {EmptyState} from "@/components/shared/empty-state";
+import {Loading} from "@/components/shared/loading";
+import {CodeText, UnauthorizedResult} from "@/components/shared/misc";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
+import {StatCard} from "@/components/shared/stat-card";
+import {MessageAlert} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardHeader} from "@/components/ui/card";
-import {ConfirmButton} from "@/components/ui/confirm-button";
-import {Spinner} from "@/components/ui/spinner";
 import {Switch} from "@/components/ui/switch";
-import {Tooltip} from "@/components/ui/tooltip";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 import {activityOf, agentDetailPath, agentKey, useAgents, useAgentSessions} from "@/lib/agents";
 import type {Account, Agent} from "@/types";
 
@@ -38,8 +38,8 @@ import type {Account, Agent} from "@/types";
 function CardRow({label, children}: {label: string; children: React.ReactNode}) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-      <span className="min-w-0 flex-1 text-right">{children}</span>
+      <span className="text-muted-foreground shrink-0 text-xs">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-right">{children}</span>
     </div>
   );
 }
@@ -70,67 +70,52 @@ function AgentCard({
   );
 
   return (
-    <Card className="flex flex-col transition-colors hover:border-primary/50">
-      <CardHeader className="flex flex-row items-start gap-3 space-y-0 p-4">
+    <Card className="hover:border-ring/50 flex flex-col gap-3 py-4 transition-colors">
+      <CardHeader className="flex flex-row items-start gap-3 px-4">
         <AgentIcon
           agent={agent.agentId || agent.name}
           size={40}
-          fallback={<Bot className="h-10 w-10 text-muted-foreground" />}
+          fallback={<Bot className="text-muted-foreground size-10" />}
         />
         <div className="min-w-0 flex-1">
-          <Link
-            to={agentDetailPath(agent)}
-            className="block truncate font-semibold hover:text-primary hover:underline"
-          >
+          <Link to={agentDetailPath(agent)} className="hover:text-primary block truncate font-semibold hover:underline">
             {agent.name}
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <Badge variant="secondary">{agent.version || i18next.t("agent:Unknown")}</Badge>
-            {agent.installMethod ? <Badge variant="secondary">{agent.installMethod}</Badge> : null}
+            <Badge variant="muted">{agent.version || i18next.t("agent:Unknown")}</Badge>
+            {agent.installMethod ? <Badge variant="muted">{agent.installMethod}</Badge> : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {busy ? <Spinner /> : null}
+          {busy ? <Loading type="small" className="py-0" /> : null}
           {agent.supported ? (
             // The dialog trigger clones its child to attach the click, so the
             // switch has to be that child - a wrapper that is not a DOM element
             // would drop the handler and the switch would do nothing.
-            <ConfirmButton
+            <ConfirmDialog
               title={`${action} ${agent.name}?`}
               description={note || undefined}
-              okText={action}
-              destructive={agent.patched}
+              confirmText={action}
+              variant={agent.patched ? "destructive" : "default"}
               onConfirm={onToggle}
             >
               {toggle}
-            </ConfirmButton>
+            </ConfirmDialog>
           ) : (
-            <Tooltip title={agent.detail || i18next.t("agent:Not supported")}>
+            <SimpleTooltip title={agent.detail || i18next.t("agent:Not supported")}>
               <span>{toggle}</span>
-            </Tooltip>
+            </SimpleTooltip>
           )}
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-1 flex-col gap-2 p-4 pt-0 text-sm">
+      <CardContent className="flex flex-1 flex-col gap-2 px-4 text-sm">
         <CardRow label={i18next.t("general:Path")}>
-          <span className="flex items-center justify-end gap-1">
-            <Tooltip title={agent.path}>
-              <code className="truncate text-xs">{agent.path}</code>
-            </Tooltip>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 shrink-0"
-              aria-label={i18next.t("agent:Copy path")}
-              onClick={() => {
-                copy(agent.path);
-                Setting.showMessage("success", i18next.t("agent:Path copied to clipboard"));
-              }}
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          </span>
+          <SimpleTooltip title={agent.path}>
+            <span className="inline-flex max-w-full">
+              <CodeText copyable>{agent.path}</CodeText>
+            </span>
+          </SimpleTooltip>
         </CardRow>
         <CardRow label={i18next.t("general:Owner")}>
           <span className="truncate text-xs">{agent.owner}</span>
@@ -139,8 +124,8 @@ function AgentCard({
         <div className="mt-auto flex items-center justify-between border-t pt-3">
           {/* The patcher's own wording is the most precise thing there is about
               a given state, so it hangs off the status line as its tooltip. */}
-          <Tooltip title={agent.detail}>
-            <span className="min-w-0 truncate text-xs text-muted-foreground">
+          <SimpleTooltip title={agent.detail}>
+            <span className="text-muted-foreground min-w-0 truncate text-xs">
               {!agent.supported
                 ? i18next.t("agent:Not supported")
                 : !agent.patched
@@ -153,13 +138,13 @@ function AgentCard({
                     ).toLocaleString()}`
                     : i18next.t("agent:Monitoring, no activity yet")}
             </span>
-          </Tooltip>
+          </SimpleTooltip>
           <Link
             to={agentDetailPath(agent)}
-            className="inline-flex shrink-0 items-center text-xs text-primary hover:underline"
+            className="text-primary inline-flex shrink-0 items-center text-xs hover:underline"
           >
             {i18next.t("agent:Details")}
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="size-3.5" />
           </Link>
         </div>
       </CardContent>
@@ -177,51 +162,45 @@ export default function AgentDashboardPage({account}: {account: Account}) {
   }
 
   const patchedCount = agents.filter(agent => agent.patched).length;
-  const sessionCount = Object.values(activity).reduce(
-    (total, entry) => total + entry.sessionCount,
-    0,
-  );
+  const sessionCount = Object.values(activity).reduce((total, entry) => total + entry.sessionCount, 0);
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <PageHeader title={i18next.t("agent:Agents on this machine")}>
-        <Button variant="outline" onClick={() => scan(true)} disabled={loading}>
-          <RefreshCw className={loading ? "animate-spin" : undefined} />
-          {i18next.t("agent:Scan")}
-        </Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("agent:Agents on this machine")}
+        description={account.hostname}
+        actions={
+          <Button variant="outline" onClick={() => scan(true)} loading={loading}>
+            <RefreshCw />
+            {i18next.t("agent:Scan")}
+          </Button>
+        }
+      />
 
-      {error && (
-        <Alert variant="destructive">
-          <CircleX />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {error ? <MessageAlert title={error} /> : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatisticCard title={i18next.t("agent:Installed")} value={agents.length} />
-        <StatisticCard title={i18next.t("agent:Monitored")} value={patchedCount} />
-        <StatisticCard title={i18next.t("agent:Agent Sessions")} value={sessionCount} />
-        <StatisticCard title={i18next.t("agent:Records")} value={recordCount} />
+        <StatCard label={i18next.t("agent:Installed")} value={agents.length} icon={Bot} />
+        <StatCard label={i18next.t("agent:Monitored")} value={patchedCount} icon={ShieldCheck} tone="success" />
+        <StatCard label={i18next.t("agent:Agent Sessions")} value={sessionCount} icon={MessageSquare} />
+        <StatCard label={i18next.t("agent:Records")} value={recordCount} icon={FileSearch} />
       </div>
 
       {!scanned ? (
-        <div className="flex justify-center p-10">
-          <Spinner />
-        </div>
+        <Loading tip={i18next.t("agent:Scan")} />
       ) : agents.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
-            <Bot className="h-12 w-12 text-muted-foreground" />
-            <div className="font-medium">{i18next.t("agent:No supported agents found")}</div>
-            <div className="max-w-md text-sm text-muted-foreground">
-              {i18next.t("agent:Install an AI agent on this machine, then scan again")}
-            </div>
-            <Button variant="outline" onClick={() => scan(true)} disabled={loading}>
-              <RefreshCw className={loading ? "animate-spin" : undefined} />
-              {i18next.t("agent:Scan")}
-            </Button>
-          </CardContent>
+        <Card className="py-0">
+          <EmptyState
+            icon={Bot}
+            title={i18next.t("agent:No supported agents found")}
+            description={i18next.t("agent:Install an AI agent on this machine, then scan again")}
+            action={
+              <Button variant="outline" onClick={() => scan(true)} loading={loading}>
+                <RefreshCw />
+                {i18next.t("agent:Scan")}
+              </Button>
+            }
+          />
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -236,6 +215,6 @@ export default function AgentDashboardPage({account}: {account: Account}) {
           ))}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

@@ -14,14 +14,16 @@
 
 import * as React from "react";
 import {useNavigate} from "react-router-dom";
+import {Plus, RefreshCw, ScrollText} from "lucide-react";
 import i18next from "i18next";
 
 import * as RecordBackend from "@/backend/RecordBackend";
 import * as Setting from "@/Setting";
-import {DataTable, type Column} from "@/components/DataTable";
-import {Field, FormDialog} from "@/components/FormDialog";
+import {DataTable, type Column} from "@/components/shared/data-table";
+import {Field, FormDialog} from "@/components/shared/form-dialog";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
 import {Button} from "@/components/ui/button";
-import {ConfirmButton} from "@/components/ui/confirm-button";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {Input} from "@/components/ui/input";
 import {
   Select,
@@ -189,21 +191,31 @@ export default function RecordListPage({account}: {account: Account}) {
           <Button size="sm" onClick={() => navigate(`/records/${record.owner}/${record.id}`)}>
             {i18next.t("general:Edit")}
           </Button>
-          <ConfirmButton title={i18next.t("general:Sure to delete {name} ?").replace("{name}", String(record.id))} onConfirm={() => deleteRecord(record)}>
+          <ConfirmDialog title={i18next.t("general:Sure to delete {name} ?").replace("{name}", String(record.id))} onConfirm={() => deleteRecord(record)}>
             <Button size="sm" variant="destructive">
               {i18next.t("general:Delete")}
             </Button>
-          </ConfirmButton>
+          </ConfirmDialog>
         </div>
       ),
     },
   ];
 
   return (
-    <div className="p-4 md:p-6">
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("general:Records")}
+        actions={
+          <Button onClick={openAddDialog}>
+            <Plus />
+            {i18next.t("general:Add")}
+          </Button>
+        }
+      />
+
       <DataTable
         columns={columns}
-        data={data}
+        dataSource={data}
         rowKey={record => String(record.id)}
         loading={loading}
         serverPagination={{
@@ -213,9 +225,12 @@ export default function RecordListPage({account}: {account: Account}) {
           onChange: (nextPage, nextPageSize) => fetchRecords(nextPage, nextPageSize),
         }}
         title={i18next.t("general:Records")}
+        description={`${total} ${i18next.t("general:Records")}`}
+        emptyIcon={ScrollText}
         toolbar={
-          <Button size="sm" onClick={openAddDialog}>
-            {i18next.t("general:Add")}
+          <Button variant="outline" size="sm" onClick={() => fetchRecords()} loading={loading}>
+            <RefreshCw />
+            {i18next.t("general:Refresh")}
           </Button>
         }
       />
@@ -263,6 +278,6 @@ export default function RecordListPage({account}: {account: Account}) {
           />
         </Field>
       </FormDialog>
-    </div>
+    </PageContainer>
   );
 }

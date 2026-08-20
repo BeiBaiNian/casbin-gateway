@@ -22,14 +22,14 @@ import * as AgentBackend from "@/backend/AgentBackend";
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
-import {DataTable, type Column} from "@/components/DataTable";
+import {DataTable, type Column} from "@/components/shared/data-table";
 import {EnvSnippet} from "@/components/EnvSnippet";
-import {Result, UnauthorizedResult} from "@/components/Result";
+import {ResultScreen, UnauthorizedResult} from "@/components/shared/misc";
 import {Alert, AlertDescription} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
-import {ConfirmButton} from "@/components/ui/confirm-button";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {
   Select,
   SelectContent,
@@ -37,8 +37,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {Spinner} from "@/components/ui/spinner";
-import {Tooltip} from "@/components/ui/tooltip";
+import {AiDots} from "@/components/shared/loading";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import {
   agentKey,
@@ -102,18 +102,18 @@ function MonitoringCard({
         {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
 
         {agent.supported ? (
-          <ConfirmButton
+          <ConfirmDialog
             title={`${action} ${agent.name}?`}
             description={note || undefined}
-            okText={action}
-            destructive={agent.patched}
+            confirmText={action}
+            variant={agent.patched ? "destructive" : "default"}
             onConfirm={onToggle}
           >
             <Button variant={agent.patched ? "outline" : "default"} disabled={busy}>
-              {busy ? <Spinner /> : null}
+              {busy ? <AiDots size="small" /> : null}
               {action}
             </Button>
-          </ConfirmButton>
+          </ConfirmDialog>
         ) : (
           <Button variant="outline" disabled>
             {i18next.t("agent:Patch")}
@@ -258,14 +258,14 @@ export default function AgentDetailPage({account}: {account: Account}) {
   if (!scanned) {
     return (
       <div className="flex justify-center p-10">
-        <Spinner />
+        <AiDots size="small" />
       </div>
     );
   }
 
   if (!agent) {
     return (
-      <Result
+      <ResultScreen
         status="404"
         title={i18next.t("agent:Agent installation not found")}
         subTitle={error || path || agentId}
@@ -413,7 +413,7 @@ export default function AgentDetailPage({account}: {account: Account}) {
             <InfoRow label={i18next.t("general:Path")}>
               <span className="flex items-start gap-1">
                 <code className="min-w-0 flex-1 text-xs">{agent.path}</code>
-                <Tooltip title={i18next.t("agent:Copy path")}>
+                <SimpleTooltip title={i18next.t("agent:Copy path")}>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -426,7 +426,7 @@ export default function AgentDetailPage({account}: {account: Account}) {
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
-                </Tooltip>
+                </SimpleTooltip>
               </span>
             </InfoRow>
           </CardContent>
@@ -483,7 +483,7 @@ export default function AgentDetailPage({account}: {account: Account}) {
           {tab === "Agent Sessions" ? (
             <DataTable
               columns={sessionColumns}
-              data={sessions}
+              dataSource={sessions}
               rowKey={session => session.sessionKey}
               pageSize={0}
               emptyText={i18next.t("agent:Monitoring, no activity yet")}
@@ -491,7 +491,7 @@ export default function AgentDetailPage({account}: {account: Account}) {
           ) : (
             <DataTable
               columns={recordColumns}
-              data={records}
+              dataSource={records}
               rowKey={record => record.id}
               pageSize={0}
               emptyText={i18next.t("agent:Monitoring, no activity yet")}

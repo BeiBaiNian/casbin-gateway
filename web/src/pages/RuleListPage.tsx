@@ -14,15 +14,17 @@
 
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
+import {ListFilter, Plus, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
 import * as RuleBackend from "@/backend/RuleBackend";
 import * as Setting from "@/Setting";
-import {DataTable, type Column} from "@/components/DataTable";
-import {Field, FormDialog} from "@/components/FormDialog";
+import {DataTable, type Column} from "@/components/shared/data-table";
+import {Field, FormDialog} from "@/components/shared/form-dialog";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
-import {ConfirmButton} from "@/components/ui/confirm-button";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {Input} from "@/components/ui/input";
 import {
   Select,
@@ -166,7 +168,7 @@ export default function RuleListPage({account}: {account: Account}) {
       dataIndex: "type",
       width: "130px",
       sorter: (a, b) => a.type.localeCompare(b.type),
-      render: (text: string) => <Badge variant="blue">{i18next.t(`rule:${text}`)}</Badge>,
+      render: (text: string) => <Badge variant="info">{i18next.t(`rule:${text}`)}</Badge>,
     },
     {
       title: i18next.t("rule:Expressions"),
@@ -212,24 +214,34 @@ export default function RuleListPage({account}: {account: Account}) {
           <Button size="sm" onClick={() => navigate(`/rules/${record.owner}/${record.name}`)}>
             {i18next.t("general:Edit")}
           </Button>
-          <ConfirmButton
+          <ConfirmDialog
             title={i18next.t("general:Sure to delete {name} ?").replace("{name}", record.name)}
             onConfirm={() => deleteRule(record)}
           >
             <Button size="sm" variant="destructive">
               {i18next.t("general:Delete")}
             </Button>
-          </ConfirmButton>
+          </ConfirmDialog>
         </div>
       ),
     },
   ];
 
   return (
-    <div className="p-4 md:p-6">
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("general:Rules")}
+        actions={
+          <Button onClick={openAddDialog}>
+            <Plus />
+            {i18next.t("general:Add")}
+          </Button>
+        }
+      />
+
       <DataTable
         columns={columns}
-        data={data}
+        dataSource={data}
         rowKey={record => `${record.owner}/${record.name}`}
         loading={loading}
         serverPagination={{
@@ -239,9 +251,12 @@ export default function RuleListPage({account}: {account: Account}) {
           onChange: (nextPage, nextPageSize) => fetchRules(nextPage, nextPageSize),
         }}
         title={i18next.t("general:Rules")}
+        description={`${total} ${i18next.t("general:Rules")}`}
+        emptyIcon={ListFilter}
         toolbar={
-          <Button size="sm" onClick={openAddDialog}>
-            {i18next.t("general:Add")}
+          <Button variant="outline" size="sm" onClick={() => fetchRules()} loading={loading}>
+            <RefreshCw />
+            {i18next.t("general:Refresh")}
           </Button>
         }
       />
@@ -294,6 +309,6 @@ export default function RuleListPage({account}: {account: Account}) {
           </Field>
         )}
       </FormDialog>
-    </div>
+    </PageContainer>
   );
 }

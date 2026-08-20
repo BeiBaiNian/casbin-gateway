@@ -18,18 +18,12 @@ import i18next from "i18next";
 
 import * as NodeBackend from "@/backend/NodeBackend";
 import * as Setting from "@/Setting";
-import {FormRow, PageHeader} from "@/components/FormRow";
+import {Field} from "@/components/shared/form-dialog";
+import {Loading} from "@/components/shared/loading";
+import {PageContainer, PageHeader, Section} from "@/components/shared/page-header";
+import {SimpleSelect} from "@/components/shared/simple-select";
 import {Button} from "@/components/ui/button";
-import {Card, CardContent} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {PageSpinner} from "@/components/ui/spinner";
 import type {Node} from "@/types";
 
 const upgradeModes = ["At Any Time", "No Upgrade", "Half A Hour"];
@@ -71,57 +65,53 @@ export default function NodeEditPage() {
   };
 
   if (node === null) {
-    return <PageSpinner />;
+    return <Loading type="page" />;
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={i18next.t("node:Edit Node")}>
-        <Button variant="outline" onClick={() => navigate("/nodes")}>
-          {i18next.t("general:Cancel")}
-        </Button>
-        <Button onClick={save}>{i18next.t("general:Save")}</Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("node:Edit Node")}
+        description={`${node.owner} / ${node.name}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => navigate("/nodes")}>
+              {i18next.t("general:Cancel")}
+            </Button>
+            <Button onClick={save}>{i18next.t("general:Save")}</Button>
+          </>
+        }
+      />
 
-      <Card>
-        <CardContent className="divide-y py-0">
-          <FormRow label={i18next.t("general:Name")}>
-            <Input value={node.name} onChange={event => updateField("name", event.target.value)} />
-          </FormRow>
-          <FormRow label={i18next.t("general:Display name")}>
-            <Input
-              value={node.displayName}
-              onChange={event => updateField("displayName", event.target.value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("general:Tag")}>
-            <Input value={node.tag ?? ""} onChange={event => updateField("tag", event.target.value)} />
-          </FormRow>
-          <FormRow label={i18next.t("general:Client IP")}>
-            <Input
-              value={node.clientIp}
-              onChange={event => updateField("clientIp", event.target.value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("general:Upgrade mode")}>
-            <Select
-              value={node.upgradeMode}
-              onValueChange={value => updateField("upgradeMode", value)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {upgradeModes.map(mode => (
-                  <SelectItem key={mode} value={mode}>
-                    {i18next.t(`general:${mode}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormRow>
-        </CardContent>
-      </Card>
-    </div>
+      <Section>
+        <Field label={i18next.t("general:Name")} htmlFor="node-name">
+          <Input id="node-name" value={node.name} onChange={event => updateField("name", event.target.value)} />
+        </Field>
+        <Field label={i18next.t("general:Display name")} htmlFor="node-display-name">
+          <Input
+            id="node-display-name"
+            value={node.displayName}
+            onChange={event => updateField("displayName", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("general:Tag")} htmlFor="node-tag">
+          <Input id="node-tag" value={node.tag ?? ""} onChange={event => updateField("tag", event.target.value)} />
+        </Field>
+        <Field label={i18next.t("general:Client IP")} htmlFor="node-client-ip">
+          <Input
+            id="node-client-ip"
+            value={node.clientIp}
+            onChange={event => updateField("clientIp", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("general:Upgrade mode")}>
+          <SimpleSelect
+            value={node.upgradeMode}
+            onChange={value => updateField("upgradeMode", value)}
+            options={upgradeModes.map(mode => ({label: i18next.t(`general:${mode}`), value: mode}))}
+          />
+        </Field>
+      </Section>
+    </PageContainer>
   );
 }

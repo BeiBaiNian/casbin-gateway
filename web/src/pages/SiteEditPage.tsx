@@ -23,28 +23,41 @@ import * as NodeBackend from "@/backend/NodeBackend";
 import * as RuleBackend from "@/backend/RuleBackend";
 import * as SiteBackend from "@/backend/SiteBackend";
 import * as Setting from "@/Setting";
-import {FormRow, PageHeader} from "@/components/FormRow";
 import {NodeTable} from "@/components/NodeTable";
 import {SiteRuleTable} from "@/components/rules/SiteRuleTable";
+import {Field} from "@/components/shared/form-dialog";
+import {Loading} from "@/components/shared/loading";
+import {NumberInput} from "@/components/shared/number-input";
+import {PageContainer, PageHeader, Section} from "@/components/shared/page-header";
+import {SearchSelect, SimpleSelect} from "@/components/shared/simple-select";
 import {Button} from "@/components/ui/button";
-import {Card, CardContent} from "@/components/ui/card";
-import {Combobox} from "@/components/ui/combobox";
 import {Input} from "@/components/ui/input";
-import {NumberInput} from "@/components/ui/number-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {PageSpinner} from "@/components/ui/spinner";
 import {Switch} from "@/components/ui/switch";
 import {TagsInput} from "@/components/ui/tags-input";
 import type {Account, Application, Cert, Node, Rule, Site} from "@/types";
 
 const sslModes = ["HTTP", "HTTPS and HTTP", "HTTPS Only", "Static Folder"];
 const statuses = ["Active", "Inactive"];
+
+/** A switch reads as a field only when its label sits beside it. */
+function ToggleField({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: React.ReactNode;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <Field>
+      <div className="flex h-9 items-center gap-3">
+        <Switch checked={checked} onCheckedChange={onCheckedChange} />
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+    </Field>
+  );
+}
 
 export default function SiteEditPage({account}: {account: Account}) {
   const {owner = "", siteName = ""} = useParams();
@@ -123,191 +136,168 @@ export default function SiteEditPage({account}: {account: Account}) {
   };
 
   if (site === null) {
-    return <PageSpinner />;
+    return <Loading type="page" />;
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={i18next.t("site:Edit Site")}>
-        <Button variant="outline" onClick={() => navigate("/sites")}>
-          {i18next.t("general:Cancel")}
-        </Button>
-        <Button onClick={save}>{i18next.t("general:Save")}</Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("site:Edit Site")}
+        description={`${site.owner} / ${site.name}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => navigate("/sites")}>
+              {i18next.t("general:Cancel")}
+            </Button>
+            <Button onClick={save}>{i18next.t("general:Save")}</Button>
+          </>
+        }
+      />
 
-      <Card>
-        <CardContent className="divide-y py-0">
-          <FormRow label={i18next.t("general:Name")}>
-            <Input value={site.name} onChange={event => updateField("name", event.target.value)} />
-          </FormRow>
-          <FormRow label={i18next.t("general:Display name")}>
+      <Section title={i18next.t("site:Site")}>
+        <Field label={i18next.t("general:Name")} htmlFor="site-name">
+          <Input id="site-name" value={site.name} onChange={event => updateField("name", event.target.value)} />
+        </Field>
+        <Field label={i18next.t("general:Display name")} htmlFor="site-display-name">
+          <Input
+            id="site-display-name"
+            value={site.displayName}
+            onChange={event => updateField("displayName", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("general:Tag")} htmlFor="site-tag">
+          <Input id="site-tag" value={site.tag ?? ""} onChange={event => updateField("tag", event.target.value)} />
+        </Field>
+        <Field label={i18next.t("site:Domain")} htmlFor="site-domain">
+          <Input
+            id="site-domain"
+            value={site.domain}
+            onChange={event => updateField("domain", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("site:Other domains")} className="lg:col-span-2">
+          <TagsInput value={site.otherDomains} onChange={value => updateField("otherDomains", value)} />
+        </Field>
+        <Field label={i18next.t("site:Status")}>
+          <SimpleSelect value={site.status} onChange={value => updateField("status", value)} options={statuses} />
+        </Field>
+        <ToggleField
+          label={i18next.t("site:Need redirect")}
+          checked={site.needRedirect}
+          onCheckedChange={checked => updateField("needRedirect", checked)}
+        />
+        <ToggleField
+          label={i18next.t("site:Disable verbose")}
+          checked={site.disableVerbose}
+          onCheckedChange={checked => updateField("disableVerbose", checked)}
+        />
+      </Section>
+
+      <Section title={i18next.t("site:Host")}>
+        <Field label={i18next.t("site:Host")} htmlFor="site-host">
+          <div className="relative">
+            <Link2 className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <Input
-              value={site.displayName}
-              onChange={event => updateField("displayName", event.target.value)}
+              id="site-host"
+              className="pl-9"
+              value={site.host}
+              onChange={event => updateField("host", event.target.value)}
             />
-          </FormRow>
-          <FormRow label={i18next.t("general:Tag")}>
-            <Input value={site.tag ?? ""} onChange={event => updateField("tag", event.target.value)} />
-          </FormRow>
-          <FormRow label={i18next.t("site:Domain")}>
-            <Input value={site.domain} onChange={event => updateField("domain", event.target.value)} />
-          </FormRow>
-          <FormRow label={i18next.t("site:Other domains")}>
-            <TagsInput
-              value={site.otherDomains}
-              onChange={value => updateField("otherDomains", value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("site:Need redirect")}>
-            <Switch
-              checked={site.needRedirect}
-              onCheckedChange={checked => updateField("needRedirect", checked)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("site:Disable verbose")}>
-            <Switch
-              checked={site.disableVerbose}
-              onCheckedChange={checked => updateField("disableVerbose", checked)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("site:Rules")}>
-            <SiteRuleTable
-              title={i18next.t("general:Rules")}
-              account={account}
-              sources={rules}
-              rules={site.rules}
-              onUpdateRules={value => updateField("rules", value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("site:Enable alert")}>
-            <Switch
-              checked={site.enableAlert}
-              onCheckedChange={checked => updateField("enableAlert", checked)}
-            />
-          </FormRow>
-          {site.enableAlert && (
-            <FormRow label={i18next.t("site:Alert interval")}>
+          </div>
+        </Field>
+        <Field label={i18next.t("site:Port")}>
+          <NumberInput min={0} max={65535} value={site.port} onChange={value => updateField("port", value)} />
+        </Field>
+        <Field label={i18next.t("site:Hosts")}>
+          <TagsInput value={site.hosts} onChange={value => updateField("hosts", value)} />
+        </Field>
+        <Field label={i18next.t("site:Public IP")}>
+          <Input value={site.publicIp} disabled />
+        </Field>
+        <Field label={i18next.t("site:Node")}>
+          <Input value={site.node} disabled />
+        </Field>
+        <Field label={i18next.t("site:Challenges")}>
+          <TagsInput value={site.challenges} onChange={value => updateField("challenges", value)} />
+        </Field>
+      </Section>
+
+      <Section title={i18next.t("site:Mode")}>
+        <Field label={i18next.t("site:Mode")}>
+          <SimpleSelect value={site.sslMode} onChange={value => updateField("sslMode", value)} options={sslModes} />
+        </Field>
+        {/* The certificate is issued and attached by the server. */}
+        <Field label={i18next.t("site:SSL cert")}>
+          <SearchSelect
+            disabled
+            value={site.sslCert}
+            options={certs.map(cert => cert.name)}
+            onChange={value => updateField("sslCert", value)}
+          />
+        </Field>
+        <Field label={i18next.t("site:Casdoor app")}>
+          <SearchSelect
+            value={site.casdoorApplication}
+            options={applications.map(application => application.name)}
+            onChange={value => updateField("casdoorApplication", value)}
+          />
+        </Field>
+      </Section>
+
+      <Section title={i18next.t("site:Alert")}>
+        <ToggleField
+          label={i18next.t("site:Enable alert")}
+          checked={site.enableAlert}
+          onCheckedChange={checked => updateField("enableAlert", checked)}
+        />
+        {site.enableAlert ? (
+          <>
+            <Field label={i18next.t("site:Alert interval")}>
               <NumberInput
                 min={1}
-                className="max-w-xs"
                 value={site.alertInterval}
                 addonAfter={i18next.t("usage:seconds")}
                 onChange={value => updateField("alertInterval", value)}
               />
-            </FormRow>
-          )}
-          {site.enableAlert && (
-            <FormRow label={i18next.t("site:Alert try times")}>
+            </Field>
+            <Field label={i18next.t("site:Alert try times")}>
               <NumberInput
                 min={1}
-                className="max-w-xs"
                 value={site.alertTryTimes}
                 onChange={value => updateField("alertTryTimes", value)}
               />
-            </FormRow>
-          )}
-          {site.enableAlert && (
-            <FormRow label={i18next.t("site:Alert providers")}>
+            </Field>
+            <Field label={i18next.t("site:Alert providers")} className="lg:col-span-3">
               <TagsInput
                 value={site.alertProviders}
                 suggestions={providers}
                 onChange={value => updateField("alertProviders", value)}
               />
-            </FormRow>
-          )}
-          <FormRow label={i18next.t("site:Challenges")}>
-            <TagsInput value={site.challenges} onChange={value => updateField("challenges", value)} />
-          </FormRow>
-          <FormRow label={i18next.t("site:Host")}>
-            <div className="relative">
-              <Link2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                value={site.host}
-                onChange={event => updateField("host", event.target.value)}
-              />
-            </div>
-          </FormRow>
-          <FormRow label={i18next.t("site:Port")}>
-            <NumberInput
-              min={0}
-              max={65535}
-              className="max-w-xs"
-              value={site.port}
-              onChange={value => updateField("port", value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("site:Hosts")}>
-            <TagsInput value={site.hosts} onChange={value => updateField("hosts", value)} />
-          </FormRow>
-          <FormRow label={i18next.t("site:Public IP")}>
-            <Input value={site.publicIp} disabled />
-          </FormRow>
-          <FormRow label={i18next.t("site:Node")}>
-            <Input value={site.node} disabled />
-          </FormRow>
-          <FormRow label={i18next.t("site:Mode")}>
-            <Select value={site.sslMode} onValueChange={value => updateField("sslMode", value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sslModes.map(mode => (
-                  <SelectItem key={mode} value={mode}>
-                    {mode}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormRow>
-          <FormRow label={i18next.t("site:SSL cert")}>
-            {/* The certificate is issued and attached by the server. */}
-            <Combobox
-              disabled
-              value={site.sslCert}
-              options={certs.map(cert => ({value: cert.name}))}
-              onChange={value => updateField("sslCert", value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("site:Casdoor app")}>
-            <Combobox
-              value={site.casdoorApplication}
-              options={applications.map(application => ({value: application.name}))}
-              onChange={value => updateField("casdoorApplication", value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("site:Status")}>
-            <Select value={site.status} onValueChange={value => updateField("status", value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {statuses.map(status => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormRow>
-          <FormRow label={i18next.t("site:Nodes")}>
-            <NodeTable
-              title={i18next.t("site:Nodes")}
-              table={site.nodes}
-              siteName={site.name}
-              account={account}
-              nodes={nodes}
-              onUpdateTable={value => updateField("nodes", value)}
-            />
-          </FormRow>
-        </CardContent>
-      </Card>
+            </Field>
+          </>
+        ) : null}
+      </Section>
 
-      <div className="mt-4">
-        <Button size="lg" onClick={save}>
-          {i18next.t("general:Save")}
-        </Button>
-      </div>
-    </div>
+      <Section title={i18next.t("general:Rules")} columns={1}>
+        <SiteRuleTable
+          title={i18next.t("general:Rules")}
+          account={account}
+          sources={rules}
+          rules={site.rules}
+          onUpdateRules={value => updateField("rules", value)}
+        />
+      </Section>
+
+      <Section title={i18next.t("site:Nodes")} columns={1}>
+        <NodeTable
+          title={i18next.t("site:Nodes")}
+          table={site.nodes}
+          siteName={site.name}
+          account={account}
+          nodes={nodes}
+          onUpdateTable={value => updateField("nodes", value)}
+        />
+      </Section>
+    </PageContainer>
   );
 }

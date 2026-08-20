@@ -15,14 +15,16 @@
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
 import copy from "copy-to-clipboard";
+import {Plus, RefreshCw, ShieldCheck} from "lucide-react";
 import i18next from "i18next";
 
 import * as CertBackend from "@/backend/CertBackend";
 import * as Setting from "@/Setting";
-import {DataTable, type Column} from "@/components/DataTable";
-import {Field, FormDialog} from "@/components/FormDialog";
+import {DataTable, type Column} from "@/components/shared/data-table";
+import {Field, FormDialog} from "@/components/shared/form-dialog";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
 import {Button} from "@/components/ui/button";
-import {ConfirmButton} from "@/components/ui/confirm-button";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {Input} from "@/components/ui/input";
 import {
   Select,
@@ -253,24 +255,34 @@ export default function CertListPage({account}: {account: Account}) {
           <Button size="sm" onClick={() => navigate(`/certs/${record.owner}/${record.name}`)}>
             {i18next.t("general:Edit")}
           </Button>
-          <ConfirmButton
+          <ConfirmDialog
             title={i18next.t("general:Sure to delete {name} ?").replace("{name}", record.name)}
             onConfirm={() => deleteCert(record)}
           >
             <Button size="sm" variant="destructive">
               {i18next.t("general:Delete")}
             </Button>
-          </ConfirmButton>
+          </ConfirmDialog>
         </div>
       ),
     },
   ];
 
   return (
-    <div className="p-4 md:p-6">
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("general:Certs")}
+        actions={
+          <Button onClick={openAddDialog}>
+            <Plus />
+            {i18next.t("general:Add")}
+          </Button>
+        }
+      />
+
       <DataTable
         columns={columns}
-        data={data}
+        dataSource={data}
         rowKey={record => `${record.owner}/${record.name}`}
         loading={loading}
         serverPagination={{
@@ -280,9 +292,12 @@ export default function CertListPage({account}: {account: Account}) {
           onChange: (nextPage, nextPageSize) => fetchCerts(nextPage, nextPageSize),
         }}
         title={i18next.t("general:Certs")}
+        description={`${total} ${i18next.t("general:Certs")}`}
+        emptyIcon={ShieldCheck}
         toolbar={
-          <Button size="sm" onClick={openAddDialog}>
-            {i18next.t("general:Add")}
+          <Button variant="outline" size="sm" onClick={() => fetchCerts()} loading={loading}>
+            <RefreshCw />
+            {i18next.t("general:Refresh")}
           </Button>
         }
       />
@@ -326,6 +341,6 @@ export default function CertListPage({account}: {account: Account}) {
           </Select>
         </Field>
       </FormDialog>
-    </div>
+    </PageContainer>
   );
 }

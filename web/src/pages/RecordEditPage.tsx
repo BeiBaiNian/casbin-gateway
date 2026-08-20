@@ -18,11 +18,11 @@ import i18next from "i18next";
 
 import * as RecordBackend from "@/backend/RecordBackend";
 import * as Setting from "@/Setting";
-import {FormRow, PageHeader} from "@/components/FormRow";
+import {Field} from "@/components/shared/form-dialog";
+import {Loading} from "@/components/shared/loading";
+import {PageContainer, PageHeader, Section} from "@/components/shared/page-header";
 import {Button} from "@/components/ui/button";
-import {Card, CardContent} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
-import {PageSpinner} from "@/components/ui/spinner";
 import type {Record as GatewayRecord} from "@/types";
 
 export default function RecordEditPage() {
@@ -62,7 +62,7 @@ export default function RecordEditPage() {
   };
 
   if (record === null) {
-    return <PageSpinner />;
+    return <Loading type="page" />;
   }
 
   const fields: {label: string; key: keyof GatewayRecord}[] = [
@@ -76,26 +76,31 @@ export default function RecordEditPage() {
   ];
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={i18next.t("general:Edit Record")}>
-        <Button variant="outline" onClick={() => navigate("/records")}>
-          {i18next.t("general:Cancel")}
-        </Button>
-        <Button onClick={save}>{i18next.t("general:Save")}</Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("general:Edit Record")}
+        description={`${record.owner} / ${record.id}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => navigate("/records")}>
+              {i18next.t("general:Cancel")}
+            </Button>
+            <Button onClick={save}>{i18next.t("general:Save")}</Button>
+          </>
+        }
+      />
 
-      <Card>
-        <CardContent className="divide-y py-0">
-          {fields.map(field => (
-            <FormRow key={String(field.key)} label={field.label}>
-              <Input
-                value={String(record[field.key] ?? "")}
-                onChange={event => updateField(field.key, event.target.value as never)}
-              />
-            </FormRow>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+      <Section>
+        {fields.map(field => (
+          <Field key={String(field.key)} label={field.label} htmlFor={`record-${String(field.key)}`}>
+            <Input
+              id={`record-${String(field.key)}`}
+              value={String(record[field.key] ?? "")}
+              onChange={event => updateField(field.key, event.target.value as never)}
+            />
+          </Field>
+        ))}
+      </Section>
+    </PageContainer>
   );
 }

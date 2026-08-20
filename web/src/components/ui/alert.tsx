@@ -1,46 +1,114 @@
+// Copyright 2026 The casbin Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import * as React from "react";
 import {cva, type VariantProps} from "class-variance-authority";
+import {AlertCircleIcon, CheckCircle2Icon, InfoIcon, TriangleAlertIcon} from "lucide-react";
 
 import {cn} from "@/lib/utils";
 
 const alertVariants = cva(
-  "relative w-full rounded-lg border px-4 py-3 text-sm [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:size-4 [&>svg~*]:pl-7",
+  "relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5",
   {
     variants: {
       variant: {
-        default: "bg-background text-foreground",
-        info: "border-sky-500/40 bg-sky-500/10 [&>svg]:text-sky-600",
-        success: "border-success/40 bg-success/10 [&>svg]:text-success",
-        warning: "border-warning/40 bg-warning/10 [&>svg]:text-warning",
-        destructive: "border-destructive/40 bg-destructive/10 [&>svg]:text-destructive",
+        default: "bg-card text-card-foreground",
+        destructive: "border-destructive/30 bg-destructive/8 text-destructive [&>svg]:text-destructive",
+        warning: "border-warning/35 bg-warning/10 text-warning [&>svg]:text-warning",
+        success: "border-success/30 bg-success/8 text-success [&>svg]:text-success",
+        info: "border-info/30 bg-info/8 text-info [&>svg]:text-info",
       },
     },
-    defaultVariants: {
-      variant: "default",
-    },
+    defaultVariants: {variant: "default"},
   },
 );
 
-const Alert = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>
->(({className, variant, ...props}, ref) => (
-  <div ref={ref} role="alert" className={cn(alertVariants({variant}), className)} {...props} />
-));
-Alert.displayName = "Alert";
+type AlertVariant = NonNullable<VariantProps<typeof alertVariants>["variant"]>;
 
-const AlertTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({className, ...props}, ref) => (
-    <h5 ref={ref} className={cn("mb-1 font-medium leading-none tracking-tight", className)} {...props} />
-  ),
-);
-AlertTitle.displayName = "AlertTitle";
+// data-variant is what lets a test assert "an error is showing" without
+// selecting on generated Tailwind classes.
+function Alert({
+  className,
+  variant = "default",
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
+  return (
+    <div
+      data-slot="alert"
+      data-variant={variant}
+      role="alert"
+      className={cn(alertVariants({variant}), className)}
+      {...props}
+    />
+  );
+}
 
-const AlertDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({className, ...props}, ref) => (
-    <div ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />
-  ),
-);
-AlertDescription.displayName = "AlertDescription";
+function AlertTitle({className, ...props}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-title"
+      className={cn("col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight", className)}
+      {...props}
+    />
+  );
+}
 
-export {Alert, AlertDescription, AlertTitle};
+function AlertDescription({className, ...props}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-description"
+      className={cn("col-start-2 grid justify-items-start gap-1 text-sm opacity-90 [&_p]:leading-relaxed", className)}
+      {...props}
+    />
+  );
+}
+
+const variantIcons: Record<AlertVariant, React.ComponentType<{className?: string}>> = {
+  destructive: AlertCircleIcon,
+  warning: TriangleAlertIcon,
+  success: CheckCircle2Icon,
+  info: InfoIcon,
+  default: InfoIcon,
+};
+
+// Nearly every page renders the same "the request failed, here is why" banner.
+// MessageAlert is that shape in one component: an icon picked from the variant,
+// a title, and an optional description or action.
+function MessageAlert({
+  variant = "destructive",
+  title,
+  description,
+  className,
+  showIcon = true,
+  action,
+  ...props
+}: React.ComponentProps<"div"> & {
+  variant?: AlertVariant;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  showIcon?: boolean;
+  action?: React.ReactNode;
+}) {
+  const Icon = variantIcons[variant] ?? InfoIcon;
+  return (
+    <Alert variant={variant} className={className} {...props}>
+      {showIcon ? <Icon /> : null}
+      {title ? <AlertTitle>{title}</AlertTitle> : null}
+      {description ? <AlertDescription>{description}</AlertDescription> : null}
+      {action ? <div className="col-start-2 mt-2">{action}</div> : null}
+    </Alert>
+  );
+}
+
+export {Alert, AlertTitle, AlertDescription, MessageAlert, alertVariants};

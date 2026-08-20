@@ -14,16 +14,16 @@
 
 import * as React from "react";
 import {Link} from "react-router-dom";
-import {Bot, CircleX, RefreshCw} from "lucide-react";
+import {Bot, MessageSquare, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
 import * as AgentBackend from "@/backend/AgentBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
-import {DataTable, type Column} from "@/components/DataTable";
-import {PageHeader} from "@/components/FormRow";
-import {UnauthorizedResult} from "@/components/Result";
-import {Alert, AlertDescription} from "@/components/ui/alert";
+import {DataTable, type Column} from "@/components/shared/data-table";
+import {UnauthorizedResult} from "@/components/shared/misc";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
+import {MessageAlert} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import type {Account, AgentSession} from "@/types";
@@ -75,11 +75,11 @@ export default function AgentSessionsPage({account}: {account: Account}) {
         <div className="flex min-w-0 flex-col">
           <Link
             to={`/agent-records?agent=${encodeURIComponent(session.agent)}&session=${encodeURIComponent(session.sessionKey)}`}
-            className="truncate text-primary hover:underline"
+            className="text-primary truncate font-medium hover:underline"
           >
             {session.title || session.sessionKey}
           </Link>
-          <span className="truncate text-xs text-muted-foreground">{session.sessionKey}</span>
+          <span className="text-muted-foreground truncate text-xs">{session.sessionKey}</span>
         </div>
       ),
     },
@@ -89,8 +89,8 @@ export default function AgentSessionsPage({account}: {account: Account}) {
       dataIndex: "agent",
       width: "180px",
       render: (value: string) => (
-        <Badge variant="blue">
-          <AgentIcon agent={value} fallback={<Bot className="h-4 w-4" />} size={16} />
+        <Badge variant="info">
+          <AgentIcon agent={value} fallback={<Bot className="size-3" />} size={12} />
           {value}
         </Badge>
       ),
@@ -118,29 +118,29 @@ export default function AgentSessionsPage({account}: {account: Account}) {
   ];
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={i18next.t("agent:Agent Sessions")}>
-        <Button variant="outline" onClick={load} disabled={loading}>
-          <RefreshCw className={loading ? "animate-spin" : undefined} />
-          {i18next.t("general:Refresh")}
-        </Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader title={i18next.t("agent:Agent Sessions")} />
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <CircleX />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {error ? <MessageAlert title={error} /> : null}
 
       <DataTable
+        title={i18next.t("agent:Agent Sessions")}
+        description={`${sessions.length} ${i18next.t("agent:Agent Sessions")}`}
         columns={columns}
-        data={sessions}
+        dataSource={sessions}
         rowKey={session => `${session.agent}:${session.sessionKey}`}
         loading={loading}
         pageSize={20}
+        searchable
+        emptyIcon={MessageSquare}
         emptyText={i18next.t("agent:No agent sessions yet - patch an agent to start collecting them")}
+        toolbar={
+          <Button variant="outline" size="sm" onClick={load} loading={loading}>
+            <RefreshCw />
+            {i18next.t("general:Refresh")}
+          </Button>
+        }
       />
-    </div>
+    </PageContainer>
   );
 }

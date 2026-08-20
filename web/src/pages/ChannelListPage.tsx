@@ -14,27 +14,23 @@
 
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
-import {CircleCheck, CircleX, Pencil, Plus, Trash2} from "lucide-react";
+import {CircleCheck, CircleX, Pencil, Plug, Plus, RefreshCw, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
-import {DataTable, type Column, type SortOrder} from "@/components/DataTable";
-import {Field, FormDialog} from "@/components/FormDialog";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
+import {DataTable, type Column, type SortOrder} from "@/components/shared/data-table";
+import {Field, FormDialog} from "@/components/shared/form-dialog";
+import {CodeText} from "@/components/shared/misc";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
+import {PasswordInput} from "@/components/shared/password-input";
+import {SimpleSelect} from "@/components/shared/simple-select";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
-import {ConfirmButton} from "@/components/ui/confirm-button";
 import {Input} from "@/components/ui/input";
-import {PasswordInput} from "@/components/ui/password-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {TagsInput} from "@/components/ui/tags-input";
-import {Tooltip} from "@/components/ui/tooltip";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 import type {Account, Channel} from "@/types";
 
 function newChannel(owner: string): Channel {
@@ -162,14 +158,14 @@ export default function ChannelListPage({account}: {account: Account}) {
       // the current page.
       sorter: true,
       render: (text: string, record) => (
-        <Tooltip title={text}>
+        <SimpleTooltip title={text}>
           <Link
             to={`/channels/${record.owner}/${record.name}`}
-            className="block truncate text-primary hover:underline"
+            className="text-primary block truncate font-medium hover:underline"
           >
             {text}
           </Link>
-        </Tooltip>
+        </SimpleTooltip>
       ),
     },
     {
@@ -185,20 +181,21 @@ export default function ChannelListPage({account}: {account: Account}) {
       key: "type",
       dataIndex: "type",
       width: "110px",
-      render: (text: string) => (
-        <Badge variant={text === "openai" ? "success" : "processing"}>{text}</Badge>
-      ),
+      render: (text: string) => <Badge variant={text === "openai" ? "success" : "info"}>{text}</Badge>,
     },
     {
       title: i18next.t("channel:Base URL"),
       key: "baseUrl",
       dataIndex: "baseUrl",
       width: "220px",
+      ellipsis: true,
       render: (text: string) =>
         text ? (
-          <Tooltip title={text}>
-            <span className="block truncate font-mono text-xs">{text}</span>
-          </Tooltip>
+          <SimpleTooltip title={text}>
+            <span className="inline-flex max-w-full">
+              <CodeText>{text}</CodeText>
+            </span>
+          </SimpleTooltip>
         ) : (
           "-"
         ),
@@ -214,7 +211,7 @@ export default function ChannelListPage({account}: {account: Account}) {
         ) : (
           <div className="flex flex-wrap gap-1">
             {models.map(model => (
-              <Badge key={model} variant="blue">
+              <Badge key={model} variant="muted">
                 {model}
               </Badge>
             ))}
@@ -236,12 +233,12 @@ export default function ChannelListPage({account}: {account: Account}) {
       render: (text: string) =>
         text === "enabled" ? (
           <Badge variant="success">
-            <CircleCheck className="h-3 w-3" />
+            <CircleCheck />
             {i18next.t("channel:Enabled")}
           </Badge>
         ) : (
-          <Badge variant="error">
-            <CircleX className="h-3 w-3" />
+          <Badge variant="muted">
+            <CircleX />
             {i18next.t("channel:Disabled")}
           </Badge>
         ),
@@ -252,29 +249,40 @@ export default function ChannelListPage({account}: {account: Account}) {
       width: "190px",
       render: (_text, record) => (
         <div className="flex gap-2">
-          <Button size="sm" onClick={() => navigate(`/channels/${record.owner}/${record.name}`)}>
+          <Button size="sm" variant="outline" onClick={() => navigate(`/channels/${record.owner}/${record.name}`)}>
             <Pencil />
             {i18next.t("general:Edit")}
           </Button>
-          <ConfirmButton
+          <ConfirmDialog
             title={i18next.t("general:Sure to delete {name} ?").replace("{name}", record.name)}
+            confirmText={i18next.t("general:Delete")}
             onConfirm={() => deleteChannel(record)}
           >
-            <Button size="sm" variant="destructive">
+            <Button size="sm" variant="outline" className="text-destructive">
               <Trash2 />
               {i18next.t("general:Delete")}
             </Button>
-          </ConfirmButton>
+          </ConfirmDialog>
         </div>
       ),
     },
   ];
 
   return (
-    <div className="p-4 md:p-6">
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("channel:Channels")}
+        actions={
+          <Button onClick={openAddDialog}>
+            <Plus />
+            {i18next.t("channel:New Channel")}
+          </Button>
+        }
+      />
+
       <DataTable
         columns={columns}
-        data={data}
+        dataSource={data}
         // An admin sees channels across owners, where names may collide.
         rowKey={record => `${record.owner}/${record.name}`}
         loading={loading}
@@ -286,10 +294,12 @@ export default function ChannelListPage({account}: {account: Account}) {
           onChange: (nextPage, nextPageSize) => fetchChannels(nextPage, nextPageSize),
         }}
         title={i18next.t("channel:Channels")}
+        description={`${total} ${i18next.t("channel:Channels")}`}
+        emptyIcon={Plug}
         toolbar={
-          <Button size="sm" onClick={openAddDialog}>
-            <Plus />
-            {i18next.t("channel:New Channel")}
+          <Button variant="outline" size="sm" onClick={() => fetchChannels()} loading={loading}>
+            <RefreshCw />
+            {i18next.t("general:Refresh")}
           </Button>
         }
       />
@@ -319,16 +329,15 @@ export default function ChannelListPage({account}: {account: Account}) {
           />
         </Field>
         <Field label={i18next.t("channel:Type")}>
-          <Select value={form.type} onValueChange={value => setFormField("type", value)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="anthropic">Anthropic</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
+          <SimpleSelect
+            value={form.type}
+            onChange={value => setFormField("type", value)}
+            options={[
+              {label: "OpenAI", value: "openai"},
+              {label: "Anthropic", value: "anthropic"},
+              {label: "Custom", value: "custom"},
+            ]}
+          />
         </Field>
         <Field label={i18next.t("channel:Base URL")} htmlFor="channel-base-url">
           <Input
@@ -354,6 +363,6 @@ export default function ChannelListPage({account}: {account: Account}) {
           />
         </Field>
       </FormDialog>
-    </div>
+    </PageContainer>
   );
 }

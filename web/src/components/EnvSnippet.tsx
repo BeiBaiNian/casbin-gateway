@@ -19,7 +19,7 @@ import i18next from "i18next";
 
 import * as Setting from "@/Setting";
 import {Button} from "@/components/ui/button";
-import {Tooltip} from "@/components/ui/tooltip";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import {envSnippet, shells, type Shell} from "@/lib/channels";
 
@@ -58,7 +58,7 @@ export function EnvSnippet({
             </button>
           ))}
         </div>
-        <Tooltip title={i18next.t("general:Copy")}>
+        <SimpleTooltip title={i18next.t("general:Copy")}>
           <Button
             variant="ghost"
             size="icon"
@@ -71,7 +71,7 @@ export function EnvSnippet({
           >
             <Copy className="h-3.5 w-3.5" />
           </Button>
-        </Tooltip>
+        </SimpleTooltip>
       </div>
       <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">{snippet}</pre>
     </div>

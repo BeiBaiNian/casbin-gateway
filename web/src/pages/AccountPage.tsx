@@ -17,20 +17,12 @@ import i18next from "i18next";
 
 import * as AccountBackend from "@/backend/AccountBackend";
 import * as Setting from "@/Setting";
-import {FormRow, PageHeader} from "@/components/FormRow";
+import {Field, FormDialog} from "@/components/shared/form-dialog";
+import {PageContainer, PageHeader, Section} from "@/components/shared/page-header";
+import {PasswordInput} from "@/components/shared/password-input";
 import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
 import {Button} from "@/components/ui/button";
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {Input} from "@/components/ui/input";
-import {Label} from "@/components/ui/label";
-import {PasswordInput} from "@/components/ui/password-input";
 import type {Account} from "@/types";
 
 // Profile and password editing for the built-in login. Casdoor-backed accounts
@@ -79,82 +71,72 @@ export default function AccountPage({account}: {account: Account}) {
     avatar.startsWith("http://") || avatar.startsWith("https://") || avatar.startsWith("data:image/");
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={i18next.t("account:My Account")}>
-        <Button onClick={save}>{i18next.t("general:Save")}</Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("account:My Account")}
+        description={account.name}
+        actions={<Button onClick={save}>{i18next.t("general:Save")}</Button>}
+      />
 
-      <Card className="mb-4">
-        <CardHeader className="border-b py-3">
-          <CardTitle className="text-sm">{i18next.t("account:Profile")}</CardTitle>
-        </CardHeader>
-        <CardContent className="divide-y py-0">
-          <FormRow label={i18next.t("general:Name")}>
-            <Input value={account.name} disabled />
-          </FormRow>
-          <FormRow label={i18next.t("general:Display name")}>
-            <Input value={displayName} onChange={event => setDisplayName(event.target.value)} />
-          </FormRow>
-          <FormRow label={i18next.t("account:Avatar")}>
-            <div className="flex items-center gap-3">
-              <Avatar className="h-16 w-16">
-                {isImageUrl ? <AvatarImage src={avatar} alt={account.name} /> : null}
-                <AvatarFallback style={{backgroundColor: Setting.getAvatarColor(account.name)}}>
-                  <span className="text-white">
-                    {Setting.getShortName(account.name).slice(0, 2).toUpperCase()}
-                  </span>
-                </AvatarFallback>
-              </Avatar>
-              <Input
-                value={avatar}
-                placeholder={i18next.t("account:Avatar image URL, optional")}
-                onChange={event => setAvatar(event.target.value)}
-              />
-            </div>
-          </FormRow>
-        </CardContent>
-      </Card>
+      <Section title={i18next.t("account:Profile")} columns={2}>
+        <Field label={i18next.t("general:Name")} htmlFor="account-name">
+          <Input id="account-name" value={account.name} disabled />
+        </Field>
+        <Field label={i18next.t("general:Display name")} htmlFor="account-display-name">
+          <Input
+            id="account-display-name"
+            value={displayName}
+            onChange={event => setDisplayName(event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("account:Avatar")} htmlFor="account-avatar" className="md:col-span-2">
+          <div className="flex items-center gap-3">
+            <Avatar className="size-16">
+              {isImageUrl ? <AvatarImage src={avatar} alt={account.name} /> : null}
+              <AvatarFallback style={{backgroundColor: Setting.getAvatarColor(account.name), color: "#fff"}}>
+                {Setting.getShortName(account.name).slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <Input
+              id="account-avatar"
+              value={avatar}
+              placeholder={i18next.t("account:Avatar image URL, optional")}
+              onChange={event => setAvatar(event.target.value)}
+            />
+          </div>
+        </Field>
+      </Section>
 
-      <Card>
-        <CardHeader className="border-b py-3">
-          <CardTitle className="text-sm">{i18next.t("general:Password")}</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4">
+      <Section title={i18next.t("general:Password")} columns={1}>
+        <div>
           <Button variant="outline" onClick={() => setPasswordOpen(true)}>
             {i18next.t("account:Modify password...")}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{i18next.t("account:Modify password")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>{i18next.t("account:Old Password")}</Label>
-              <PasswordInput
-                value={currentPassword}
-                onChange={event => setCurrentPassword(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{i18next.t("account:New Password")}</Label>
-              <PasswordInput
-                value={newPassword}
-                onChange={event => setNewPassword(event.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPasswordOpen(false)}>
-              {i18next.t("general:Cancel")}
-            </Button>
-            <Button onClick={setPassword}>{i18next.t("account:Set Password")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+      <FormDialog
+        open={passwordOpen}
+        onOpenChange={setPasswordOpen}
+        title={i18next.t("account:Modify password")}
+        submitText={i18next.t("account:Set Password")}
+        onSubmit={setPassword}
+      >
+        <Field label={i18next.t("account:Old Password")} htmlFor="account-old-password">
+          <PasswordInput
+            id="account-old-password"
+            value={currentPassword}
+            onChange={event => setCurrentPassword(event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("account:New Password")} htmlFor="account-new-password">
+          <PasswordInput
+            id="account-new-password"
+            value={newPassword}
+            onChange={event => setNewPassword(event.target.value)}
+          />
+        </Field>
+      </FormDialog>
+    </PageContainer>
   );
 }

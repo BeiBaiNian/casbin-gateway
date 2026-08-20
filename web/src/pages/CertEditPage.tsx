@@ -20,18 +20,12 @@ import i18next from "i18next";
 
 import * as CertBackend from "@/backend/CertBackend";
 import * as Setting from "@/Setting";
-import {FormRow, PageHeader} from "@/components/FormRow";
+import {Field} from "@/components/shared/form-dialog";
+import {Loading} from "@/components/shared/loading";
+import {PageContainer, PageHeader, Section} from "@/components/shared/page-header";
+import {SimpleSelect} from "@/components/shared/simple-select";
 import {Button} from "@/components/ui/button";
-import {Card, CardContent} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {PageSpinner} from "@/components/ui/spinner";
 import {Textarea} from "@/components/ui/textarea";
 import type {Cert} from "@/types";
 
@@ -72,7 +66,7 @@ export default function CertEditPage() {
   };
 
   if (cert === null) {
-    return <PageSpinner />;
+    return <Loading type="page" />;
   }
 
   const download = (text: string, filename: string) => {
@@ -80,143 +74,141 @@ export default function CertEditPage() {
   };
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={i18next.t("cert:Edit Cert")}>
-        <Button variant="outline" onClick={() => navigate("/certs")}>
-          {i18next.t("general:Cancel")}
-        </Button>
-        <Button onClick={save}>{i18next.t("general:Save")}</Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("cert:Edit Cert")}
+        description={`${cert.owner} / ${cert.name}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => navigate("/certs")}>
+              {i18next.t("general:Cancel")}
+            </Button>
+            <Button onClick={save}>{i18next.t("general:Save")}</Button>
+          </>
+        }
+      />
 
-      <Card>
-        <CardContent className="divide-y py-0">
-          <FormRow label={i18next.t("general:Name")}>
-            <Input value={cert.name} onChange={event => updateField("name", event.target.value)} />
-          </FormRow>
-          <FormRow label={i18next.t("cert:Type")}>
-            <Select value={cert.type} onValueChange={value => updateField("type", value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SSL">SSL</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormRow>
-          <FormRow label={i18next.t("cert:Crypto algorithm")}>
-            <Select
-              value={cert.cryptoAlgorithm}
-              onValueChange={value => updateField("cryptoAlgorithm", value)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="RSA">RSA</SelectItem>
-                <SelectItem value="ECC">ECC</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormRow>
-          <FormRow label={i18next.t("cert:Expire time")}>
-            <Input value={Setting.getFormattedDate(cert.expireTime) ?? ""} disabled />
-          </FormRow>
-          <FormRow label={i18next.t("cert:Domain expire")}>
-            <Input value={Setting.getFormattedDate(cert.domainExpireTime) ?? ""} disabled />
-          </FormRow>
-          <FormRow label={i18next.t("cert:Provider")}>
-            <Select value={cert.provider} onValueChange={value => updateField("provider", value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="GoDaddy">GoDaddy</SelectItem>
-                <SelectItem value="Aliyun">Aliyun</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormRow>
-          <FormRow label={i18next.t("cert:Account")}>
-            <Input value={cert.account} onChange={event => updateField("account", event.target.value)} />
-          </FormRow>
-          <FormRow label={i18next.t("cert:Access key")}>
-            <Input
-              value={cert.accessKey}
-              onChange={event => updateField("accessKey", event.target.value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("cert:Access secret")}>
-            <Input
-              value={cert.accessSecret}
-              onChange={event => updateField("accessSecret", event.target.value)}
-            />
-          </FormRow>
-        </CardContent>
-      </Card>
+      <Section title={i18next.t("cert:Cert")}>
+        <Field label={i18next.t("general:Name")} htmlFor="cert-name">
+          <Input id="cert-name" value={cert.name} onChange={event => updateField("name", event.target.value)} />
+        </Field>
+        <Field label={i18next.t("cert:Type")}>
+          <SimpleSelect
+            value={cert.type}
+            onChange={value => updateField("type", value)}
+            options={[{label: "SSL", value: "SSL"}]}
+          />
+        </Field>
+        <Field label={i18next.t("cert:Crypto algorithm")}>
+          <SimpleSelect
+            value={cert.cryptoAlgorithm}
+            onChange={value => updateField("cryptoAlgorithm", value)}
+            options={[
+              {label: "RSA", value: "RSA"},
+              {label: "ECC", value: "ECC"},
+            ]}
+          />
+        </Field>
+        <Field label={i18next.t("cert:Expire time")}>
+          <Input value={Setting.getFormattedDate(cert.expireTime) ?? ""} disabled />
+        </Field>
+        <Field label={i18next.t("cert:Domain expire")}>
+          <Input value={Setting.getFormattedDate(cert.domainExpireTime) ?? ""} disabled />
+        </Field>
+        <Field label={i18next.t("cert:Provider")}>
+          <SimpleSelect
+            value={cert.provider}
+            onChange={value => updateField("provider", value)}
+            options={[
+              {label: "GoDaddy", value: "GoDaddy"},
+              {label: "Aliyun", value: "Aliyun"},
+            ]}
+          />
+        </Field>
+        <Field label={i18next.t("cert:Account")} htmlFor="cert-account">
+          <Input
+            id="cert-account"
+            value={cert.account}
+            onChange={event => updateField("account", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("cert:Access key")} htmlFor="cert-access-key">
+          <Input
+            id="cert-access-key"
+            value={cert.accessKey}
+            onChange={event => updateField("accessKey", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("cert:Access secret")} htmlFor="cert-access-secret">
+          <Input
+            id="cert-access-secret"
+            value={cert.accessSecret}
+            onChange={event => updateField("accessSecret", event.target.value)}
+          />
+        </Field>
+      </Section>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardContent className="space-y-2 pt-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">{i18next.t("cert:Certificate")}</span>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section
+          title={i18next.t("cert:Certificate")}
+          columns={1}
+          description={
+            <span className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   copy(cert.certificate);
-                  Setting.showMessage(
-                    "success",
-                    i18next.t("cert:Certificate copied to clipboard successfully"),
-                  );
+                  Setting.showMessage("success", i18next.t("cert:Certificate copied to clipboard successfully"));
                 }}
               >
                 {i18next.t("cert:Copy certificate")}
               </Button>
-              <Button size="sm" onClick={() => download(cert.certificate, "token_jwt_key.pem")}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => download(cert.certificate, "token_jwt_key.pem")}
+              >
                 {i18next.t("cert:Download certificate")}
               </Button>
-            </div>
-            <Textarea
-              className="h-[420px] font-mono text-xs"
-              value={cert.certificate}
-              onChange={event => updateField("certificate", event.target.value)}
-            />
-          </CardContent>
-        </Card>
+            </span>
+          }
+        >
+          <Textarea
+            className="scrollbar-thin h-[420px] font-mono text-xs"
+            value={cert.certificate}
+            onChange={event => updateField("certificate", event.target.value)}
+          />
+        </Section>
 
-        <Card>
-          <CardContent className="space-y-2 pt-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">{i18next.t("cert:Private key")}</span>
+        <Section
+          title={i18next.t("cert:Private key")}
+          columns={1}
+          description={
+            <span className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   copy(cert.privateKey);
-                  Setting.showMessage(
-                    "success",
-                    i18next.t("cert:Private key copied to clipboard successfully"),
-                  );
+                  Setting.showMessage("success", i18next.t("cert:Private key copied to clipboard successfully"));
                 }}
               >
                 {i18next.t("cert:Copy private key")}
               </Button>
-              <Button size="sm" onClick={() => download(cert.privateKey, "token_jwt_key.key")}>
+              <Button variant="outline" size="sm" onClick={() => download(cert.privateKey, "token_jwt_key.key")}>
                 {i18next.t("cert:Download private key")}
               </Button>
-            </div>
-            <Textarea
-              className="h-[420px] font-mono text-xs"
-              value={cert.privateKey}
-              onChange={event => updateField("privateKey", event.target.value)}
-            />
-          </CardContent>
-        </Card>
+            </span>
+          }
+        >
+          <Textarea
+            className="scrollbar-thin h-[420px] font-mono text-xs"
+            value={cert.privateKey}
+            onChange={event => updateField("privateKey", event.target.value)}
+          />
+        </Section>
       </div>
-
-      <div className="mt-4">
-        <Button size="lg" onClick={save}>
-          {i18next.t("general:Save")}
-        </Button>
-      </div>
-    </div>
+    </PageContainer>
   );
 }

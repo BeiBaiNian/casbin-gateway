@@ -14,21 +14,22 @@
 
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
-import {TriangleAlert} from "lucide-react";
+import {Globe, Pencil, Plus, RefreshCw, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import * as MiscBackend from "@/backend/MiscBackend";
 import * as SiteBackend from "@/backend/SiteBackend";
 import * as Setting from "@/Setting";
-import {DataTable, type Column} from "@/components/DataTable";
-import {Field, FormDialog} from "@/components/FormDialog";
-import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
+import {DataTable, type Column} from "@/components/shared/data-table";
+import {Field, FormDialog} from "@/components/shared/form-dialog";
+import {MessageAlert} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
-import {ConfirmButton} from "@/components/ui/confirm-button";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {Input} from "@/components/ui/input";
-import {NumberInput} from "@/components/ui/number-input";
-import {Tooltip} from "@/components/ui/tooltip";
+import {NumberInput} from "@/components/shared/number-input";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 import type {Account, Site} from "@/types";
 
 function newSite(owner: string): Site {
@@ -207,7 +208,7 @@ export default function SiteListPage({account}: {account: Account}) {
         <div className="flex flex-wrap gap-1">
           {(record.otherDomains ?? []).map(domain => (
             <a key={domain} target="_blank" rel="noreferrer" href={`https://${domain}`}>
-              <Badge variant={record.needRedirect ? "secondary" : "processing"}>{domain}</Badge>
+              <Badge variant={record.needRedirect ? "muted" : "info"}>{domain}</Badge>
             </a>
           ))}
         </div>
@@ -222,7 +223,7 @@ export default function SiteListPage({account}: {account: Account}) {
         <div className="flex flex-wrap gap-1">
           {(record.rules ?? []).map(rule => (
             <a key={rule} target="_blank" rel="noreferrer" href={`/rules/${rule}`}>
-              <Badge variant="processing">{rule}</Badge>
+              <Badge variant="info">{rule}</Badge>
             </a>
           ))}
         </div>
@@ -249,7 +250,7 @@ export default function SiteListPage({account}: {account: Account}) {
         Array.isArray(hosts) ? (
           <div className="flex flex-wrap gap-1">
             {hosts.map((host, index) => (
-              <Badge variant="blue" key={index}>
+              <Badge variant="muted" key={index}>
                 {host}
               </Badge>
             ))}
@@ -266,9 +267,8 @@ export default function SiteListPage({account}: {account: Account}) {
         <div className="flex flex-wrap gap-1">
           {(record.nodes ?? []).map(node => {
             const versionInfo = Setting.getVersionInfo(node.version, record.name);
-            let variant: "processing" | "error" | "warning" | "success" =
-              node.message === "" ? "processing" : "error";
-            if (variant === "processing" && node.provider) {
+            let variant: "info" | "danger" | "warning" | "success" = node.message === "" ? "info" : "danger";
+            if (variant === "info" && node.provider) {
               variant = node.version === "" ? "warning" : "success";
             }
 
@@ -282,9 +282,9 @@ export default function SiteListPage({account}: {account: Account}) {
               );
 
             return (
-              <Tooltip key={node.name} title={node.message}>
+              <SimpleTooltip key={node.name} title={node.message}>
                 <span>{badge}</span>
-              </Tooltip>
+              </SimpleTooltip>
             );
           })}
         </div>
@@ -309,45 +309,61 @@ export default function SiteListPage({account}: {account: Account}) {
       width: "180px",
       render: (_text, record) => (
         <div className="flex gap-2">
-          <Button size="sm" onClick={() => navigate(`/sites/${record.owner}/${record.name}`)}>
+          <Button size="sm" variant="outline" onClick={() => navigate(`/sites/${record.owner}/${record.name}`)}>
+            <Pencil />
             {i18next.t("general:Edit")}
           </Button>
-          <ConfirmButton
+          <ConfirmDialog
             title={i18next.t("general:Sure to delete {name} ?").replace("{name}", record.name)}
+            confirmText={i18next.t("general:Delete")}
             onConfirm={() => deleteSite(record)}
           >
-            <Button size="sm" variant="destructive">
+            <Button size="sm" variant="outline" className="text-destructive">
+              <Trash2 />
               {i18next.t("general:Delete")}
             </Button>
-          </ConfirmButton>
+          </ConfirmDialog>
         </div>
       ),
     },
   ];
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("general:Sites")}
+        actions={
+          <Button onClick={openAddDialog}>
+            <Plus />
+            {i18next.t("general:Add")}
+          </Button>
+        }
+      />
+
       {gatewayEnabled === false && (
-        <Alert variant="warning">
-          <TriangleAlert />
-          <AlertTitle>{i18next.t("site:The reverse proxy is not enabled")}</AlertTitle>
-          <AlertDescription>
-            {i18next.t(
-              "site:The sites below will not be proxied. Set gatewayEnabled = true in conf/app.conf and restart Casbin Gateway to enable it.",
-            )}
-          </AlertDescription>
-        </Alert>
+        <MessageAlert
+          variant="warning"
+          title={i18next.t("site:The reverse proxy is not enabled")}
+          description={i18next.t(
+            "site:The sites below will not be proxied. Set gatewayEnabled = true in conf/app.conf and restart Casbin Gateway to enable it.",
+          )}
+        />
       )}
+
       <DataTable
         columns={columns}
-        data={data}
+        dataSource={data}
         rowKey={record => `${record.owner}/${record.name}`}
         loading={loading}
         pageSize={20}
+        searchable
         title={i18next.t("general:Sites")}
+        description={`${data.length} ${i18next.t("general:Sites")}`}
+        emptyIcon={Globe}
         toolbar={
-          <Button size="sm" onClick={openAddDialog}>
-            {i18next.t("general:Add")}
+          <Button variant="outline" size="sm" onClick={() => fetchSites()} loading={loading}>
+            <RefreshCw />
+            {i18next.t("general:Refresh")}
           </Button>
         }
       />
@@ -400,6 +416,6 @@ export default function SiteListPage({account}: {account: Account}) {
           />
         </Field>
       </FormDialog>
-    </div>
+    </PageContainer>
   );
 }

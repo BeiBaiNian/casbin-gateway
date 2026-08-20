@@ -14,7 +14,7 @@
 
 import i18next from "i18next";
 
-import {DataTable, type Column} from "@/components/DataTable";
+import {DataTable, type Column} from "@/components/shared/data-table";
 import {RowActions} from "@/components/rules/RowActions";
 import {useExpressionTable, type ExpressionTableProps} from "@/components/rules/useExpressionTable";
 import {Button} from "@/components/ui/button";
@@ -115,7 +115,7 @@ export function UaRuleTable({
   return (
     <DataTable
       columns={columns}
-      data={rows}
+      dataSource={rows}
       rowKey={(_record, index) => String(index)}
       pageSize={0}
       title={title}

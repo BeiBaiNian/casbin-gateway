@@ -20,11 +20,12 @@ import i18next from "i18next";
 import * as AccountBackend from "@/backend/AccountBackend";
 import * as Conf from "@/Conf";
 import * as Setting from "@/Setting";
-import {Footer} from "@/components/layout/Footer";
-import {Header} from "@/components/layout/Header";
-import {Sidebar} from "@/components/layout/Sidebar";
-import {PageSpinner} from "@/components/ui/spinner";
+import {findGroupOf, selectedKeyOf} from "@/nav";
+import {AppHeader} from "@/components/shared/app-header";
+import {AppSidebar, persistOpenKeys, readSavedOpenKeys} from "@/components/shared/app-sidebar";
+import {Loading} from "@/components/shared/loading";
 import {TooltipProvider} from "@/components/ui/tooltip";
+import {cn} from "@/lib/utils";
 import AccountPage from "@/pages/AccountPage";
 import AgentDashboardPage from "@/pages/AgentDashboardPage";
 import AgentDetailPage from "@/pages/AgentDetailPage";
@@ -45,7 +46,7 @@ import RuleListPage from "@/pages/RuleListPage";
 import SigninPage from "@/pages/SigninPage";
 import SiteEditPage from "@/pages/SiteEditPage";
 import SiteListPage from "@/pages/SiteListPage";
-import type {Account} from "@/types";
+import type {Account, ThemeAlgorithm} from "@/types";
 
 // The gateway analytics page is the only one that draws charts, and the
 // charting runtime is by far the largest dependency here, so it is fetched only
@@ -54,24 +55,80 @@ const DashboardPage = React.lazy(() => import("@/pages/DashboardPage"));
 
 Setting.initCasdoorSdk(Conf.AuthConfig);
 
-const collapsedKey = "sidebarCollapsed";
+const collapsedKey = "siderCollapsed";
 
 export default function App() {
   // Pages call i18next.t() directly, so re-render the whole tree on a language change.
   useTranslation();
   // undefined while the account request is in flight, null when signed out.
   const [account, setAccount] = React.useState<Account | null | undefined>(undefined);
-  const [collapsed, setCollapsed] = React.useState(
-    () => localStorage.getItem(collapsedKey) === "true",
-  );
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [themeAlgorithm, setThemeAlgorithm] = React.useState<ThemeAlgorithm>(() => {
+    const stored = Setting.readThemeAlgorithm();
+    // Applied before the first paint so a dark-mode reload never flashes the
+    // light palette.
+    Setting.applyThemeAlgorithm(stored);
+    return stored;
+  });
+  const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem(collapsedKey) === "true");
   const location = useLocation();
 
-  const toggleCollapsed = () => {
+  const selectedKey = selectedKeyOf(location.pathname);
+  const wasCollapsedRef = React.useRef(false);
+  const [openKeys, setOpenKeys] = React.useState<string[]>(() => {
+    if (localStorage.getItem(collapsedKey) === "true") {
+      return [];
+    }
+    const saved = new Set(readSavedOpenKeys());
+    const group = findGroupOf(selectedKey);
+    if (group) {
+      saved.add(group.key);
+    }
+    return [...saved];
+  });
+
+  // Navigating into a collapsed group opens it, and expanding the rail restores
+  // whatever the reader last had open rather than the defaults.
+  React.useEffect(() => {
+    if (collapsed) {
+      wasCollapsedRef.current = true;
+      setOpenKeys([]);
+      return;
+    }
+    const justExpanded = wasCollapsedRef.current;
+    wasCollapsedRef.current = false;
+    const group = findGroupOf(selectedKey);
+
+    setOpenKeys(previous => {
+      if (justExpanded) {
+        const restored = new Set(readSavedOpenKeys());
+        if (group) {
+          restored.add(group.key);
+        }
+        return [...restored];
+      }
+      if (group && !previous.includes(group.key)) {
+        return [...previous, group.key];
+      }
+      return previous;
+    });
+  }, [selectedKey, collapsed]);
+
+  React.useEffect(() => {
+    if (!collapsed) {
+      persistOpenKeys(openKeys);
+    }
+  }, [openKeys, collapsed]);
+
+  const toggleSidebar = () => {
     setCollapsed(value => {
       localStorage.setItem(collapsedKey, String(!value));
       return !value;
     });
+  };
+
+  const changeTheme = (next: ThemeAlgorithm) => {
+    setThemeAlgorithm(next);
+    Setting.saveThemeAlgorithm(next);
   };
 
   const getAccount = React.useCallback(() => {
@@ -119,7 +176,7 @@ export default function App() {
   /** Wraps a page that only makes sense for a signed-in user. */
   const requireSignin = (render: (user: Account) => React.ReactNode) => {
     if (account === undefined) {
-      return <PageSpinner />;
+      return <Loading type="page" />;
     }
     if (account === null) {
       sessionStorage.setItem("from", location.pathname);
@@ -135,28 +192,49 @@ export default function App() {
     return <>{element}</>;
   };
 
+  // The sign-in screen is its own full-page layout: no rail, no header.
+  if (location.pathname === "/signin" || location.pathname === "/callback") {
+    return (
+      <TooltipProvider>
+        <Routes>
+          <Route path="/callback" element={<AuthCallback />} />
+          <Route path="/signin" element={redirectHomeIfSignedIn(<SigninPage />)} />
+        </Routes>
+      </TooltipProvider>
+    );
+  }
+
   return (
-    <TooltipProvider delayDuration={200}>
-      <div className="flex min-h-screen">
-        <Sidebar
-          account={account}
+    <TooltipProvider>
+      <div className="bg-muted/30 min-h-screen">
+        <AppSidebar
           collapsed={collapsed}
-          drawerOpen={drawerOpen}
-          onDrawerOpenChange={setDrawerOpen}
+          selectedKey={selectedKey}
+          openKeys={openKeys}
+          onOpenKeysChange={setOpenKeys}
+          isAdmin={Setting.isAdminUser(account)}
         />
-        {/* min-w-0 keeps a wide table from stretching the whole layout. */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Header
-            account={account}
+
+        <div
+          className={cn(
+            "flex min-h-screen flex-col transition-[margin] duration-200",
+            collapsed ? "ml-16" : "ml-64",
+          )}
+        >
+          <AppHeader
             collapsed={collapsed}
-            onToggleCollapsed={toggleCollapsed}
-            onOpenDrawer={() => setDrawerOpen(true)}
+            onToggleSidebar={toggleSidebar}
+            uri={location.pathname}
+            account={account}
+            themeAlgorithm={themeAlgorithm}
+            onThemeChange={changeTheme}
             onSignout={signout}
           />
-          <main className="flex-1">
-            <React.Suspense fallback={<PageSpinner />}>
+
+          {/* min-w-0 keeps a wide table from stretching the whole layout. */}
+          <main className="flex min-w-0 flex-1 flex-col">
+            <React.Suspense fallback={<Loading type="page" />}>
               <Routes>
-                <Route path="/callback" element={<AuthCallback />} />
                 <Route
                   path="/"
                   element={requireSignin(user =>
@@ -170,11 +248,7 @@ export default function App() {
                     ),
                   )}
                 />
-                <Route path="/signin" element={redirectHomeIfSignedIn(<SigninPage />)} />
-                <Route
-                  path="/account"
-                  element={requireSignin(user => <AccountPage account={user} />)}
-                />
+                <Route path="/account" element={requireSignin(user => <AccountPage account={user} />)} />
                 <Route path="/agents" element={requireSignin(user => <AgentsPage account={user} />)} />
                 <Route
                   path="/agents/:agentId"
@@ -197,17 +271,11 @@ export default function App() {
                 />
                 <Route path="/certs" element={requireSignin(user => <CertListPage account={user} />)} />
                 <Route path="/certs/:owner/:certName" element={requireSignin(() => <CertEditPage />)} />
-                <Route
-                  path="/records"
-                  element={requireSignin(user => <RecordListPage account={user} />)}
-                />
+                <Route path="/records" element={requireSignin(user => <RecordListPage account={user} />)} />
                 <Route path="/records/:owner/:id" element={requireSignin(() => <RecordEditPage />)} />
                 <Route path="/rules" element={requireSignin(user => <RuleListPage account={user} />)} />
                 <Route path="/rules/:owner/:ruleName" element={requireSignin(() => <RuleEditPage />)} />
-                <Route
-                  path="/channels"
-                  element={requireSignin(user => <ChannelListPage account={user} />)}
-                />
+                <Route path="/channels" element={requireSignin(user => <ChannelListPage account={user} />)} />
                 <Route
                   path="/channels/:owner/:channelName"
                   element={requireSignin(() => <ChannelEditPage />)}
@@ -216,7 +284,17 @@ export default function App() {
               </Routes>
             </React.Suspense>
           </main>
-          <Footer />
+
+          <footer className="text-muted-foreground flex items-center justify-center gap-2 border-t py-5 text-sm">
+            {i18next.t("general:Powered by")}
+            <a target="_blank" rel="noreferrer" href="https://github.com/apache/casbin-gateway">
+              <img
+                className="h-[30px] w-auto"
+                alt="Casbin"
+                src={`${Setting.StaticBaseUrl}/img/casbin_logo_1024x256.png`}
+              />
+            </a>
+          </footer>
         </div>
       </div>
     </TooltipProvider>

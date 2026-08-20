@@ -14,15 +14,17 @@
 
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
+import {Plus, RefreshCw, Server} from "lucide-react";
 import i18next from "i18next";
 
 import * as NodeBackend from "@/backend/NodeBackend";
 import * as Setting from "@/Setting";
-import {DataTable, type Column} from "@/components/DataTable";
-import {Field, FormDialog} from "@/components/FormDialog";
-import {UnauthorizedResult} from "@/components/Result";
+import {DataTable, type Column} from "@/components/shared/data-table";
+import {Field, FormDialog} from "@/components/shared/form-dialog";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
+import {UnauthorizedResult} from "@/components/shared/misc";
 import {Button} from "@/components/ui/button";
-import {ConfirmButton} from "@/components/ui/confirm-button";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {Input} from "@/components/ui/input";
 import type {Account, Node} from "@/types";
 
@@ -178,31 +180,45 @@ export default function NodeListPage({account}: {account: Account}) {
           <Button size="sm" onClick={() => navigate(`/nodes/${record.owner}/${record.name}`)}>
             {i18next.t("general:Edit")}
           </Button>
-          <ConfirmButton
+          <ConfirmDialog
             title={i18next.t("general:Sure to delete {name} ?").replace("{name}", record.name)}
             onConfirm={() => deleteNode(record)}
           >
             <Button size="sm" variant="destructive">
               {i18next.t("general:Delete")}
             </Button>
-          </ConfirmButton>
+          </ConfirmDialog>
         </div>
       ),
     },
   ];
 
   return (
-    <div className="p-4 md:p-6">
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("general:Nodes")}
+        actions={
+          <Button onClick={openAddDialog}>
+            <Plus />
+            {i18next.t("general:Add")}
+          </Button>
+        }
+      />
+
       <DataTable
         columns={columns}
-        data={data}
+        dataSource={data}
         rowKey={record => `${record.owner}/${record.name}`}
         loading={loading}
         pageSize={20}
+        searchable
         title={i18next.t("general:Nodes")}
+        description={`${data.length} ${i18next.t("general:Nodes")}`}
+        emptyIcon={Server}
         toolbar={
-          <Button size="sm" onClick={openAddDialog}>
-            {i18next.t("general:Add")}
+          <Button variant="outline" size="sm" onClick={() => fetchNodes()} loading={loading}>
+            <RefreshCw />
+            {i18next.t("general:Refresh")}
           </Button>
         }
       />
@@ -239,6 +255,6 @@ export default function NodeListPage({account}: {account: Account}) {
           />
         </Field>
       </FormDialog>
-    </div>
+    </PageContainer>
   );
 }

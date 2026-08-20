@@ -17,7 +17,7 @@ import {CircleCheck, CircleMinus, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
 import * as Setting from "@/Setting";
-import {DataTable, type Column} from "@/components/DataTable";
+import {DataTable, type Column} from "@/components/shared/data-table";
 import {RowActions} from "@/components/rules/RowActions";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {Tooltip} from "@/components/ui/tooltip";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 import type {Account, Node, SiteNode} from "@/types";
 
 function StatusBadge({status}: {status: string}) {
@@ -38,7 +38,7 @@ function StatusBadge({status}: {status: string}) {
   }
   if (status === "In Progress") {
     return (
-      <Badge variant="processing">
+      <Badge variant="info">
         <RefreshCw className="h-3 w-3 animate-spin" />
         {status}
       </Badge>
@@ -54,7 +54,7 @@ function StatusBadge({status}: {status: string}) {
   }
   if (status === "Stopped") {
     return (
-      <Badge variant="error">
+      <Badge variant="danger">
         <CircleMinus className="h-3 w-3" />
         {status}
       </Badge>
@@ -146,9 +146,9 @@ export function NodeTable({
           return null;
         }
         return (
-          <Tooltip title={<pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs">{text}</pre>}>
+          <SimpleTooltip title={<pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs">{text}</pre>}>
             <span className="cursor-help">{Setting.getShortText(text)}</span>
-          </Tooltip>
+          </SimpleTooltip>
         );
       },
     },
@@ -199,7 +199,7 @@ export function NodeTable({
   return (
     <DataTable
       columns={columns}
-      data={rows}
+      dataSource={rows}
       rowKey={(_record, index) => String(index)}
       pageSize={0}
       title={title}

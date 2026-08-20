@@ -13,20 +13,19 @@
 // limitations under the License.
 
 import {Link} from "react-router-dom";
-import {Bot, CircleX, RefreshCw} from "lucide-react";
+import {Bot, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
-import {DataTable, type Column} from "@/components/DataTable";
-import {PageHeader} from "@/components/FormRow";
-import {UnauthorizedResult} from "@/components/Result";
-import {Alert, AlertDescription} from "@/components/ui/alert";
+import {ConfirmDialog} from "@/components/shared/confirm-dialog";
+import {DataTable, type Column} from "@/components/shared/data-table";
+import {CodeText, UnauthorizedResult} from "@/components/shared/misc";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
+import {MessageAlert} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
-import {ConfirmButton} from "@/components/ui/confirm-button";
-import {Spinner} from "@/components/ui/spinner";
-import {Tooltip} from "@/components/ui/tooltip";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 import {agentDetailPath, agentKey, monitorAgentId, useAgents} from "@/lib/agents";
 import type {Account, Agent} from "@/types";
 
@@ -44,12 +43,9 @@ export default function AgentsPage({account}: {account: Account}) {
       key: "name",
       dataIndex: "name",
       render: (value: string, record) => (
-        <Link to={agentDetailPath(record)} className="flex items-center gap-2 hover:text-primary">
-          <AgentIcon
-            agent={record.agentId || value}
-            fallback={<Bot className="h-[18px] w-[18px] text-muted-foreground" />}
-          />
-          <span className="hover:underline">{value}</span>
+        <Link to={agentDetailPath(record)} className="hover:text-primary flex items-center gap-2">
+          <AgentIcon agent={record.agentId || value} fallback={<Bot className="text-muted-foreground size-4" />} />
+          <span className="font-medium hover:underline">{value}</span>
         </Link>
       ),
     },
@@ -63,7 +59,7 @@ export default function AgentsPage({account}: {account: Account}) {
       title: i18next.t("agent:Install Method"),
       key: "installMethod",
       dataIndex: "installMethod",
-      render: (value: string) => <Badge variant="secondary">{value || "-"}</Badge>,
+      render: (value: string) => <Badge variant="muted">{value || "-"}</Badge>,
     },
     {
       title: i18next.t("general:Owner"),
@@ -74,7 +70,8 @@ export default function AgentsPage({account}: {account: Account}) {
       title: i18next.t("general:Path"),
       key: "path",
       dataIndex: "path",
-      render: (value: string) => <code className="text-xs">{value}</code>,
+      ellipsis: true,
+      render: (value: string) => <CodeText copyable>{value}</CodeText>,
     },
     {
       title: i18next.t("agent:Channel"),
@@ -94,16 +91,16 @@ export default function AgentsPage({account}: {account: Account}) {
       key: "patched",
       render: (_value, record) => {
         const badge = !record.supported ? (
-          <Badge variant="secondary">{i18next.t("agent:Not supported")}</Badge>
+          <Badge variant="muted">{i18next.t("agent:Not supported")}</Badge>
         ) : record.patched ? (
           <Badge variant="success">{i18next.t("agent:Patched")}</Badge>
         ) : (
-          <Badge variant="secondary">{i18next.t("agent:Not patched")}</Badge>
+          <Badge variant="muted">{i18next.t("agent:Not patched")}</Badge>
         );
         return (
-          <Tooltip title={record.detail}>
+          <SimpleTooltip title={record.detail}>
             <span>{badge}</span>
-          </Tooltip>
+          </SimpleTooltip>
         );
       },
     },
@@ -135,51 +132,50 @@ export default function AgentsPage({account}: {account: Account}) {
         const action = i18next.t(`agent:${record.patched ? "Unpatch" : "Patch"}`);
         const note = [record.notice, record.followup].filter(Boolean).join(" ");
         return (
-          <ConfirmButton
+          <ConfirmDialog
             title={`${action} ${record.name}?`}
             description={note || undefined}
-            okText={action}
-            destructive={record.patched}
+            confirmText={action}
+            variant={record.patched ? "destructive" : "default"}
             onConfirm={() => togglePatch(record)}
           >
             <Button
               size="sm"
               variant={record.patched ? "outline" : "default"}
-              disabled={busyKey === agentKey(record)}
+              loading={busyKey === agentKey(record)}
             >
-              {busyKey === agentKey(record) ? <Spinner /> : null}
               {action}
             </Button>
-          </ConfirmButton>
+          </ConfirmDialog>
         );
       },
     },
   ];
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={i18next.t("agent:Agents")}>
-        <Button variant="outline" onClick={() => scan(true)} disabled={loading}>
-          <RefreshCw className={loading ? "animate-spin" : undefined} />
-          {i18next.t("agent:Scan")}
-        </Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader title={i18next.t("agent:Agents")} description={account.hostname} />
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <CircleX />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {error ? <MessageAlert title={error} /> : null}
 
       <DataTable
+        title={i18next.t("agent:Agents")}
+        description={`${agents.length} ${i18next.t("agent:Agents")}`}
         columns={columns}
-        data={agents}
+        dataSource={agents}
         rowKey={agentKey}
         loading={loading}
         pageSize={0}
+        searchable
+        emptyIcon={Bot}
         emptyText={i18next.t("agent:No supported agents found")}
+        toolbar={
+          <Button variant="outline" size="sm" onClick={() => scan(true)} loading={loading}>
+            <RefreshCw />
+            {i18next.t("agent:Scan")}
+          </Button>
+        }
       />
-    </div>
+    </PageContainer>
   );
 }

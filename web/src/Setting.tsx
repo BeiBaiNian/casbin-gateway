@@ -17,7 +17,7 @@ import Sdk from "casdoor-js-sdk";
 import {toast} from "sonner";
 
 import * as Conf from "@/Conf";
-import type {Account, ApiResponse} from "@/types";
+import type {Account, ApiResponse, ThemeAlgorithm} from "@/types";
 
 /**
  * Where the REST API lives. It stays empty on purpose: the dev server proxies
@@ -191,6 +191,39 @@ export function getAvatarColor(s: string) {
 
 export function getLanguage() {
   return i18next.language;
+}
+
+// Dark mode is a class on <html> because that is what the Tailwind `dark:`
+// variant keys off; the data-theme attribute is kept for the plain CSS rules
+// and third-party widgets that read it.
+export function isDarkTheme(themeAlgorithm: ThemeAlgorithm | undefined) {
+  return Array.isArray(themeAlgorithm) && themeAlgorithm.includes("dark");
+}
+
+export function applyThemeAlgorithm(themeAlgorithm: ThemeAlgorithm) {
+  const dark = isDarkTheme(themeAlgorithm);
+  document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+}
+
+export function readThemeAlgorithm(): ThemeAlgorithm {
+  try {
+    const raw = localStorage.getItem("themeAlgorithm");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed as ThemeAlgorithm;
+      }
+    }
+  } catch {
+    // A corrupt value is not worth failing startup over.
+  }
+  return ["default"];
+}
+
+export function saveThemeAlgorithm(themeAlgorithm: ThemeAlgorithm) {
+  localStorage.setItem("themeAlgorithm", JSON.stringify(themeAlgorithm));
+  applyThemeAlgorithm(themeAlgorithm);
 }
 
 export function setLanguage(language: string) {

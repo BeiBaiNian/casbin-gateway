@@ -14,32 +14,24 @@
 
 import * as React from "react";
 import {Link, useNavigate, useSearchParams} from "react-router-dom";
-import {Bot, CircleX, Info, RefreshCw} from "lucide-react";
+import {Bot, FileSearch, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
 import * as AgentBackend from "@/backend/AgentBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
-import {DataTable, type Column} from "@/components/DataTable";
-import {PageHeader} from "@/components/FormRow";
-import {UnauthorizedResult} from "@/components/Result";
-import {Alert, AlertDescription} from "@/components/ui/alert";
+import {DataTable, type Column} from "@/components/shared/data-table";
+import {CodeBlock, CodeText, DescriptionList, UnauthorizedResult} from "@/components/shared/misc";
+import {PageContainer, PageHeader} from "@/components/shared/page-header";
+import {SimpleSelect} from "@/components/shared/simple-select";
+import {getOutcomeVariant, monitorAgentId} from "@/lib/agents";
+import {MessageAlert} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import {Label} from "@/components/ui/label";
 import {Switch} from "@/components/ui/switch";
 import type {Account, AgentRecord} from "@/types";
-
-function monitorAgentId(agentId: string) {
-  return agentId === "codex_vscode" || agentId === "codex-vscode" ? "codex-cli" : agentId;
-}
 
 // The server keeps a bounded in-memory window; these are the slices of it the
 // page can ask for. Without a control here the UI could only ever reach the
@@ -62,92 +54,40 @@ function formatPayload(object: unknown) {
   }
 }
 
-function getOutcomeVariant(outcome: string | undefined) {
-  return (
-    {
-      attempted: "processing",
-      denied: "warning",
-      failure: "error",
-      success: "success",
-    } as const
-  )[outcome as "attempted" | "denied" | "failure" | "success"];
-}
-
-function DetailField({label, children}: {label: string; children: React.ReactNode}) {
-  return (
-    <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-2 border-b py-1.5 last:border-0">
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="min-w-0 break-words text-sm">{children}</div>
-    </div>
-  );
-}
-
 function RecordDetail({record}: {record: AgentRecord}) {
-  const mcpTarget =
-    record.mcpServer && `${record.mcpServer}${record.mcpTool ? ` / ${record.mcpTool}` : ""}`;
+  const mcpTarget = record.mcpServer && `${record.mcpServer}${record.mcpTool ? ` / ${record.mcpTool}` : ""}`;
 
   return (
-    <div className="px-4 py-2">
-      <DetailField label={i18next.t("general:ID")}>{record.id}</DetailField>
-      <DetailField label={i18next.t("agent:Time")}>
-        {new Date(record.createdTime).toLocaleString()}
-      </DetailField>
-      {record.agentPath && (
-        <DetailField label={i18next.t("agent:Agent path")}>
-          <code className="text-xs">{record.agentPath}</code>
-        </DetailField>
-      )}
-      {record.user && <DetailField label={i18next.t("agent:User")}>{record.user}</DetailField>}
-      {record.sessionKey && (
-        <DetailField label={i18next.t("agent:Session")}>
-          <code className="text-xs">{record.sessionKey}</code>
-        </DetailField>
-      )}
-      {record.title && (
-        <DetailField label={i18next.t("agent:Session title")}>{record.title}</DetailField>
-      )}
-      {record.promptId && (
-        <DetailField label={i18next.t("agent:Prompt ID")}>
-          <code className="text-xs">{record.promptId}</code>
-        </DetailField>
-      )}
-      {record.toolUseId && (
-        <DetailField label={i18next.t("agent:Tool use ID")}>
-          <code className="text-xs">{record.toolUseId}</code>
-        </DetailField>
-      )}
-      {record.toolName && (
-        <DetailField label={i18next.t("agent:Tool")}>
-          <code className="text-xs">{record.toolName}</code>
-        </DetailField>
-      )}
-      {mcpTarget && (
-        <DetailField label={i18next.t("agent:MCP target")}>
-          <code className="text-xs">{mcpTarget}</code>
-        </DetailField>
-      )}
-      {record.model && (
-        <DetailField label={i18next.t("agent:Model")}>
-          <code className="text-xs">{record.model}</code>
-        </DetailField>
-      )}
-      {record.durationMs !== undefined && (
-        <DetailField label={i18next.t("agent:Duration")}>
-          {record.durationMs.toLocaleString()} ms
-        </DetailField>
-      )}
-      {record.clientIp && (
-        <DetailField label={i18next.t("agent:Reported from")}>
-          <code className="text-xs">{record.clientIp}</code>
-        </DetailField>
-      )}
-      {record.detail && <DetailField label={i18next.t("agent:Detail")}>{record.detail}</DetailField>}
+    <div className="flex flex-col gap-3 px-4 py-3">
+      <DescriptionList
+        columns={3}
+        items={[
+          {label: i18next.t("general:ID"), value: record.id},
+          {label: i18next.t("agent:Time"), value: new Date(record.createdTime).toLocaleString()},
+          record.agentPath && {label: i18next.t("agent:Agent path"), value: <CodeText>{record.agentPath}</CodeText>},
+          record.user && {label: i18next.t("agent:User"), value: record.user},
+          record.sessionKey && {label: i18next.t("agent:Session"), value: <CodeText>{record.sessionKey}</CodeText>},
+          record.title && {label: i18next.t("agent:Session title"), value: record.title},
+          record.promptId && {label: i18next.t("agent:Prompt ID"), value: <CodeText>{record.promptId}</CodeText>},
+          record.toolUseId && {label: i18next.t("agent:Tool use ID"), value: <CodeText>{record.toolUseId}</CodeText>},
+          record.toolName && {label: i18next.t("agent:Tool"), value: <CodeText>{record.toolName}</CodeText>},
+          mcpTarget && {label: i18next.t("agent:MCP target"), value: <CodeText>{mcpTarget}</CodeText>},
+          record.model && {label: i18next.t("agent:Model"), value: <CodeText>{record.model}</CodeText>},
+          record.durationMs !== undefined && {
+            label: i18next.t("agent:Duration"),
+            value: `${record.durationMs.toLocaleString()} ms`,
+          },
+          record.clientIp && {label: i18next.t("agent:Reported from"), value: <CodeText>{record.clientIp}</CodeText>},
+          record.detail && {label: i18next.t("agent:Detail"), value: record.detail},
+        ]}
+      />
       {record.object ? (
-        <DetailField label={i18next.t("agent:Payload")}>
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-xs">
+        <div className="grid gap-1">
+          <span className="text-muted-foreground text-xs">{i18next.t("agent:Payload")}</span>
+          <CodeBlock copyable maxHeight="20rem">
             {formatPayload(record.object)}
-          </pre>
-        </DetailField>
+          </CodeBlock>
+        </div>
       ) : null}
     </div>
   );
@@ -262,8 +202,8 @@ export default function AgentRecordsPage({account}: {account: Account}) {
       dataIndex: "agent",
       width: "160px",
       render: (value: string) => (
-        <Badge variant="blue">
-          <AgentIcon agent={value} fallback={<Bot className="h-4 w-4" />} size={16} />
+        <Badge variant="info">
+          <AgentIcon agent={value} fallback={<Bot className="size-3" />} size={12} />
           {value}
         </Badge>
       ),
@@ -274,11 +214,9 @@ export default function AgentRecordsPage({account}: {account: Account}) {
       width: "200px",
       render: (_value, record) => (
         <div className="flex flex-wrap items-center gap-1">
-          <Badge variant="secondary">{record.eventType}</Badge>
-          {record.action && <code className="text-xs">{record.action}</code>}
-          {record.outcome && (
-            <Badge variant={getOutcomeVariant(record.outcome)}>{record.outcome}</Badge>
-          )}
+          <Badge variant="muted">{record.eventType}</Badge>
+          {record.action && <CodeText>{record.action}</CodeText>}
+          {record.outcome && <Badge variant={getOutcomeVariant(record.outcome)}>{record.outcome}</Badge>}
         </div>
       ),
     },
@@ -291,9 +229,9 @@ export default function AgentRecordsPage({account}: {account: Account}) {
           ? `${record.mcpServer}${record.mcpTool ? ` / ${record.mcpTool}` : ""}`
           : record.toolName;
         return (
-          <div className="flex flex-col">
-            {target && <code className="truncate text-xs">{target}</code>}
-            {record.model && <span className="truncate text-xs text-muted-foreground">{record.model}</span>}
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {target && <CodeText>{target}</CodeText>}
+            {record.model && <span className="text-muted-foreground truncate text-xs">{record.model}</span>}
           </div>
         );
       },
@@ -309,7 +247,7 @@ export default function AgentRecordsPage({account}: {account: Account}) {
             {record.title && <span className="truncate font-medium">{record.title}</span>}
             <Link
               to={`/agent-records?agent=${encodeURIComponent(record.agent)}&session=${encodeURIComponent(value)}`}
-              className="truncate text-xs text-primary hover:underline"
+              className="text-primary truncate text-xs hover:underline"
             >
               {value}
             </Link>
@@ -327,87 +265,66 @@ export default function AgentRecordsPage({account}: {account: Account}) {
   ];
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={i18next.t("agent:Agent Records")}>
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
-          {i18next.t("agent:Auto refresh")}
-        </label>
-        <Button variant="outline" onClick={() => load(true)} disabled={loading}>
-          <RefreshCw className={loading ? "animate-spin" : undefined} />
-          {i18next.t("general:Refresh")}
-        </Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("agent:Agent Records")}
+        description={i18next.t("agent:Records are kept in memory only and are lost when Gateway restarts")}
+        actions={
+          <>
+            <Label className="text-sm font-normal">
+              <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
+              {i18next.t("agent:Auto refresh")}
+            </Label>
+            <Button variant="outline" onClick={() => load(true)} loading={loading}>
+              <RefreshCw />
+              {i18next.t("general:Refresh")}
+            </Button>
+          </>
+        }
+      />
 
-      <Alert variant="info" className="mb-4">
-        <Info />
-        <AlertDescription>
-          {i18next.t("agent:Records are kept in memory only and are lost when Gateway restarts")}
-        </AlertDescription>
-      </Alert>
+      {error ? <MessageAlert title={error} /> : null}
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Select value={agent || ALL} onValueChange={value => setFilter("agent", value)}>
-          <SelectTrigger className="w-[190px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{i18next.t("agent:All agents")}</SelectItem>
-            {agentOptions.map(value => (
-              <SelectItem key={value} value={value}>
-                {value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={eventType || ALL} onValueChange={value => setFilter("eventType", value)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{i18next.t("agent:All event types")}</SelectItem>
-            {["session", "prompt", "llm", "tool", "mcp", "permission", "subagent", "compact"].map(
-              value => (
-                <SelectItem key={value} value={value}>
-                  {value}
-                </SelectItem>
-              ),
-            )}
-          </SelectContent>
-        </Select>
-
-        <Select value={outcome || ALL} onValueChange={value => setFilter("outcome", value)}>
-          <SelectTrigger className="w-[170px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{i18next.t("agent:All outcomes")}</SelectItem>
-            {["attempted", "success", "failure", "denied"].map(value => (
-              <SelectItem key={value} value={value}>
-                {value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
+      <div className="flex flex-wrap items-center gap-2">
+        <SimpleSelect
+          className="w-[190px]"
+          value={agent || ALL}
+          onChange={value => setFilter("agent", value)}
+          options={[
+            {label: i18next.t("agent:All agents"), value: ALL},
+            ...agentOptions.map(value => ({label: value, value})),
+          ]}
+        />
+        <SimpleSelect
+          className="w-[180px]"
+          value={eventType || ALL}
+          onChange={value => setFilter("eventType", value)}
+          options={[
+            {label: i18next.t("agent:All event types"), value: ALL},
+            ...["session", "prompt", "llm", "tool", "mcp", "permission", "subagent", "compact"].map(value => ({
+              label: value,
+              value,
+            })),
+          ]}
+        />
+        <SimpleSelect
+          className="w-[170px]"
+          value={outcome || ALL}
+          onChange={value => setFilter("outcome", value)}
+          options={[
+            {label: i18next.t("agent:All outcomes"), value: ALL},
+            ...["attempted", "success", "failure", "denied"].map(value => ({label: value, value})),
+          ]}
+        />
+        <SimpleSelect
+          className="w-[190px]"
           value={String(limit)}
-          onValueChange={value =>
-            setFilter("limit", Number(value) === defaultLimit ? "" : value)
-          }
-        >
-          <SelectTrigger className="w-[190px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {limitOptions.map(value => (
-              <SelectItem key={value} value={String(value)}>
-                {i18next.t("agent:Last {count} records").replace("{count}", String(value))}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={value => setFilter("limit", Number(value) === defaultLimit ? "" : value)}
+          options={limitOptions.map(value => ({
+            label: i18next.t("agent:Last {count} records").replace("{count}", String(value)),
+            value: String(value),
+          }))}
+        />
 
         <form
           className="flex gap-2"
@@ -428,22 +345,19 @@ export default function AgentRecordsPage({account}: {account: Account}) {
         </form>
       </div>
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <CircleX />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
       <DataTable
+        title={i18next.t("agent:Agent Records")}
+        description={`${records.length} ${i18next.t("agent:Records")}`}
         columns={columns}
-        data={records}
-        rowKey={record => record.id}
+        dataSource={records}
+        rowKey={record => String(record.id)}
         loading={loading}
         pageSize={20}
+        searchable
+        emptyIcon={FileSearch}
         emptyText={i18next.t("agent:No agent records yet - patch an agent to start collecting them")}
-        expandedRowRender={record => <RecordDetail record={record} />}
+        expandable={{expandedRowRender: record => <RecordDetail record={record} />}}
       />
-    </div>
+    </PageContainer>
   );
 }

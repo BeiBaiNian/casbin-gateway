@@ -16,8 +16,8 @@ import * as React from "react";
 import i18next from "i18next";
 
 import * as Setting from "@/Setting";
-import {Result} from "@/components/Result";
-import {PageSpinner} from "@/components/ui/spinner";
+import {Loading} from "@/components/shared/loading";
+import {ResultScreen} from "@/components/shared/misc";
 
 /** Where Casdoor sends the browser back after a successful SSO login. */
 export default function AuthCallback() {
@@ -35,8 +35,16 @@ export default function AuthCallback() {
   }, []);
 
   if (message === null) {
-    return <PageSpinner tip={i18next.t("general:Signing in...")} />;
+    return (
+      <div className="bg-muted/30 flex min-h-screen items-center justify-center">
+        <Loading type="page" tip={i18next.t("general:Signing in...")} />
+      </div>
+    );
   }
 
-  return <Result status="error" title={i18next.t("general:Login Error")} subTitle={message} />;
+  return (
+    <div className="bg-muted/30 flex min-h-screen items-center justify-center">
+      <ResultScreen status="!" title={i18next.t("general:Login Error")} subTitle={message} />
+    </div>
+  );
 }

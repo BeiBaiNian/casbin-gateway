@@ -20,23 +20,16 @@ import i18next from "i18next";
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {EnvSnippet} from "@/components/EnvSnippet";
-import {FormRow, PageHeader} from "@/components/FormRow";
-import {Result} from "@/components/Result";
-import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
+import {Field} from "@/components/shared/form-dialog";
+import {Loading} from "@/components/shared/loading";
+import {CodeText, ResultScreen} from "@/components/shared/misc";
+import {NumberInput} from "@/components/shared/number-input";
+import {PageContainer, PageHeader, Section} from "@/components/shared/page-header";
+import {PasswordInput} from "@/components/shared/password-input";
+import {SearchSelect, SimpleSelect} from "@/components/shared/simple-select";
+import {MessageAlert} from "@/components/ui/alert";
 import {Button} from "@/components/ui/button";
-import {Card, CardContent} from "@/components/ui/card";
-import {Combobox} from "@/components/ui/combobox";
 import {Input} from "@/components/ui/input";
-import {NumberInput} from "@/components/ui/number-input";
-import {PasswordInput} from "@/components/ui/password-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {PageSpinner, Spinner} from "@/components/ui/spinner";
 import {TagsInput} from "@/components/ui/tags-input";
 import {channelProtocol, gatewayBaseUrl, localShell} from "@/lib/channels";
 import type {Channel, ChannelTestResult} from "@/types";
@@ -180,17 +173,15 @@ export default function ChannelEditPage() {
   };
 
   if (channel === undefined) {
-    return <PageSpinner />;
+    return <Loading type="page" />;
   }
 
   if (channel === null) {
     return (
-      <Result
+      <ResultScreen
         status="404"
         title={i18next.t("channel:Channel not found")}
-        extra={
-          <Button onClick={() => navigate("/channels")}>{i18next.t("channel:Channels")}</Button>
-        }
+        extra={<Button onClick={() => navigate("/channels")}>{i18next.t("channel:Channels")}</Button>}
       />
     );
   }
@@ -198,130 +189,130 @@ export default function ChannelEditPage() {
   const upstreamUrl = buildUpstreamUrl(channel.baseUrl, channel.type);
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader title={`${i18next.t("channel:Edit Channel")}: ${channel.displayName}`}>
-        <Button variant="outline" onClick={test} disabled={testing}>
-          {testing ? <Spinner /> : <Zap />}
-          {i18next.t("channel:Test Connectivity")}
-        </Button>
-        <Button onClick={save}>
-          <Save />
-          {i18next.t("general:Save")}
-        </Button>
-      </PageHeader>
-
-      <Card>
-        <CardContent className="divide-y py-0">
-          <FormRow label={i18next.t("general:Display name")}>
-            <Input
-              value={channel.displayName}
-              onChange={event => setField("displayName", event.target.value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("channel:Type")}>
-            <Select value={channel.type} onValueChange={value => setField("type", value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="openai">OpenAI</SelectItem>
-                <SelectItem value="anthropic">Anthropic</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormRow>
-          <FormRow
-            label={i18next.t("channel:Base URL")}
-            hint={
-              upstreamUrl === "" ? undefined : (
-                <>
-                  {i18next.t("channel:Base URL hint")}:{" "}
-                  <span className="font-mono">{upstreamUrl}</span>
-                </>
-              )
-            }
-          >
-            <Combobox
-              allowCustomValue
-              value={channel.baseUrl}
-              placeholder={channel.type === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"}
-              options={(BASE_URL_PRESETS[channel.type] ?? []).map(url => ({value: url}))}
-              onChange={value => setField("baseUrl", value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("channel:API Key")} hint={i18next.t("channel:API Key hint")}>
-            <PasswordInput
-              placeholder="sk-..."
-              value={channel.apiKey}
-              onChange={event => setField("apiKey", event.target.value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("channel:Models")}>
-            <TagsInput
-              value={channel.models}
-              placeholder={channel.type === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini"}
-              suggestions={MODEL_PRESETS[channel.type] ?? []}
-              onChange={value => setField("models", value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("channel:Priority")} hint={i18next.t("channel:Priority hint")}>
-            <NumberInput
-              min={0}
-              className="max-w-xs"
-              value={channel.priority}
-              onChange={value => setField("priority", value)}
-            />
-          </FormRow>
-          <FormRow label={i18next.t("channel:Status")}>
-            <Select value={channel.status} onValueChange={value => setField("status", value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="enabled">
-                  <span className="flex items-center gap-2">
-                    <CircleCheck className="h-4 w-4 text-success" />
-                    {i18next.t("channel:Enabled")}
-                  </span>
-                </SelectItem>
-                <SelectItem value="disabled">
-                  <span className="flex items-center gap-2">
-                    <CircleX className="h-4 w-4 text-destructive" />
-                    {i18next.t("channel:Disabled")}
-                  </span>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </FormRow>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardContent className="space-y-3 p-4">
-          <div className="text-base font-medium">{i18next.t("channel:Usage")}</div>
-          <p className="text-sm text-muted-foreground">{i18next.t("channel:Usage hint")}</p>
-          <EnvSnippet
-            protocol={channelProtocol(channel.type)}
-            baseUrl={gatewayBaseUrl(channelProtocol(channel.type))}
-            defaultShell={localShell()}
-          />
-          <p className="text-sm text-muted-foreground">{i18next.t("channel:Model routing hint")}</p>
-        </CardContent>
-      </Card>
+    <PageContainer>
+      <PageHeader
+        title={i18next.t("channel:Edit Channel")}
+        description={`${channel.owner} / ${channel.name}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={test} loading={testing}>
+              <Zap />
+              {i18next.t("channel:Test Connectivity")}
+            </Button>
+            <Button onClick={save}>
+              <Save />
+              {i18next.t("general:Save")}
+            </Button>
+          </>
+        }
+      />
 
       {result ? (
-        <Alert className="mt-4" variant={result.success ? "success" : "destructive"}>
-          {result.success ? <CircleCheck /> : <CircleX />}
-          <AlertTitle>
-            {result.success
-              ? i18next.t("channel:Connection Successful")
-              : i18next.t("channel:Connection Failed")}
-          </AlertTitle>
-          <AlertDescription>
-            {result.statusCode ? `HTTP ${result.statusCode} - ${result.message}` : result.message}
-          </AlertDescription>
-        </Alert>
+        <MessageAlert
+          variant={result.success ? "success" : "destructive"}
+          title={
+            result.success ? i18next.t("channel:Connection Successful") : i18next.t("channel:Connection Failed")
+          }
+          description={result.statusCode ? `HTTP ${result.statusCode} - ${result.message}` : result.message}
+        />
       ) : null}
-    </div>
+
+      <Section title={i18next.t("channel:Channel")}>
+        <Field label={i18next.t("general:Display name")} htmlFor="channel-display-name">
+          <Input
+            id="channel-display-name"
+            value={channel.displayName}
+            onChange={event => setField("displayName", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("channel:Type")}>
+          <SimpleSelect
+            value={channel.type}
+            onChange={value => setField("type", value)}
+            options={[
+              {label: "OpenAI", value: "openai"},
+              {label: "Anthropic", value: "anthropic"},
+              {label: "Custom", value: "custom"},
+            ]}
+          />
+        </Field>
+        <Field
+          label={i18next.t("channel:Base URL")}
+          hint={
+            upstreamUrl === "" ? undefined : (
+              <>
+                {i18next.t("channel:Base URL hint")}: <CodeText>{upstreamUrl}</CodeText>
+              </>
+            )
+          }
+        >
+          <SearchSelect
+            allowCustomValue
+            value={channel.baseUrl}
+            placeholder={channel.type === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"}
+            options={(BASE_URL_PRESETS[channel.type] ?? []).map(url => ({label: url, value: url}))}
+            onChange={value => setField("baseUrl", value)}
+          />
+        </Field>
+        <Field
+          label={i18next.t("channel:API Key")}
+          htmlFor="channel-api-key"
+          hint={i18next.t("channel:API Key hint")}
+        >
+          <PasswordInput
+            id="channel-api-key"
+            placeholder="sk-..."
+            value={channel.apiKey}
+            onChange={event => setField("apiKey", event.target.value)}
+          />
+        </Field>
+        <Field label={i18next.t("channel:Models")}>
+          <TagsInput
+            value={channel.models}
+            placeholder={channel.type === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini"}
+            suggestions={MODEL_PRESETS[channel.type] ?? []}
+            onChange={value => setField("models", value)}
+          />
+        </Field>
+        <Field label={i18next.t("channel:Priority")} hint={i18next.t("channel:Priority hint")}>
+          <NumberInput min={0} value={channel.priority} onChange={value => setField("priority", value)} />
+        </Field>
+        <Field label={i18next.t("channel:Status")}>
+          <SimpleSelect
+            value={channel.status}
+            onChange={value => setField("status", value)}
+            options={[
+              {
+                label: (
+                  <span className="flex items-center gap-2">
+                    <CircleCheck className="text-success size-4" />
+                    {i18next.t("channel:Enabled")}
+                  </span>
+                ),
+                value: "enabled",
+              },
+              {
+                label: (
+                  <span className="flex items-center gap-2">
+                    <CircleX className="text-destructive size-4" />
+                    {i18next.t("channel:Disabled")}
+                  </span>
+                ),
+                value: "disabled",
+              },
+            ]}
+          />
+        </Field>
+      </Section>
+
+      <Section title={i18next.t("channel:Usage")} description={i18next.t("channel:Usage hint")} columns={1}>
+        <EnvSnippet
+          protocol={channelProtocol(channel.type)}
+          baseUrl={gatewayBaseUrl(channelProtocol(channel.type))}
+          defaultShell={localShell()}
+        />
+        <p className="text-muted-foreground text-sm">{i18next.t("channel:Model routing hint")}</p>
+      </Section>
+    </PageContainer>
   );
 }

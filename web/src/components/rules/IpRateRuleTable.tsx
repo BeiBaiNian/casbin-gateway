@@ -14,11 +14,11 @@
 
 import i18next from "i18next";
 
-import {DataTable, type Column} from "@/components/DataTable";
+import {DataTable, type Column} from "@/components/shared/data-table";
 import {useExpressionTable, type ExpressionTableProps} from "@/components/rules/useExpressionTable";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
-import {NumberInput} from "@/components/ui/number-input";
+import {NumberInput} from "@/components/shared/number-input";
 import type {RuleExpression} from "@/types";
 
 // The server keeps both numbers as strings in the generic expression row, so
@@ -72,7 +72,7 @@ export function IpRateRuleTable({title, table, onUpdateTable}: ExpressionTablePr
   return (
     <DataTable
       columns={columns}
-      data={rows}
+      dataSource={rows}
       rowKey={(_record, index) => String(index)}
       pageSize={0}
       title={title}

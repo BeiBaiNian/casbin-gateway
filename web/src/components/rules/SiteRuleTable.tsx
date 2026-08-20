@@ -16,7 +16,7 @@ import * as React from "react";
 import i18next from "i18next";
 
 import * as Setting from "@/Setting";
-import {DataTable, type Column} from "@/components/DataTable";
+import {DataTable, type Column} from "@/components/shared/data-table";
 import {RowActions} from "@/components/rules/RowActions";
 import {Button} from "@/components/ui/button";
 import {
@@ -110,7 +110,7 @@ export function SiteRuleTable({
   return (
     <DataTable
       columns={columns}
-      data={rows}
+      dataSource={rows}
       rowKey={(_record, index) => String(index)}
       pageSize={0}
       title={title}

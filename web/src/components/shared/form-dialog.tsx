@@ -14,36 +14,60 @@
 
 import * as React from "react";
 import i18next from "i18next";
+import type {VariantProps} from "class-variance-authority";
 
 import {cn} from "@/lib/utils";
-import {Button} from "@/components/ui/button";
+import {Button, buttonVariants} from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {Label} from "@/components/ui/label";
 
-/** The modal every list page opens to create an object: chrome here, fields in the caller. */
+/**
+ * The "open a modal, fill a short form, POST it" shape that most create flows
+ * reduce to. It owns the chrome — title, footer, submit state, Enter to submit —
+ * so a page only writes its fields.
+ */
 export function FormDialog({
   open,
   onOpenChange,
   title,
+  description,
   children,
   onSubmit,
   submitText,
+  cancelText,
   submitting = false,
+  submitDisabled = false,
+  submitVariant = "default",
+  size = "default",
+  footer,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: React.ReactNode;
+  description?: React.ReactNode;
   children: React.ReactNode;
   onSubmit: () => void;
   submitText?: React.ReactNode;
+  cancelText?: React.ReactNode;
   submitting?: boolean;
+  submitDisabled?: boolean;
+  submitVariant?: VariantProps<typeof buttonVariants>["variant"];
+  size?: "default" | "lg" | "xl";
+  footer?: React.ReactNode;
 }) {
+  const sizeClass = {
+    default: "sm:max-w-lg",
+    lg: "sm:max-w-2xl",
+    xl: "sm:max-w-4xl",
+  }[size];
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     onSubmit();
@@ -51,19 +75,26 @@ export function FormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={cn("max-h-[90vh] overflow-hidden", sizeClass)}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4">
-          <div className="-mx-1 grid max-h-[60vh] gap-4 overflow-y-auto px-1 py-0.5">{children}</div>
+          <div className="scrollbar-thin -mx-1 max-h-[60vh] overflow-y-auto px-1 py-0.5">
+            <div className="grid gap-4">{children}</div>
+          </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {i18next.t("general:Cancel")}
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitText ?? i18next.t("general:OK")}
-            </Button>
+            {footer ?? (
+              <>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  {cancelText ?? i18next.t("general:Cancel")}
+                </Button>
+                <Button type="submit" variant={submitVariant} loading={submitting} disabled={submitDisabled}>
+                  {submitText ?? i18next.t("general:OK")}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
@@ -71,7 +102,11 @@ export function FormDialog({
   );
 }
 
-/** One labelled control inside a FormDialog. */
+/**
+ * A labelled control with optional hint and error text. Deliberately
+ * uncontrolled about the input itself so it wraps anything — Input, Textarea,
+ * SimpleSelect, a custom editor.
+ */
 export function Field({
   label,
   htmlFor,
@@ -94,12 +129,12 @@ export function Field({
       {label ? (
         <Label htmlFor={htmlFor}>
           {label}
-          {required ? <span className="ml-0.5 text-destructive">*</span> : null}
+          {required ? <span className="text-destructive">*</span> : null}
         </Label>
       ) : null}
       {children}
-      {hint && !error ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {hint && !error ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
+      {error ? <p className="text-destructive text-xs">{error}</p> : null}
     </div>
   );
 }

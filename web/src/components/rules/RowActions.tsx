@@ -16,7 +16,7 @@ import {ArrowDown, ArrowUp, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import {Button} from "@/components/ui/button";
-import {Tooltip} from "@/components/ui/tooltip";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 
 /** The move-up / move-down / delete trio every editable sub-table carries. */
 export function RowActions({
@@ -34,21 +34,21 @@ export function RowActions({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <Tooltip title={i18next.t("general:Up")}>
+      <SimpleTooltip title={i18next.t("general:Up")}>
         <Button variant="outline" size="icon-sm" disabled={index === 0} onClick={onUp}>
           <ArrowUp />
         </Button>
-      </Tooltip>
-      <Tooltip title={i18next.t("general:Down")}>
+      </SimpleTooltip>
+      <SimpleTooltip title={i18next.t("general:Down")}>
         <Button variant="outline" size="icon-sm" disabled={index === length - 1} onClick={onDown}>
           <ArrowDown />
         </Button>
-      </Tooltip>
-      <Tooltip title={i18next.t("general:Delete")}>
+      </SimpleTooltip>
+      <SimpleTooltip title={i18next.t("general:Delete")}>
         <Button variant="outline" size="icon-sm" onClick={onDelete}>
           <Trash2 />
         </Button>
-      </Tooltip>
+      </SimpleTooltip>
     </div>
   );
 }

@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/** The theme the shell renders in; "dark" toggles the .dark class on <html>. */
+export type ThemeAlgorithm = ("default" | "dark")[];
+
 /**
  * The envelope every /api handler returns (controllers.Response): "ok" or
  * "error" in `status`, the payload in `data`, and a second value such as a row

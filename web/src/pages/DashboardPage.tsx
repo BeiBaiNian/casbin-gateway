@@ -18,7 +18,7 @@ import i18next from "i18next";
 import * as MiscBackend from "@/backend/MiscBackend";
 import * as Setting from "@/Setting";
 import {cn} from "@/lib/utils";
-import {DataTable, type Column} from "@/components/DataTable";
+import {DataTable, type Column} from "@/components/shared/data-table";
 import {BarChartCard, PieChartCard, StatisticCard} from "@/components/charts/ChartCards";
 import type {MetricPoint} from "@/types";
 
@@ -163,7 +163,7 @@ export default function DashboardPage() {
             },
             countColumn,
           ]}
-          data={ipAddresses}
+          dataSource={ipAddresses}
           rowKey={(record, index) => `${record.data}-${index}`}
           pageSize={0}
           title={i18next.t("general:Top 10 IP Addresses")}
@@ -183,7 +183,7 @@ export default function DashboardPage() {
               },
               countColumn,
             ]}
-            data={userAgents}
+            dataSource={userAgents}
             rowKey={(record, index) => `${record.data}-${index}`}
             pageSize={0}
             title={i18next.t("general:Top 10 User-Agents")}
