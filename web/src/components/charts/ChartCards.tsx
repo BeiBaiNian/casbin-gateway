@@ -80,6 +80,7 @@ export function PieChartCard({
   title: string;
   data: {name: string; value: number}[] | null;
 }) {
+  const other = i18next.t("general:Other");
   // Rank the slices, keep the five that get their own color, and sum the tail
   // into a single neutral "Other" slice so no color is ever reused.
   const {slices, config} = React.useMemo(() => {
@@ -92,7 +93,7 @@ export function PieChartCard({
 
     if (tail.length > 0) {
       head.push({
-        name: i18next.t("general:Other"),
+        name: other,
         value: tail.reduce((sum, item) => sum + item.value, 0),
         fill: OTHER_COLOR,
       });
@@ -104,7 +105,7 @@ export function PieChartCard({
     });
 
     return {slices: head, config: chartConfig};
-  }, [data]);
+  }, [data, other]);
 
   return (
     <Card className="h-full">

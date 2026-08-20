@@ -33,7 +33,7 @@ export function LanguageSelect() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {Setting.Countries.map(country => (
-          <DropdownMenuItem key={country.key} onClick={() => Setting.changeLanguage(country.key)}>
+          <DropdownMenuItem key={country.key} onClick={() => Setting.setLanguage(country.key)}>
             <img
               src={`${Setting.StaticBaseUrl}/flag-icons/${country.country}.svg`}
               alt={country.alt}

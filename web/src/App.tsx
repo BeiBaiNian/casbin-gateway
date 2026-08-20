@@ -14,6 +14,8 @@
 
 import * as React from "react";
 import {Navigate, Route, Routes, useLocation} from "react-router-dom";
+import {useTranslation} from "react-i18next";
+import i18next from "i18next";
 
 import * as AccountBackend from "@/backend/AccountBackend";
 import * as Conf from "@/Conf";
@@ -55,6 +57,8 @@ Setting.initCasdoorSdk(Conf.AuthConfig);
 const collapsedKey = "sidebarCollapsed";
 
 export default function App() {
+  // Pages call i18next.t() directly, so re-render the whole tree on a language change.
+  useTranslation();
   // undefined while the account request is in flight, null when signed out.
   const [account, setAccount] = React.useState<Account | null | undefined>(undefined);
   const [collapsed, setCollapsed] = React.useState(
@@ -104,10 +108,10 @@ export default function App() {
     AccountBackend.signout().then(res => {
       if (res.status === "ok") {
         setAccount(null);
-        Setting.showMessage("success", "Successfully signed out, redirected to homepage");
+        Setting.showMessage("success", i18next.t("general:Signed out successfully"));
         Setting.goToLink("/");
       } else {
-        Setting.showMessage("error", `Signout failed: ${res.msg}`);
+        Setting.showMessage("error", `${i18next.t("general:Failed to sign out")}: ${res.msg}`);
       }
     });
   };

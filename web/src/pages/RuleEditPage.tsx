@@ -49,7 +49,7 @@ export default function RuleEditPage() {
       if (res.status === "ok") {
         setRule(res.data);
       } else {
-        Setting.showMessage("error", `Failed to get rule: ${res.msg}`);
+        Setting.showMessage("error", `${i18next.t("general:Failed to get data")}: ${res.msg}`);
       }
     });
   }, [owner, ruleName]);
@@ -80,10 +80,10 @@ export default function RuleEditPage() {
 
     RuleBackend.updateRule(owner, ruleName, Setting.deepCopy(rule)).then(res => {
       if (res.status !== "error") {
-        Setting.showMessage("success", "Rule updated successfully");
+        Setting.showMessage("success", i18next.t("general:Successfully saved"));
         navigate(`/rules/${rule.owner}/${rule.name}`);
       } else {
-        Setting.showMessage("error", `Rule failed to update: ${res.msg}`);
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         getRule();
       }
     });
@@ -98,18 +98,18 @@ export default function RuleEditPage() {
   const renderExpressions = () => {
     switch (rule.type) {
     case "WAF":
-      return <WafRuleTable title="Seclang" table={rule.expressions} onUpdateTable={setExpressions} />;
+      return <WafRuleTable title={i18next.t("rule:Seclang")} table={rule.expressions} onUpdateTable={setExpressions} />;
     case "IP":
-      return <IpRuleTable title="IPs" table={rule.expressions} onUpdateTable={setExpressions} />;
+      return <IpRuleTable title={i18next.t("rule:IPs")} table={rule.expressions} onUpdateTable={setExpressions} />;
     case "User-Agent":
       return (
-        <UaRuleTable title="User-Agents" table={rule.expressions} onUpdateTable={setExpressions} />
+        <UaRuleTable title={i18next.t("rule:User-Agents")} table={rule.expressions} onUpdateTable={setExpressions} />
       );
     case "URL Path":
       return (
         <UaRuleTable
           kind="urlPath"
-          title="URL Paths"
+          title={i18next.t("rule:URL Paths")}
           table={rule.expressions}
           onUpdateTable={setExpressions}
         />

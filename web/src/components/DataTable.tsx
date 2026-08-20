@@ -209,7 +209,7 @@ export function DataTable<T>({
           {pageRows.length === 0 ? (
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
-                {loading ? <Spinner className="mx-auto" /> : (emptyText ?? "No data")}
+                {loading ? <Spinner className="mx-auto" /> : (emptyText ?? i18next.t("general:No data"))}
               </TableCell>
             </TableRow>
           ) : (

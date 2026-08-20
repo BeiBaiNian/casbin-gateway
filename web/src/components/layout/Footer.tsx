@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import i18next from "i18next";
+
 import * as Setting from "@/Setting";
 
 export function Footer() {
   return (
     <footer className="mt-auto border-t py-4">
       <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-        Powered by
+        {i18next.t("general:Powered by")}
         <a
           target="_blank"
           rel="noreferrer"

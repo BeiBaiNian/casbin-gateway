@@ -76,14 +76,14 @@ export default function SigninPage() {
   };
 
   if (loading) {
-    return <PageSpinner tip="Signing in..." />;
+    return <PageSpinner tip={i18next.t("general:Signing in...")} />;
   }
 
   if (!showSignin) {
     return (
       <Result
         status="warning"
-        title="Login Error"
+        title={i18next.t("general:Login Error")}
         subTitle={errorMessage || i18next.t("account:Sign in is unavailable")}
       />
     );

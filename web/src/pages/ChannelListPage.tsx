@@ -221,7 +221,7 @@ export default function ChannelListPage({account}: {account: Account}) {
             {i18next.t("general:Edit")}
           </Button>
           <ConfirmButton
-            title={`${i18next.t("general:Delete")} channel "${record.name}"?`}
+            title={i18next.t("general:Sure to delete {name} ?").replace("{name}", record.name)}
             onConfirm={() => deleteChannel(record)}
           >
             <Button size="sm" variant="destructive">

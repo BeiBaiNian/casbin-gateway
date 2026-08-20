@@ -198,11 +198,6 @@ export function setLanguage(language: string) {
   i18next.changeLanguage(language);
 }
 
-export function changeLanguage(language: string) {
-  setLanguage(language);
-  window.location.reload();
-}
-
 export function isResponseDenied(data: {msg?: string}) {
   return data.msg === "Unauthorized operation" || data.msg === "未授权的操作";
 }
