@@ -85,6 +85,28 @@ Gateway reads and writes these files in place. It stages a replacement and renam
 
 Configuration is found whether or not the agent itself was discovered, so an agent installed some way Gateway does not recognize still shows the skills it has on disk. Like agent monitoring, this only ever sees the host Gateway runs on.
 
+### What was sent to the model
+
+Agents point at Gateway instead of at the model vendor, so every request they make passes through it. The **LLM Records** page is where that traffic is read back: one row per relayed request, and behind each row the whole body that went upstream - the full system prompt, every message in order with its tool calls and tool results, and the schema of every tool the model was offered. Both wire formats are shown the same way, so an OpenAI request and an Anthropic one read alike.
+
+Each row also carries what the turn cost: input tokens billed as fresh, tokens read from and written to the prompt cache, output tokens, and the price of all four. Above the table the same window is totalled, with a cache hit rate and a per-model breakdown. Prices are built-in list prices, which vendors change and resellers do not follow; point `llmPricingFile` at a JSON file of your own rates to correct them.
+
+Turn **Live** on and the page stops polling: new requests appear at the top as Gateway writes them.
+
+Nothing is recorded until you ask for it, because a prompt can carry anything the user pasted into it. In `conf/app.conf`:
+
+```ini
+; "off" keeps nothing, "metadata" records who called which model with which
+; outcome, "full" also stores the request body - which is what the page needs
+; to show prompts, messages and tool schemas.
+llmRecordMode = "full"
+llmRecordRetentionDays = 30
+llmRecordMaxRecords = 10000
+llmRecordMaxPayloadBytes = 1048576
+```
+
+Bodies are sanitized before they are stored: anything that looks like a credential is replaced, and the count of replacements is shown with the record. Request headers, which is where the inbound API key is, never reach a record at all. A body over `llmRecordMaxPayloadBytes` keeps its structure and loses only its longest strings, so a large conversation is still listed message by message.
+
 ### Quick start
 
 From nothing to a request flowing through the gateway, in four steps. No database server is needed: Gateway creates `./data/casbin-gateway.db` on first start.

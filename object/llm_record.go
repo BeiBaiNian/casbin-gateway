@@ -30,6 +30,14 @@ import (
 
 const llmRecordSummaryRunes = 160
 
+// llmOversizeFactor is how far past the payload limit a body may still be
+// worth shrinking rather than dropping.
+const llmOversizeFactor = 4
+
+// llmStringCaps are tried in turn on a body over the limit, so that every
+// message and tool stays visible where dropping the body would keep none.
+var llmStringCaps = []int{16384, 4096, 1024, 256}
+
 // LlmRecord is one client request relayed by the LLM proxy, together with the
 // outcome it ended in. Payload is filled only in "full" mode, and only after
 // auditutil has removed the credentials the body may carry.
@@ -50,9 +58,25 @@ type LlmRecord struct {
 	Attempts   int    `xorm:"int" json:"attempts"`
 	Error      string `xorm:"varchar(500)" json:"error"`
 
+	// PromptTokens counts only the input billed as fresh: the cached part is
+	// reported separately, so the counters can be added up without counting a
+	// token twice.
 	PromptTokens     int `xorm:"int" json:"promptTokens"`
 	CompletionTokens int `xorm:"int" json:"completionTokens"`
+	CacheReadTokens  int `xorm:"int" json:"cacheReadTokens"`
+	CacheWriteTokens int `xorm:"int" json:"cacheWriteTokens"`
+	ReasoningTokens  int `xorm:"int" json:"reasoningTokens"`
 	TotalTokens      int `xorm:"int" json:"totalTokens"`
+
+	// Cost is in US dollars, and means anything only where Priced is true.
+	Cost   float64 `xorm:"double" json:"cost"`
+	Priced bool    `xorm:"bool" json:"priced"`
+
+	// Counted while the body is parsed, so the list can show the shape of a
+	// request without loading it.
+	SystemBytes  int `xorm:"int" json:"systemBytes"`
+	MessageCount int `xorm:"int" json:"messageCount"`
+	ToolCount    int `xorm:"int" json:"toolCount"`
 
 	Summary    string `xorm:"varchar(500)" json:"summary"`
 	Payload    string `xorm:"mediumtext" json:"payload"`
@@ -68,6 +92,31 @@ type LlmRecordFilter struct {
 	Agent    string
 	ClientIp string
 	Outcome  string
+	// Since bounds the window to records created after it, formatted the way
+	// CreatedTime is. Empty means every record still retained.
+	Since string
+}
+
+// LlmModelStat is one model's share of the window the stats cover.
+type LlmModelStat struct {
+	Model    string  `json:"model"`
+	Requests int64   `json:"requests"`
+	Tokens   int64   `json:"tokens"`
+	Cost     float64 `json:"cost"`
+}
+
+// LlmRecordStats totals the records a filter matches.
+type LlmRecordStats struct {
+	Requests         int64          `json:"requests"`
+	Failed           int64          `json:"failed"`
+	PromptTokens     int64          `json:"promptTokens"`
+	CompletionTokens int64          `json:"completionTokens"`
+	CacheReadTokens  int64          `json:"cacheReadTokens"`
+	CacheWriteTokens int64          `json:"cacheWriteTokens"`
+	TotalTokens      int64          `json:"totalTokens"`
+	Cost             float64        `json:"cost"`
+	Unpriced         int64          `json:"unpriced"`
+	Models           []LlmModelStat `json:"models"`
 }
 
 // LlmRecordStatus is what the management page shows about the recorder itself,
@@ -143,7 +192,7 @@ func AddLlmRecord(record *LlmRecord, rawBody []byte) {
 	record.Bytes = len(rawBody)
 	if conf.GetLlmRecordMode() != conf.LlmRecordFull {
 		rawBody = nil
-	} else if len(rawBody) > auditutil.MaxPayloadBytes {
+	} else if len(rawBody) > conf.GetLlmRecordMaxPayloadBytes()*llmOversizeFactor {
 		record.Truncated = true
 		rawBody = nil
 	}
@@ -196,9 +245,12 @@ func (writer *llmRecordWriter) write(task llmRecordTask) {
 	if len(task.rawBody) > 0 {
 		fillLlmRecordBody(task.record, task.rawBody)
 	}
+	fillLlmRecordCost(task.record)
 	if _, err := ormer.Engine.Insert(task.record); err != nil {
 		beego.Error("LLM record write failed:", err)
+		return
 	}
+	publishLlmRecord(task.record)
 }
 
 func (writer *llmRecordWriter) prune() {
@@ -249,18 +301,100 @@ func fillLlmRecordBody(record *LlmRecord, rawBody []byte) {
 	}
 
 	sanitized := auditutil.SanitizeValue("", decoded)
-	encoded, err := json.Marshal(sanitized)
-	if err != nil {
-		return
-	}
-	if len(encoded) > auditutil.MaxPayloadBytes {
-		record.Truncated = true
-		record.Payload = auditutil.EncodeBoundedJSON(sanitized, auditutil.MaxPayloadBytes)
-	} else {
-		record.Payload = string(encoded)
-	}
+	describeLlmRequest(record, sanitized)
+
+	payload, truncated := encodeLlmBody(sanitized, conf.GetLlmRecordMaxPayloadBytes())
+	record.Payload = payload
+	record.Truncated = record.Truncated || truncated
 	record.Redactions = strings.Count(record.Payload, "[REDACTED")
 	record.Summary = llmRecordSummary(sanitized)
+}
+
+// fillLlmRecordCost prices a record from its token counters.
+func fillLlmRecordCost(record *LlmRecord) {
+	record.Cost, record.Priced = GetLlmCost(
+		record.Model, record.PromptTokens, record.CompletionTokens, record.CacheWriteTokens, record.CacheReadTokens)
+}
+
+// describeLlmRequest counts what the request was made of.
+func describeLlmRequest(record *LlmRecord, value any) {
+	body, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	record.SystemBytes = len(llmSystemText(body))
+	if messages, ok := body["messages"].([]any); ok {
+		record.MessageCount = len(messages)
+	}
+	if tools, ok := body["tools"].([]any); ok {
+		record.ToolCount = len(tools)
+	}
+}
+
+// llmSystemText is the system prompt however the API spells it: a top-level
+// field for Anthropic, the first messages for OpenAI.
+func llmSystemText(body map[string]any) string {
+	if text := llmMessageText(body["system"]); text != "" {
+		return text
+	}
+
+	messages, _ := body["messages"].([]any)
+	parts := []string{}
+	for _, item := range messages {
+		message, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if role, _ := message["role"].(string); role != "system" && role != "developer" {
+			continue
+		}
+		parts = append(parts, llmMessageText(message["content"]))
+	}
+	return strings.Join(parts, "\n")
+}
+
+// encodeLlmBody serializes a body within the limit, capping its strings a step
+// at a time until it fits. It reports whether anything was cut.
+func encodeLlmBody(value any, maximum int) (string, bool) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", false
+	}
+	if len(encoded) <= maximum {
+		return string(encoded), false
+	}
+
+	for _, cap := range llmStringCaps {
+		encoded, err = json.Marshal(boundStrings(value, cap))
+		if err != nil {
+			return "", true
+		}
+		if len(encoded) <= maximum {
+			return string(encoded), true
+		}
+	}
+	return auditutil.EncodeBoundedJSON(value, maximum), true
+}
+
+// boundStrings caps every string in a decoded body, leaving its structure alone.
+func boundStrings(value any, maximum int) any {
+	switch typed := value.(type) {
+	case string:
+		return auditutil.BoundString(typed, maximum)
+	case []any:
+		bounded := make([]any, len(typed))
+		for i, item := range typed {
+			bounded[i] = boundStrings(item, maximum)
+		}
+		return bounded
+	case map[string]any:
+		bounded := make(map[string]any, len(typed))
+		for key, item := range typed {
+			bounded[key] = boundStrings(item, maximum)
+		}
+		return bounded
+	}
+	return value
 }
 
 // llmRecordSummary is the last thing the user asked for, which is what makes a
@@ -332,11 +466,15 @@ func llmRecordSession(filter LlmRecordFilter) *xorm.Session {
 	if filter.ClientIp != "" {
 		session = session.And("client_ip = ?", filter.ClientIp)
 	}
+	if filter.Since != "" {
+		session = session.And("created_time >= ?", filter.Since)
+	}
 	switch filter.Outcome {
 	case "ok":
 		session = session.And("status >= 200").And("status < 300")
 	case "error":
-		session = session.And("status = 0 or status < 200 or status >= 300")
+		// Parenthesized because it sits next to the AND clauses above.
+		session = session.And("(status = 0 or status < 200 or status >= 300)")
 	}
 	return session
 }
@@ -390,4 +528,125 @@ func GetLlmRecordStatus() (*LlmRecordStatus, error) {
 		Dropped:       llmWriter.dropped.Load(),
 		Count:         count,
 	}, nil
+}
+
+// GetLlmRecordStats totals the same records GetLlmRecords lists.
+func GetLlmRecordStats(filter LlmRecordFilter, topModels int) (*LlmRecordStats, error) {
+	countSession := llmRecordSession(filter)
+	defer countSession.Close()
+	requests, err := countSession.Count(&LlmRecord{})
+	if err != nil {
+		return nil, err
+	}
+
+	failedSession := llmRecordSession(filter)
+	defer failedSession.Close()
+	failed, err := failedSession.And("(status = 0 or status < 200 or status >= 300)").Count(&LlmRecord{})
+	if err != nil {
+		return nil, err
+	}
+
+	sumSession := llmRecordSession(filter)
+	defer sumSession.Close()
+	sums, err := sumSession.SumsInt(&LlmRecord{},
+		"prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_tokens", "total_tokens")
+	if err != nil {
+		return nil, err
+	}
+
+	costSession := llmRecordSession(filter)
+	defer costSession.Close()
+	cost, err := costSession.Sum(&LlmRecord{}, "cost")
+	if err != nil {
+		return nil, err
+	}
+
+	unpricedSession := llmRecordSession(filter)
+	defer unpricedSession.Close()
+	unpriced, err := unpricedSession.And("priced = ?", false).And("total_tokens > 0").Count(&LlmRecord{})
+	if err != nil {
+		return nil, err
+	}
+
+	stats := &LlmRecordStats{
+		Requests:         requests,
+		Failed:           failed,
+		PromptTokens:     sums[0],
+		CompletionTokens: sums[1],
+		CacheReadTokens:  sums[2],
+		CacheWriteTokens: sums[3],
+		TotalTokens:      sums[4],
+		Cost:             cost,
+		Unpriced:         unpriced,
+		Models:           []LlmModelStat{},
+	}
+
+	modelSession := llmRecordSession(filter)
+	defer modelSession.Close()
+	err = modelSession.Table("llm_record").
+		Select("model as model, COUNT(*) as requests, SUM(total_tokens) as tokens, SUM(cost) as cost").
+		GroupBy("model").
+		Desc("requests").
+		Limit(topModels).
+		Find(&stats.Models)
+	if err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
+// llmSubscriberBuffer is how far a live watcher may fall behind before it
+// starts losing records.
+const llmSubscriberBuffer = 64
+
+// llmRecordHub fans finished records out to the dashboards watching live. A
+// watcher that cannot keep up loses records rather than holding the writer up.
+type llmRecordHub struct {
+	mutex       sync.Mutex
+	subscribers map[int64]chan *LlmRecord
+	nextId      int64
+}
+
+var llmHub = llmRecordHub{subscribers: map[int64]chan *LlmRecord{}}
+
+// SubscribeLlmRecords opens a live feed of records as they are written. The
+// caller must pass the id back to UnsubscribeLlmRecords when it is done.
+func SubscribeLlmRecords() (int64, <-chan *LlmRecord) {
+	llmHub.mutex.Lock()
+	defer llmHub.mutex.Unlock()
+
+	llmHub.nextId++
+	id := llmHub.nextId
+	feed := make(chan *LlmRecord, llmSubscriberBuffer)
+	llmHub.subscribers[id] = feed
+	return id, feed
+}
+
+func UnsubscribeLlmRecords(id int64) {
+	llmHub.mutex.Lock()
+	defer llmHub.mutex.Unlock()
+
+	if feed, ok := llmHub.subscribers[id]; ok {
+		delete(llmHub.subscribers, id)
+		close(feed)
+	}
+}
+
+// publishLlmRecord hands a record to every live feed, without its body: the
+// feed keeps a table up to date, and a row is opened one at a time.
+func publishLlmRecord(record *LlmRecord) {
+	llmHub.mutex.Lock()
+	defer llmHub.mutex.Unlock()
+
+	if len(llmHub.subscribers) == 0 {
+		return
+	}
+	summary := *record
+	summary.Payload = ""
+	for _, feed := range llmHub.subscribers {
+		select {
+		case feed <- &summary:
+		default:
+		}
+	}
 }

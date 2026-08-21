@@ -13,23 +13,29 @@
 // limitations under the License.
 
 import * as React from "react";
-import {Logs, RefreshCw, Trash2} from "lucide-react";
+import {Activity, CircleDollarSign, Database, Hash, Logs, RefreshCw, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import * as LlmRecordBackend from "@/backend/LlmRecordBackend";
 import * as Setting from "@/Setting";
+import {RequestInspector} from "@/components/llm/request-inspector";
 import {DataTable, type Column} from "@/components/shared/data-table";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
-import {CodeBlock, CodeText, DescriptionList, UnauthorizedResult} from "@/components/shared/misc";
+import {Loading} from "@/components/shared/loading";
+import {CodeText, DescriptionList, UnauthorizedResult} from "@/components/shared/misc";
 import {PageContainer, PageHeader} from "@/components/shared/page-header";
 import {SimpleSelect} from "@/components/shared/simple-select";
+import {StatCard} from "@/components/shared/stat-card";
 import {MessageAlert} from "@/components/ui/alert";
 import {Badge, type BadgeVariant} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Switch} from "@/components/ui/switch";
-import type {Account, LlmRecord, LlmRecordStatus} from "@/types";
+import type {Account, LlmPrice, LlmRecord, LlmRecordStats, LlmRecordStatus} from "@/types";
+
+/** How often the totals are recomputed while the live feed is open. */
+const STATS_INTERVAL = 10000;
 
 function statusVariant(status: number): BadgeVariant {
   if (status >= 200 && status < 300) {
@@ -41,29 +47,70 @@ function statusVariant(status: number): BadgeVariant {
   return "danger";
 }
 
-function formatPayload(payload: string) {
-  try {
-    return JSON.stringify(JSON.parse(payload), null, 2);
-  } catch {
-    return payload;
+function formatCost(cost: number) {
+  if (cost <= 0) {
+    return "$0";
   }
+  if (cost < 0.01) {
+    return `$${cost.toFixed(4)}`;
+  }
+  if (cost < 1) {
+    return `$${cost.toFixed(3)}`;
+  }
+  return `$${cost.toFixed(2)}`;
+}
+
+function formatTokens(tokens: number) {
+  if (tokens < 1000) {
+    return String(tokens);
+  }
+  if (tokens < 1000000) {
+    return `${(tokens / 1000).toFixed(1)}k`;
+  }
+  return `${(tokens / 1000000).toFixed(2)}M`;
+}
+
+/** Share of the input tokens served out of the prompt cache. */
+function cacheHitRate(stats: LlmRecordStats) {
+  const input = stats.promptTokens + stats.cacheReadTokens + stats.cacheWriteTokens;
+  return input === 0 ? 0 : (stats.cacheReadTokens / input) * 100;
+}
+
+function tokenBreakdown(record: LlmRecord) {
+  return [
+    `${i18next.t("llm:Fresh input")}: ${record.promptTokens.toLocaleString()}`,
+    `${i18next.t("llm:Cache read")}: ${record.cacheReadTokens.toLocaleString()}`,
+    `${i18next.t("llm:Cache write")}: ${record.cacheWriteTokens.toLocaleString()}`,
+    `${i18next.t("llm:Output")}: ${record.completionTokens.toLocaleString()}`,
+  ].join("\n");
 }
 
 /** Mounted only once a row is expanded, which is when the body is fetched. */
 function RecordDetail({record, onDelete}: {record: LlmRecord; onDelete: () => void}) {
   const [detail, setDetail] = React.useState<LlmRecord | null>(null);
+  const [price, setPrice] = React.useState<LlmPrice | null>(null);
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
     LlmRecordBackend.getLlmRecord(record.id)
-      .then(res => (res.status === "ok" ? setDetail(res.data ?? null) : setError(res.msg)))
+      .then(res => {
+        if (res.status === "ok") {
+          setDetail(res.data ?? null);
+          setPrice(res.data2 ?? null);
+        } else {
+          setError(res.msg);
+        }
+      })
       .catch(err => setError(err.message || String(err)));
   }, [record.id]);
 
   const payload = detail?.payload ?? "";
+  const rate = price
+    ? `${formatCost(price.input)} / ${formatCost(price.output)} ${i18next.t("llm:per million")}`
+    : i18next.t("llm:No price for this model");
 
   return (
-    <div className="flex flex-col gap-3 px-4 py-3">
+    <div className="flex flex-col gap-4 px-4 py-3">
       <DescriptionList
         columns={3}
         items={[
@@ -73,7 +120,25 @@ function RecordDetail({record, onDelete}: {record: LlmRecord; onDelete: () => vo
           record.channel && {label: i18next.t("llm:Channel"), value: <CodeText>{record.channel}</CodeText>},
           record.agent && {label: i18next.t("agent:Agent"), value: <CodeText>{record.agent}</CodeText>},
           {label: i18next.t("llm:Attempts"), value: record.attempts},
-          {label: i18next.t("llm:Tokens"), value: `${record.promptTokens} + ${record.completionTokens} = ${record.totalTokens}`},
+          {
+            label: i18next.t("llm:Input tokens"),
+            value: `${record.promptTokens.toLocaleString()} ${i18next.t("llm:fresh")}`,
+          },
+          {
+            label: i18next.t("llm:Cached input"),
+            value: `${record.cacheReadTokens.toLocaleString()} ${i18next.t("llm:read")} · ${record.cacheWriteTokens.toLocaleString()} ${i18next.t("llm:written")}`,
+          },
+          {
+            label: i18next.t("llm:Output tokens"),
+            value:
+              record.reasoningTokens > 0
+                ? `${record.completionTokens.toLocaleString()} · ${record.reasoningTokens.toLocaleString()} ${i18next.t("llm:reasoning")}`
+                : record.completionTokens.toLocaleString(),
+          },
+          {
+            label: i18next.t("llm:Cost"),
+            value: record.priced ? `${formatCost(record.cost)} · ${rate}` : i18next.t("llm:No price for this model"),
+          },
           {label: i18next.t("llm:Request size"), value: `${record.bytes.toLocaleString()} B`},
           {label: i18next.t("llm:Redacted values"), value: record.redactions},
           record.error && {label: i18next.t("llm:Error"), value: record.error},
@@ -81,19 +146,13 @@ function RecordDetail({record, onDelete}: {record: LlmRecord; onDelete: () => vo
       />
 
       {error ? <MessageAlert title={error} /> : null}
+      {record.truncated ? <MessageAlert variant="warning" title={i18next.t("llm:Body was shortened")} /> : null}
 
-      {payload ? (
-        <div className="grid gap-1">
-          <span className="text-muted-foreground text-xs">{i18next.t("agent:Payload")}</span>
-          <CodeBlock copyable maxHeight="24rem">
-            {formatPayload(payload)}
-          </CodeBlock>
-        </div>
-      ) : (
-        <span className="text-muted-foreground text-xs">
-          {record.truncated ? i18next.t("llm:Body too large to store") : i18next.t("llm:Body not stored")}
-        </span>
-      )}
+      {payload ? <RequestInspector payload={payload} /> : null}
+      {!payload && detail === null && error === "" ? <Loading type="small" /> : null}
+      {!payload && detail !== null ? (
+        <span className="text-muted-foreground text-xs">{i18next.t("llm:Body not stored")}</span>
+      ) : null}
 
       <div>
         <ConfirmDialog
@@ -114,36 +173,46 @@ export default function LlmRecordsPage({account}: {account: Account}) {
   const isAdmin = Setting.isAdminUser(account);
   const [records, setRecords] = React.useState<LlmRecord[]>([]);
   const [status, setStatus] = React.useState<LlmRecordStatus | null>(null);
+  const [stats, setStats] = React.useState<LlmRecordStats | null>(null);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(25);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
-  const [autoRefresh, setAutoRefresh] = React.useState(false);
+  const [live, setLive] = React.useState(false);
+  const [liveOpen, setLiveOpen] = React.useState(false);
+  const [pending, setPending] = React.useState(0);
 
   const [outcome, setOutcome] = React.useState("");
+  const [windowHours, setWindowHours] = React.useState("24");
   const [modelDraft, setModelDraft] = React.useState("");
   const [clientIpDraft, setClientIpDraft] = React.useState("");
   const [filter, setFilter] = React.useState<LlmRecordBackend.LlmRecordFilter>({});
+
+  const activeFilter = React.useMemo(
+    () => ({...filter, outcome: outcome, windowHours: Number(windowHours)}),
+    [filter, outcome, windowHours],
+  );
 
   const load = React.useCallback(
     (nextPage = page, nextPageSize = pageSize, foreground = true) => {
       if (!isAdmin) {
         return;
       }
-      // A background poll must not raise the loading state, or it would cover
-      // the rows the operator is reading every few seconds.
+      // A background reload keeps the loading state down, or it would cover the
+      // rows being read.
       if (foreground) {
         setLoading(true);
       }
 
-      LlmRecordBackend.getLlmRecords(nextPage, nextPageSize, {...filter, outcome: outcome})
+      LlmRecordBackend.getLlmRecords(nextPage, nextPageSize, activeFilter)
         .then(res => {
           if (res.status === "ok") {
             setRecords(res.data ?? []);
             setTotal(res.data2 ?? 0);
             setPage(nextPage);
             setPageSize(nextPageSize);
+            setPending(0);
             setError("");
           } else {
             setError(res.msg || i18next.t("general:Failed to get data"));
@@ -156,8 +225,19 @@ export default function LlmRecordsPage({account}: {account: Account}) {
           }
         });
     },
-    [filter, isAdmin, outcome, page, pageSize],
+    [activeFilter, isAdmin, page, pageSize],
   );
+
+  const loadStats = React.useCallback(() => {
+    if (!isAdmin) {
+      return;
+    }
+    LlmRecordBackend.getLlmRecordStats(activeFilter).then(res => {
+      if (res.status === "ok") {
+        setStats(res.data ?? null);
+      }
+    });
+  }, [activeFilter, isAdmin]);
 
   const loadStatus = React.useCallback(() => {
     if (!isAdmin) {
@@ -172,21 +252,77 @@ export default function LlmRecordsPage({account}: {account: Account}) {
 
   React.useEffect(() => {
     load(1, pageSize);
+    loadStats();
     loadStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, outcome]);
+  }, [activeFilter]);
+
+  // The feed carries every record Gateway writes, so the page drops the ones
+  // its own filter would not have asked for.
+  const matchesFilter = React.useCallback(
+    (record: LlmRecord) => {
+      if (activeFilter.model && !record.model.includes(activeFilter.model)) {
+        return false;
+      }
+      if (activeFilter.clientIp && record.clientIp !== activeFilter.clientIp) {
+        return false;
+      }
+      const succeeded = record.status >= 200 && record.status < 300;
+      if (outcome === "ok" && !succeeded) {
+        return false;
+      }
+      if (outcome === "error" && succeeded) {
+        return false;
+      }
+      return true;
+    },
+    [activeFilter, outcome],
+  );
 
   React.useEffect(() => {
-    if (!autoRefresh) {
+    if (!live || !isAdmin) {
+      setLiveOpen(false);
       return undefined;
     }
-    const interval = setInterval(() => load(page, pageSize, false), 5000);
-    return () => clearInterval(interval);
-  }, [autoRefresh, load, page, pageSize]);
+
+    const close = LlmRecordBackend.streamLlmRecords({
+      onRecord: record => {
+        if (!matchesFilter(record)) {
+          return;
+        }
+        setTotal(current => current + 1);
+        // A page further down counts them instead of reshuffling what is
+        // being read.
+        setPage(currentPage => {
+          if (currentPage === 1) {
+            setRecords(current => [record, ...current].slice(0, pageSize));
+          } else {
+            setPending(current => current + 1);
+          }
+          return currentPage;
+        });
+      },
+      onOpen: () => setLiveOpen(true),
+      onError: () => setLiveOpen(false),
+    });
+    const interval = setInterval(loadStats, STATS_INTERVAL);
+
+    return () => {
+      close();
+      clearInterval(interval);
+      setLiveOpen(false);
+    };
+  }, [isAdmin, live, loadStats, matchesFilter, pageSize]);
 
   if (!isAdmin) {
     return <UnauthorizedResult />;
   }
+
+  const refresh = () => {
+    load(page, pageSize);
+    loadStats();
+    loadStatus();
+  };
 
   const deleteRecord = (id: number) => {
     LlmRecordBackend.deleteLlmRecord(id)
@@ -195,7 +331,7 @@ export default function LlmRecordsPage({account}: {account: Account}) {
           Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
         } else {
           Setting.showMessage("success", i18next.t("general:Deleted successfully"));
-          load(page, pageSize);
+          refresh();
         }
       })
       .catch(err => Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${err}`));
@@ -209,6 +345,7 @@ export default function LlmRecordsPage({account}: {account: Account}) {
         } else {
           Setting.showMessage("success", i18next.t("general:Deleted successfully"));
           load(1, pageSize);
+          loadStats();
           loadStatus();
         }
       })
@@ -241,12 +378,12 @@ export default function LlmRecordsPage({account}: {account: Account}) {
       title: i18next.t("general:Client ip"),
       key: "clientIp",
       dataIndex: "clientIp",
-      width: "130px",
+      width: "120px",
     },
     {
       title: i18next.t("llm:Status"),
       key: "status",
-      width: "130px",
+      width: "120px",
       render: (_value, record) => (
         <div className="flex flex-wrap items-center gap-1">
           <Badge variant={statusVariant(record.status)}>{record.status || i18next.t("llm:No response")}</Badge>
@@ -258,35 +395,61 @@ export default function LlmRecordsPage({account}: {account: Account}) {
       title: i18next.t("agent:Duration"),
       key: "durationMs",
       dataIndex: "durationMs",
-      width: "110px",
+      width: "100px",
       render: (value: number) => `${value.toLocaleString()} ms`,
     },
     {
       title: i18next.t("llm:Tokens"),
       key: "totalTokens",
-      width: "120px",
+      width: "150px",
       render: (_value, record) =>
         record.totalTokens > 0 ? (
-          <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-col gap-0.5" title={tokenBreakdown(record)}>
             <span>{record.totalTokens.toLocaleString()}</span>
             <span className="text-muted-foreground truncate text-xs">
-              {record.promptTokens.toLocaleString()} + {record.completionTokens.toLocaleString()}
+              {formatTokens(record.promptTokens)} ↑ · {formatTokens(record.completionTokens)} ↓
+              {record.cacheReadTokens > 0 ? ` · ${formatTokens(record.cacheReadTokens)} ⚡` : ""}
             </span>
           </div>
         ) : null,
     },
     {
+      title: i18next.t("llm:Cost"),
+      key: "cost",
+      width: "90px",
+      align: "right",
+      render: (_value, record) =>
+        record.priced ? (
+          formatCost(record.cost)
+        ) : (
+          <span className="text-muted-foreground" title={i18next.t("llm:No price for this model")}>
+            —
+          </span>
+        ),
+    },
+    {
       title: i18next.t("llm:Request"),
       key: "summary",
       render: (_value, record) => (
-        <span className="text-muted-foreground block truncate text-xs" title={record.summary || record.error}>
-          {record.summary || record.error}
-        </span>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate text-xs" title={record.summary || record.error}>
+            {record.summary || record.error}
+          </span>
+          {record.messageCount > 0 || record.toolCount > 0 ? (
+            <span className="text-muted-foreground truncate text-xs">
+              {record.messageCount} {i18next.t("llm:messages")} · {record.toolCount} {i18next.t("llm:tools")}
+              {record.systemBytes > 0
+                ? ` · ${i18next.t("llm:system")} ${(record.systemBytes / 1000).toFixed(1)}k`
+                : ""}
+            </span>
+          ) : null}
+        </div>
       ),
     },
   ];
 
   const modeOff = status !== null && status.mode === "off";
+  const modeMetadata = status !== null && status.mode === "metadata";
   const description = status
     ? i18next
       .t("llm:Mode {mode}, kept for {days} days, up to {max} records")
@@ -302,11 +465,30 @@ export default function LlmRecordsPage({account}: {account: Account}) {
         description={description}
         actions={
           <>
+            <SimpleSelect
+              className="w-[150px]"
+              value={windowHours}
+              onChange={setWindowHours}
+              options={[
+                {label: i18next.t("llm:Last hour"), value: "1"},
+                {label: i18next.t("llm:Last 24 hours"), value: "24"},
+                {label: i18next.t("llm:Last 7 days"), value: "168"},
+                {label: i18next.t("llm:All time"), value: "0"},
+              ]}
+            />
             <Label className="text-sm font-normal">
-              <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
-              {i18next.t("agent:Auto refresh")}
+              <Switch checked={live} onCheckedChange={setLive} />
+              <span className="flex items-center gap-1.5">
+                {i18next.t("llm:Live")}
+                {live ? (
+                  <span
+                    className={liveOpen ? "bg-success size-2 animate-pulse rounded-full" : "bg-muted-foreground size-2 rounded-full"}
+                    title={liveOpen ? i18next.t("llm:Feed connected") : i18next.t("llm:Feed connecting")}
+                  />
+                ) : null}
+              </span>
             </Label>
-            <Button variant="outline" onClick={() => load(page, pageSize)} loading={loading}>
+            <Button variant="outline" onClick={refresh} loading={loading}>
               <RefreshCw />
               {i18next.t("general:Refresh")}
             </Button>
@@ -321,6 +503,7 @@ export default function LlmRecordsPage({account}: {account: Account}) {
       />
 
       {modeOff ? <MessageAlert variant="info" title={i18next.t("llm:Recording is off")} description={i18next.t("llm:Recording is off detail")} /> : null}
+      {modeMetadata ? <MessageAlert variant="info" title={i18next.t("llm:Bodies are not stored")} description={i18next.t("llm:Bodies are not stored detail")} /> : null}
       {status && status.dropped > 0 ? (
         <MessageAlert
           variant="warning"
@@ -328,6 +511,57 @@ export default function LlmRecordsPage({account}: {account: Account}) {
         />
       ) : null}
       {error ? <MessageAlert title={error} /> : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label={i18next.t("llm:Requests")}
+          value={(stats?.requests ?? 0).toLocaleString()}
+          icon={Activity}
+          hint={
+            stats && stats.failed > 0
+              ? `${stats.failed.toLocaleString()} ${i18next.t("llm:failed")}`
+              : i18next.t("llm:all succeeded")
+          }
+          tone={stats && stats.failed > 0 ? "warning" : "default"}
+        />
+        <StatCard
+          label={i18next.t("llm:Tokens")}
+          value={formatTokens(stats?.totalTokens ?? 0)}
+          icon={Hash}
+          hint={`${formatTokens(stats?.promptTokens ?? 0)} ${i18next.t("llm:in")} · ${formatTokens(stats?.completionTokens ?? 0)} ${i18next.t("llm:out")}`}
+        />
+        <StatCard
+          label={i18next.t("llm:Cache hit rate")}
+          value={`${(stats ? cacheHitRate(stats) : 0).toFixed(0)}%`}
+          icon={Database}
+          percent={stats ? cacheHitRate(stats) : 0}
+          hint={`${formatTokens(stats?.cacheReadTokens ?? 0)} ${i18next.t("llm:read")} · ${formatTokens(stats?.cacheWriteTokens ?? 0)} ${i18next.t("llm:written")}`}
+        />
+        <StatCard
+          label={i18next.t("llm:Cost")}
+          value={formatCost(stats?.cost ?? 0)}
+          icon={CircleDollarSign}
+          hint={
+            stats && stats.unpriced > 0
+              ? i18next.t("llm:{count} records have no price").replace("{count}", stats.unpriced.toLocaleString())
+              : i18next.t("llm:List prices, see llmPricingFile")
+          }
+        />
+      </div>
+
+      {stats && stats.models.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {stats.models.map(model => (
+            <Badge key={model.model} variant="muted" className="gap-2">
+              <span className="font-mono">{model.model}</span>
+              <span>{model.requests.toLocaleString()}</span>
+              <span className="text-muted-foreground">
+                {formatTokens(model.tokens)} · {formatCost(model.cost)}
+              </span>
+            </Badge>
+          ))}
+        </div>
+      ) : null}
 
       <form
         className="flex flex-wrap items-center gap-2"
@@ -361,6 +595,11 @@ export default function LlmRecordsPage({account}: {account: Account}) {
         <Button type="submit" variant="outline">
           {i18next.t("agent:Filter")}
         </Button>
+        {pending > 0 ? (
+          <Button variant="ghost" onClick={() => load(1, pageSize)}>
+            {i18next.t("llm:{count} new records").replace("{count}", pending.toLocaleString())}
+          </Button>
+        ) : null}
       </form>
 
       <DataTable

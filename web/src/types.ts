@@ -226,9 +226,19 @@ export interface LlmRecord {
   durationMs: number;
   attempts: number;
   error: string;
+  /** Input billed as fresh: the cached part is counted separately. */
   promptTokens: number;
   completionTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
   totalTokens: number;
+  /** US dollars, meaningful only where `priced` is true. */
+  cost: number;
+  priced: boolean;
+  systemBytes: number;
+  messageCount: number;
+  toolCount: number;
   summary: string;
   /** Only returned by getLlmRecord, the list endpoint leaves it out. */
   payload: string;
@@ -243,6 +253,35 @@ export interface LlmRecordStatus {
   maxRecords: number;
   dropped: number;
   count: number;
+}
+
+/** US dollars per million tokens, as the record was costed. */
+export interface LlmPrice {
+  input: number;
+  output: number;
+  cacheWrite: number;
+  cacheRead: number;
+}
+
+export interface LlmModelStat {
+  model: string;
+  requests: number;
+  tokens: number;
+  cost: number;
+}
+
+export interface LlmRecordStats {
+  requests: number;
+  failed: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  cost: number;
+  /** Records whose model has no price entry. */
+  unpriced: number;
+  models: LlmModelStat[];
 }
 
 export interface MetricPoint {

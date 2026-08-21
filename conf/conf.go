@@ -265,6 +265,20 @@ func GetLlmRecordRetentionDays() int {
 	return res
 }
 
+// GetLlmRecordMaxPayloadBytes bounds one retained request body. A coding agent
+// sends its whole system prompt, tool schemas and conversation every turn, so
+// the limit is far above what a chat message needs.
+func GetLlmRecordMaxPayloadBytes() int {
+	res := GetConfigIntDefault("llmRecordMaxPayloadBytes", 1024*1024)
+	if res < 64*1024 {
+		res = 64 * 1024
+	}
+	if res > 32*1024*1024 {
+		res = 32 * 1024 * 1024
+	}
+	return res
+}
+
 // GetLlmRecordMaxRecords caps the table regardless of the retention window.
 func GetLlmRecordMaxRecords() int {
 	res := GetConfigIntDefault("llmRecordMaxRecords", 10000)
@@ -272,6 +286,12 @@ func GetLlmRecordMaxRecords() int {
 		res = 10000
 	}
 	return res
+}
+
+// GetLlmPricingFile is an optional JSON file of token prices overriding the
+// built-in table.
+func GetLlmPricingFile() string {
+	return strings.Trim(GetConfigString("llmPricingFile"), `"' `)
 }
 
 func GetConfigRealDataSourceName(driverName string) string {

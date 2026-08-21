@@ -63,11 +63,23 @@ func (route *proxyRoute) recordUsage(tail []byte) {
 	}
 
 	usage := readUsage(tail)
-	route.record.PromptTokens = higher(usage.PromptTokens, usage.InputTokens)
-	route.record.CompletionTokens = higher(usage.CompletionTokens, usage.OutputTokens)
-	route.record.TotalTokens = usage.TotalTokens
-	if route.record.TotalTokens == 0 {
-		route.record.TotalTokens = route.record.PromptTokens + route.record.CompletionTokens
+	record := route.record
+	record.CompletionTokens = higher(usage.CompletionTokens, usage.OutputTokens)
+	record.ReasoningTokens = usage.ReasoningTokens
+	record.CacheWriteTokens = usage.CacheWriteTokens
+	record.CacheReadTokens = higher(usage.CacheReadInputTokens, usage.CachedTokens)
+
+	// OpenAI counts cached input inside prompt_tokens, Anthropic reports it
+	// beside input_tokens. Taking it out where it is included leaves the four
+	// counters disjoint, so each can be priced at its own rate.
+	record.PromptTokens = higher(usage.PromptTokens, usage.InputTokens)
+	if usage.PromptTokens > 0 && usage.CachedTokens > 0 {
+		record.PromptTokens = higher(record.PromptTokens-usage.CachedTokens, 0)
+	}
+
+	record.TotalTokens = record.PromptTokens + record.CompletionTokens + record.CacheReadTokens + record.CacheWriteTokens
+	if record.TotalTokens == 0 {
+		record.TotalTokens = usage.TotalTokens
 	}
 }
 
@@ -99,14 +111,42 @@ func (tap *usageTap) keep(chunk []byte) {
 	tap.tail = append(tap.tail, chunk...)
 }
 
-// llmUsage covers both spellings of the same counters: OpenAI reports
-// prompt/completion tokens, Anthropic input/output ones.
+// llmUsage covers both spellings of the same counters: OpenAI nests the cached
+// and reasoning parts in detail objects, Anthropic reports them flat.
 type llmUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 	InputTokens      int `json:"input_tokens"`
 	OutputTokens     int `json:"output_tokens"`
+
+	CacheWriteTokens     int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens int `json:"cache_read_input_tokens"`
+	// CacheCreation is what cache_creation_input_tokens totals, so it is only
+	// read when that field is absent.
+	CacheCreation struct {
+		Ephemeral5m int `json:"ephemeral_5m_input_tokens"`
+		Ephemeral1h int `json:"ephemeral_1h_input_tokens"`
+	} `json:"cache_creation"`
+	PromptTokensDetails struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
+	CompletionTokensDetails struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	} `json:"completion_tokens_details"`
+
+	// Flattened out of the detail objects above by normalize.
+	CachedTokens    int `json:"-"`
+	ReasoningTokens int `json:"-"`
+}
+
+// normalize lifts the nested counters up onto one flat set of fields.
+func (usage *llmUsage) normalize() {
+	usage.CachedTokens = usage.PromptTokensDetails.CachedTokens
+	usage.ReasoningTokens = usage.CompletionTokensDetails.ReasoningTokens
+	if usage.CacheWriteTokens == 0 {
+		usage.CacheWriteTokens = usage.CacheCreation.Ephemeral5m + usage.CacheCreation.Ephemeral1h
+	}
 }
 
 func (usage *llmUsage) merge(other llmUsage) {
@@ -115,6 +155,10 @@ func (usage *llmUsage) merge(other llmUsage) {
 	usage.TotalTokens = higher(usage.TotalTokens, other.TotalTokens)
 	usage.InputTokens = higher(usage.InputTokens, other.InputTokens)
 	usage.OutputTokens = higher(usage.OutputTokens, other.OutputTokens)
+	usage.CacheWriteTokens = higher(usage.CacheWriteTokens, other.CacheWriteTokens)
+	usage.CacheReadInputTokens = higher(usage.CacheReadInputTokens, other.CacheReadInputTokens)
+	usage.CachedTokens = higher(usage.CachedTokens, other.CachedTokens)
+	usage.ReasoningTokens = higher(usage.ReasoningTokens, other.ReasoningTokens)
 }
 
 // readUsage merges every usage object in the tail: a stream splits the counters
@@ -131,14 +175,15 @@ func readUsage(tail []byte) llmUsage {
 
 		var parsed llmUsage
 		if value := balancedObject(rest); value != nil && json.Unmarshal(value, &parsed) == nil {
+			parsed.normalize()
 			usage.merge(parsed)
 		}
 	}
 }
 
 // balancedObject returns the JSON object that directly follows a key, or nil
-// when the value is not one. Usage objects hold only numbers, so counting
-// braces cannot be thrown off by one inside a string.
+// when the value is not one. Usage objects hold only numbers and objects of
+// numbers, so counting braces cannot be thrown off by one inside a string.
 func balancedObject(data []byte) []byte {
 	start := 0
 	for start < len(data) && (data[start] == ':' || data[start] == ' ' || data[start] == '\t' || data[start] == '\r' || data[start] == '\n') {

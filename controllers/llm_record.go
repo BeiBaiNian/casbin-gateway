@@ -15,10 +15,21 @@
 package controllers
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/util"
 )
+
+// llmStreamHeartbeat keeps an idle live feed from being closed by whatever sits
+// between the browser and Gateway.
+const llmStreamHeartbeat = 25 * time.Second
+
+const llmStatsTopModels = 8
 
 // A record holds what a user asked a model, so unlike the proxy endpoints
 // themselves these are limited to Gateway administrators.
@@ -41,6 +52,18 @@ func (c *ApiController) GetLlmRecords() {
 		limit = 100
 	}
 
+	records, count, err := object.GetLlmRecords(c.readLlmRecordFilter(), (page-1)*limit, limit)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(records, count)
+}
+
+// readLlmRecordFilter reads the filter the list and the stats share, so the two
+// always describe the same set of requests.
+func (c *ApiController) readLlmRecordFilter() object.LlmRecordFilter {
 	filter := object.LlmRecordFilter{
 		Model:    c.Input().Get("model"),
 		Channel:  c.Input().Get("channel"),
@@ -48,13 +71,75 @@ func (c *ApiController) GetLlmRecords() {
 		ClientIp: c.Input().Get("clientIp"),
 		Outcome:  c.Input().Get("outcome"),
 	}
-	records, count, err := object.GetLlmRecords(filter, (page-1)*limit, limit)
+	if hours, err := strconv.Atoi(c.Input().Get("windowHours")); err == nil && hours > 0 {
+		filter.Since = util.FormatTime(time.Now().Add(-time.Duration(hours) * time.Hour))
+	}
+	return filter
+}
+
+// GetLlmRecordStats totals the window the list is showing.
+func (c *ApiController) GetLlmRecordStats() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	stats, err := object.GetLlmRecordStats(c.readLlmRecordFilter(), llmStatsTopModels)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	c.ResponseOk(records, count)
+	c.ResponseOk(stats)
+}
+
+// StreamLlmRecords pushes records to the page as they are written, so what a
+// model is being sent is visible while it happens rather than on the next
+// refresh.
+func (c *ApiController) StreamLlmRecords() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	c.EnableRender = false
+	writer := c.Ctx.ResponseWriter
+	writer.Header().Set("Content-Type", "text/event-stream")
+	writer.Header().Set("Cache-Control", "no-cache")
+	writer.Header().Set("Connection", "keep-alive")
+	// An nginx in front of Gateway would otherwise hold every event back until
+	// the response ends.
+	writer.Header().Set("X-Accel-Buffering", "no")
+	writer.WriteHeader(http.StatusOK)
+	writer.Flush()
+
+	id, feed := object.SubscribeLlmRecords()
+	defer object.UnsubscribeLlmRecords(id)
+
+	ticker := time.NewTicker(llmStreamHeartbeat)
+	defer ticker.Stop()
+	closed := c.Ctx.Request.Context().Done()
+	for {
+		select {
+		case record, ok := <-feed:
+			if !ok {
+				return
+			}
+			data, err := json.Marshal(record)
+			if err != nil {
+				continue
+			}
+			if _, err := fmt.Fprintf(writer, "event: record\ndata: %s\n\n", data); err != nil {
+				return
+			}
+			writer.Flush()
+		case <-ticker.C:
+			if _, err := fmt.Fprint(writer, ": keep-alive\n\n"); err != nil {
+				return
+			}
+			writer.Flush()
+		case <-closed:
+			return
+		}
+	}
 }
 
 // GetLlmRecord returns one record with its stored request body.
@@ -73,8 +158,19 @@ func (c *ApiController) GetLlmRecord() {
 		c.ResponseError(err.Error())
 		return
 	}
+	if record == nil {
+		c.ResponseError("record not found")
+		return
+	}
 
-	c.ResponseOk(record)
+	// The rates travel with the record, so the detail pane does not match model
+	// names of its own.
+	price, priced := object.GetLlmPrice(record.Model)
+	if !priced {
+		c.ResponseOk(record)
+		return
+	}
+	c.ResponseOk(record, price)
 }
 
 // GetLlmRecordStatus reports the recorder's own settings and how many records

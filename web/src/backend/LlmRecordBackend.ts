@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import {query, request} from "@/backend/request";
-import type {LlmRecord, LlmRecordStatus} from "@/types";
+import {ServerUrl} from "@/Setting";
+import type {LlmPrice, LlmRecord, LlmRecordStats, LlmRecordStatus} from "@/types";
 
 export interface LlmRecordFilter {
   model?: string;
@@ -21,6 +22,8 @@ export interface LlmRecordFilter {
   agent?: string;
   clientIp?: string;
   outcome?: string;
+  /** How far back the list and the totals reach. 0 is everything. */
+  windowHours?: number;
 }
 
 export function getLlmRecords(page = 1, pageSize = 25, filter: LlmRecordFilter = {}) {
@@ -29,8 +32,37 @@ export function getLlmRecords(page = 1, pageSize = 25, filter: LlmRecordFilter =
   );
 }
 
+/** The second payload is the rates the record was costed at, when it has any. */
 export function getLlmRecord(id: number) {
-  return request<LlmRecord>(`/api/get-llm-record${query({id: id})}`);
+  return request<LlmRecord, LlmPrice>(`/api/get-llm-record${query({id: id})}`);
+}
+
+export function getLlmRecordStats(filter: LlmRecordFilter = {}) {
+  return request<LlmRecordStats>(`/api/get-llm-record-stats${query({...filter})}`);
+}
+
+/**
+ * Opens the live feed of records; the browser reconnects on its own. Returns
+ * the function that closes it.
+ */
+export function streamLlmRecords(handlers: {
+  onRecord: (record: LlmRecord) => void;
+  onOpen?: () => void;
+  onError?: () => void;
+}) {
+  const source = new EventSource(`${ServerUrl}/api/stream-llm-records`, {withCredentials: true});
+
+  source.addEventListener("record", event => {
+    try {
+      handlers.onRecord(JSON.parse((event as MessageEvent).data) as LlmRecord);
+    } catch {
+      // A malformed event is not worth tearing the feed down for.
+    }
+  });
+  source.onopen = () => handlers.onOpen?.();
+  source.onerror = () => handlers.onError?.();
+
+  return () => source.close();
 }
 
 export function getLlmRecordStatus() {
