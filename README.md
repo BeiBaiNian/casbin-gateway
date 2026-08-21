@@ -96,6 +96,35 @@ Set `INSTALL_DIR` to install somewhere else, or `NO_START=1` to install without 
 
 **These are nightly builds**, rebuilt from `master` on every push and published as the [`nightly`](https://github.com/apache/casbin-gateway/releases/tag/nightly) pre-release. They exist so that Gateway can be tried without a Go and Node toolchain; anything else should be built from a source release.
 
+### Running in Docker or Podman
+
+**A container cannot see the agents on your machine.** Agents are discovered by reading the home directories and install paths of the machine Gateway runs on, and inside a container that is the container's own filesystem. **Agents**, **Skills & MCP** and agent monitoring therefore stay empty there, and the pages say so rather than pretending nothing is installed. Everything that does not depend on the host works normally: **Channels**, **LLM Records** and the reverse-proxy WAF.
+
+So run the one-command install above on the machine whose agents you want to watch, and use a container when Gateway is only a model endpoint or a reverse proxy for other machines.
+
+No image is published, so the compose file builds one from a checkout of this repository:
+
+```bash
+docker compose up -d
+```
+
+Podman reads the same file:
+
+```bash
+podman compose up -d
+```
+
+Either way the UI is on http://localhost:17000, the SQLite database lives in a named volume that survives `down`, and `conf/app.conf` is mounted from the repository, so settings can be changed and the container restarted without rebuilding it.
+
+To serve the WAF proxy from a container, set `gatewayEnabled = true` in that mounted `conf/app.conf` and publish its ports too, by adding them next to `17000:17000` in `docker-compose.yml`:
+
+```yaml
+    ports:
+      - "17000:17000"
+      - "8080:80"
+      - "8443:443"
+```
+
 ## Configuration
 
 Everything is optional. Settings live in `conf/app.conf`, next to the executable, and each one is explained in the file itself. The ones people actually change:

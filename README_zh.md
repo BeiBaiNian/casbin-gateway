@@ -96,6 +96,35 @@ export ANTHROPIC_AUTH_TOKEN="casbin-gateway"
 
 **这些是 nightly 构建**，每次推送都从 `master` 重新构建，并作为 [`nightly`](https://github.com/apache/casbin-gateway/releases/tag/nightly) 预发布版本发布。它们的用途是让人不装 Go 和 Node 工具链就能试用 Gateway；其他场景都应该从源码发布版构建。
 
+### 在 Docker 或 Podman 里运行
+
+**容器看不到你机器上的 Agent。** Agent 是靠读取 Gateway 所在机器的用户主目录和安装路径发现的，而在容器里那是容器自己的文件系统。所以 **Agents**、**Skills & MCP** 和 Agent 监控在容器里一直是空的，页面会直接说明这一点，而不是让人以为什么都没装。不依赖宿主机的部分照常可用：**Channels**、**LLM Records** 和 WAF 反向代理。
+
+因此，想监控哪台机器上的 Agent，就在那台机器上跑上面的一键安装；只把 Gateway 当作模型入口或别的机器的反向代理时，才用容器部署。
+
+我们没有发布镜像，compose 文件会用本仓库的源码构建一个，所以先把仓库 clone 下来，在仓库根目录执行：
+
+```bash
+docker compose up -d
+```
+
+Podman 读同一个文件：
+
+```bash
+podman compose up -d
+```
+
+两种方式下管理界面都在 http://localhost:17000，SQLite 数据库存在一个命名卷里，`down` 之后依然保留；`conf/app.conf` 从仓库挂载进去，改完配置重启容器即可生效，不用重新构建镜像。
+
+想在容器里用 WAF 反向代理，把挂载的 `conf/app.conf` 里的 `gatewayEnabled` 设为 `true`，并在 `docker-compose.yml` 里 `17000:17000` 旁边补上它的端口：
+
+```yaml
+    ports:
+      - "17000:17000"
+      - "8080:80"
+      - "8443:443"
+```
+
 ## 配置
 
 所有配置都是可选的。设置位于可执行文件旁边的 `conf/app.conf`，每一项在文件里都有说明。真正常被改动的是这些：
