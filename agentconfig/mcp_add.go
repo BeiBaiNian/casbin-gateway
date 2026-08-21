@@ -63,12 +63,12 @@ func AddMcp(request McpRequest) ([]*PlanItem, error) {
 		item := &PlanItem{AgentId: agentId, Name: name}
 		planned = append(planned, item)
 
-		existing, err := targetNames(agentId, request.Owner, KindMcp)
+		existing, err := targetItems(agentId, request.Owner, KindMcp)
 		switch {
 		case err != nil:
 			item.Action, item.Reason = ActionSkip, err.Error()
 			continue
-		case !existing[name]:
+		case existing[name] == nil:
 			item.Action = ActionCreate
 		case request.Overwrite:
 			item.Action = ActionOverwrite
