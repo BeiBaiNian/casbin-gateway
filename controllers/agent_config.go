@@ -16,7 +16,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"slices"
 	"sort"
 
 	"github.com/apache/casbin-gateway/agent"
@@ -89,7 +88,7 @@ func (collected *agentConfigs) add(agentId string, owner string, name string, pa
 	inventory := agentconfig.Read(agentId, owner)
 	key := inventory.SkillsDir + "\x00" + inventory.McpFile
 	if first, ok := collected.seen[key]; ok {
-		if first.AgentId != agentId && !slices.Contains(first.SharedWith, name) {
+		if first.AgentId != agentId && !contains(first.SharedWith, name) {
 			first.SharedWith = append(first.SharedWith, name)
 		}
 		return
@@ -103,6 +102,15 @@ func (collected *agentConfigs) add(agentId string, owner string, name string, pa
 	}
 	collected.seen[key] = view
 	collected.views = append(collected.views, view)
+}
+
+func contains(names []string, name string) bool {
+	for _, each := range names {
+		if each == name {
+			return true
+		}
+	}
+	return false
 }
 
 // GetAgentConfigItem returns one skill's manifest or one MCP server's entry.
