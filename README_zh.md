@@ -243,8 +243,7 @@ Casbin Gateway 包含 2 个部分：
 
 ## 在线演示
 
-- 只读站点：https://door.caswaf.com （任何修改操作都会失败）
-- 可写站点：https://demo.caswaf.com （原始数据每 5 分钟恢复一次）
+https://ai.casbin.com
 
 ## 文档
 

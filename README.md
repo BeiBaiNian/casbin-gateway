@@ -243,8 +243,7 @@ Casbin Gateway contains 2 parts:
 
 ## Online demo
 
-- Read-only site: https://door.caswaf.com (any modification operation will fail)
-- Writable site: https://demo.caswaf.com (original data is restored every 5 minutes)
+https://ai.casbin.com
 
 ## Documentation
 
