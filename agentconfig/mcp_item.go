@@ -15,6 +15,7 @@
 package agentconfig
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"strings"
 
@@ -37,6 +38,7 @@ func mcpItems(agentId string, owner string, file string, entries map[string]map[
 			Url:       stringField(entry, "url", "serverUrl", "endpoint"),
 			Managed:   name == ManagedEntryName,
 			Transport: transportOf(entry),
+			Digest:    entryDigest(entry),
 		}
 		items = append(items, item)
 	}
@@ -56,6 +58,18 @@ func mcpDetail(agentId string, owner string, file string, name string, entry map
 
 	items := mcpItems(agentId, owner, file, map[string]map[string]any{name: entry})
 	return &Detail{Item: items[0], Content: string(content)}, nil
+}
+
+// entryDigest identifies one server's definition, so the same name in two
+// agents can be told apart when the two definitions differ. Marshalling sorts
+// the keys, so the digest does not depend on how the file was written.
+func entryDigest(entry map[string]any) string {
+	raw, err := json.Marshal(entry)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return shortDigest(sum[:])
 }
 
 // transportOf reports how the agent reaches the server. An entry that names its
