@@ -307,7 +307,7 @@ export default function AgentConfigsPage({account}: {account: Account}) {
 
       {error ? <MessageAlert description={error} /> : null}
 
-      {scanned && inventories.length === 0 ? (
+      {scanned && !error && inventories.length === 0 ? (
         <EmptyState
           icon={Package}
           title={i18next.t("agentConfig:No agents found")}

@@ -244,6 +244,7 @@
     "At Any Time": "任意时间",
     "Back Home": "返回首页",
     "Cancel": "取消",
+    "Cannot connect to the server, please check that the backend is running": "无法连接到服务器，请检查后端是否已启动",
     "Certs": "证书",
     "Client IP": "客户端 IP",
     "Client ip": "客户端IP",

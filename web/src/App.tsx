@@ -134,19 +134,23 @@ export default function App() {
   };
 
   const getAccount = React.useCallback(() => {
-    AccountBackend.getAccount().then(res => {
-      const user = res.data;
-      if (user !== null && user !== undefined) {
-        user.hostname = res.data2;
-        const language = localStorage.getItem("language");
-        if (language && language !== Setting.getLanguage()) {
-          Setting.setLanguage(language);
+    AccountBackend.getAccount()
+      .then(res => {
+        const user = res.data;
+        if (user !== null && user !== undefined) {
+          user.hostname = res.data2;
+          const language = localStorage.getItem("language");
+          if (language && language !== Setting.getLanguage()) {
+            Setting.setLanguage(language);
+          }
+          setAccount(user);
+        } else {
+          setAccount(null);
         }
-        setAccount(user);
-      } else {
-        setAccount(null);
-      }
-    });
+      })
+      // An unreachable backend is not a signed-in session: without this the
+      // app waits on account forever behind the full-page spinner.
+      .catch(() => setAccount(null));
   }, []);
 
   React.useEffect(() => {

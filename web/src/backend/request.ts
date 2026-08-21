@@ -12,8 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import i18next from "i18next";
+
 import {ServerUrl} from "@/Setting";
 import type {ApiResponse} from "@/types";
+
+/**
+ * The API answers in JSON and nothing else, so a body that will not parse is a
+ * request that never reached the Go server: a proxy error page, or the SPA's own
+ * index.html served as the fallback for an unhandled /api path.
+ */
+function unreachable(status?: number) {
+  const text = i18next.t("general:Cannot connect to the server, please check that the backend is running");
+  return new Error(status === undefined ? text : `${text} (HTTP ${status})`);
+}
 
 /**
  * One place where every call to the Go API is made. `credentials: include`
@@ -35,8 +47,19 @@ export async function request<T = any, T2 = any>(
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${ServerUrl}${path}`, options);
-  return (await response.json()) as ApiResponse<T, T2>;
+  let response: Response;
+  try {
+    response = await fetch(`${ServerUrl}${path}`, options);
+  } catch {
+    throw unreachable();
+  }
+
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as ApiResponse<T, T2>;
+  } catch {
+    throw unreachable(response.ok ? undefined : response.status);
+  }
 }
 
 /** Builds a query string, dropping the parameters that were left empty. */

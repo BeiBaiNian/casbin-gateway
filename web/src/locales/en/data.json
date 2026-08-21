@@ -244,6 +244,7 @@
     "At Any Time": "At Any Time",
     "Back Home": "Back Home",
     "Cancel": "Cancel",
+    "Cannot connect to the server, please check that the backend is running": "Cannot connect to the server, please check that the backend is running",
     "Certs": "Certs",
     "Client IP": "Client IP",
     "Client ip": "Client ip",
