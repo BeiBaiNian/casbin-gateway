@@ -223,7 +223,7 @@ func (writer *llmRecordWriter) prune() {
 	}
 
 	oldest := []LlmRecord{}
-	if err := ormer.Engine.Cols("id").Asc("id").Limit(int(count-maximum)).Find(&oldest); err != nil {
+	if err := ormer.Engine.Cols("id").Asc("id").Limit(int(count - maximum)).Find(&oldest); err != nil {
 		beego.Error("LLM record retention lookup failed:", err)
 		return
 	}
