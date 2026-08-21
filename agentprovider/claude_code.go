@@ -160,8 +160,13 @@ func (claudeCodeWriter) env(endpoint Endpoint, masked bool) map[string]any {
 	}
 
 	env := map[string]any{
-		"ANTHROPIC_BASE_URL":   endpoint.BaseUrl,
-		"ANTHROPIC_AUTH_TOKEN": token,
+		"ANTHROPIC_BASE_URL": endpoint.BaseUrl,
+	}
+	// A channel that forwards the caller's own credentials has no token to
+	// write, and writing one would override the sign-in Claude Code already
+	// has, which is the login the switch is meant to keep using.
+	if endpoint.ApiKey != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = token
 	}
 	if endpoint.Model != "" {
 		env["ANTHROPIC_MODEL"] = endpoint.Model

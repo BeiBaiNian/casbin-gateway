@@ -32,6 +32,7 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {TagsInput} from "@/components/ui/tags-input";
 import {
+  authClient,
   baseUrlPlaceholder,
   baseUrlPresets,
   channelProtocol,
@@ -39,6 +40,7 @@ import {
   localShell,
   modelPresets,
   modelsPlaceholder,
+  usesClientAuth,
 } from "@/lib/channels";
 import type {Channel, ChannelTestResult} from "@/types";
 
@@ -250,18 +252,40 @@ export default function ChannelEditPage() {
           />
         </Field>
         <Field
-          label={i18next.t("channel:API Key")}
-          htmlFor="channel-api-key"
-          hint={i18next.t("channel:API Key hint")}
+          label={i18next.t("channel:Authentication")}
+          hint={usesClientAuth(channel) ? i18next.t("channel:Client auth hint") : undefined}
         >
-          <PasswordInput
-            id="channel-api-key"
-            placeholder="sk-..."
-            value={channel.apiKey}
-            onChange={event => setField("apiKey", event.target.value)}
+          <SimpleSelect
+            value={channel.authMode}
+            // The stored key is meaningless once the caller's own is forwarded,
+            // and the server drops it on save anyway.
+            onChange={value =>
+              setChannel(current => (current ? {...current, authMode: value, apiKey: ""} : current))
+            }
+            options={[
+              {label: i18next.t("channel:Stored API key"), value: "channel"},
+              {label: i18next.t("channel:Caller's own login"), value: authClient},
+            ]}
           />
         </Field>
-        <Field label={i18next.t("channel:Models")}>
+        {usesClientAuth(channel) ? null : (
+          <Field
+            label={i18next.t("channel:API Key")}
+            htmlFor="channel-api-key"
+            hint={i18next.t("channel:API Key hint")}
+          >
+            <PasswordInput
+              id="channel-api-key"
+              placeholder="sk-..."
+              value={channel.apiKey}
+              onChange={event => setField("apiKey", event.target.value)}
+            />
+          </Field>
+        )}
+        <Field
+          label={i18next.t("channel:Models")}
+          hint={usesClientAuth(channel) ? i18next.t("channel:Any model hint") : undefined}
+        >
           <TagsInput
             value={channel.models}
             placeholder={modelsPlaceholder(channel.type)}
@@ -305,7 +329,11 @@ export default function ChannelEditPage() {
           protocol={channelProtocol(channel.type)}
           baseUrl={gatewayBaseUrl(channelProtocol(channel.type))}
           defaultShell={localShell()}
+          includeToken={!usesClientAuth(channel)}
         />
+        {usesClientAuth(channel) ? (
+          <p className="text-muted-foreground text-sm">{i18next.t("channel:Client auth usage hint")}</p>
+        ) : null}
         <p className="text-muted-foreground text-sm">{i18next.t("channel:Model routing hint")}</p>
       </Section>
     </PageContainer>

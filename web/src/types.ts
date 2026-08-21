@@ -156,6 +156,7 @@ export interface Channel {
   priority: number;
   baseUrl: string;
   apiKey: string;
+  authMode: string;
 }
 
 export interface ChannelTestResult {

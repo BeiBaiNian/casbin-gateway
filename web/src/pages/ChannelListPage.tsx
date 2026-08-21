@@ -34,11 +34,13 @@ import {Input} from "@/components/ui/input";
 import {TagsInput} from "@/components/ui/tags-input";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {
+  authClient,
   baseUrlPlaceholder,
   baseUrlPresets,
   channelPresets,
   modelPresets,
   modelsPlaceholder,
+  usesClientAuth,
   type ChannelPreset,
 } from "@/lib/channels";
 import type {Account, Channel, ChannelHealth} from "@/types";
@@ -55,6 +57,7 @@ function newChannel(owner: string): Channel {
     priority: 0,
     baseUrl: "",
     apiKey: "",
+    authMode: "channel",
   };
 }
 
@@ -237,9 +240,9 @@ export default function ChannelListPage({account}: {account: Account}) {
       key: "models",
       dataIndex: "models",
       width: "220px",
-      render: (models: string[]) =>
+      render: (models: string[], record) =>
         !models || models.length === 0 ? (
-          "-"
+          usesClientAuth(record) ? <Badge variant="muted">{i18next.t("channel:Any model")}</Badge> : "-"
         ) : (
           <div className="flex flex-wrap gap-1">
             {models.map(model => (
@@ -451,18 +454,37 @@ export default function ChannelListPage({account}: {account: Account}) {
           />
         </Field>
         <Field
-          label={i18next.t("channel:API Key")}
-          htmlFor="channel-api-key"
-          hint={i18next.t("channel:API Key ownership hint")}
+          label={i18next.t("channel:Authentication")}
+          hint={usesClientAuth(form) ? i18next.t("channel:Client auth hint") : undefined}
         >
-          <PasswordInput
-            id="channel-api-key"
-            placeholder="sk-..."
-            value={form.apiKey}
-            onChange={event => setFormField("apiKey", event.target.value)}
+          <SimpleSelect
+            value={form.authMode}
+            // The stored key is meaningless once the caller's own is forwarded.
+            onChange={value => setForm(prev => ({...prev, authMode: value, apiKey: ""}))}
+            options={[
+              {label: i18next.t("channel:Stored API key"), value: "channel"},
+              {label: i18next.t("channel:Caller's own login"), value: authClient},
+            ]}
           />
         </Field>
-        <Field label={i18next.t("channel:Models")} hint={i18next.t("channel:Models hint")}>
+        {usesClientAuth(form) ? null : (
+          <Field
+            label={i18next.t("channel:API Key")}
+            htmlFor="channel-api-key"
+            hint={i18next.t("channel:API Key ownership hint")}
+          >
+            <PasswordInput
+              id="channel-api-key"
+              placeholder="sk-..."
+              value={form.apiKey}
+              onChange={event => setFormField("apiKey", event.target.value)}
+            />
+          </Field>
+        )}
+        <Field
+          label={i18next.t("channel:Models")}
+          hint={usesClientAuth(form) ? i18next.t("channel:Any model hint") : i18next.t("channel:Models hint")}
+        >
           <TagsInput
             value={form.models}
             placeholder={modelsPlaceholder(form.type)}

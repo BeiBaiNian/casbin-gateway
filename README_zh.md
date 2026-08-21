@@ -65,7 +65,7 @@ irm https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/insta
 | --- | --- | --- |
 | **Agents** | 本机安装的每一个 AI 编程 Agent —— Claude Code、Codex CLI、Cursor 等等。点其中一个的 **Patch**，它的活动就会实时流进页面。 | 无 |
 | **Skills & MCP** | 所有 Agent 的所有技能和 MCP 服务器汇总在一张表里。可以给一个或多个 Agent 添加 MCP 服务器，也可以打开、删除，或复制到另一个 Agent。 | 无 |
-| **Channels** | 挡在模型厂商前面的统一入口。API Key 由 Gateway 持有，Agent 拿不到。 | 一个厂商的 API Key |
+| **Channels** | 挡在模型厂商前面的统一入口。API Key 由 Gateway 持有，Agent 拿不到；也可以转发 Agent 自己的登录，什么都不持有。 | 一个厂商的 API Key，或者什么都不用 |
 | **LLM Records** | Agent 转发的每一次请求：完整的 system prompt、每一条消息和工具调用、模型可用的每个工具的 schema，以及 token 数和费用。 | 一个 Channel，以及 `llmRecordMode` —— 见[记录提示词](#记录提示词) |
 | **Advanced → Sites** | 反向代理 WAF：按站点的路由、规则、证书和统计。 | 打开代理 —— 见[开启 WAF 反向代理](#开启-waf-反向代理) |
 
@@ -85,6 +85,14 @@ export ANTHROPIC_AUTH_TOKEN="casbin-gateway"
 ```
 
 这个 token 只是占位符 —— Agent 没有它就拒绝启动，而 Gateway 会用 Channel 自己的 Key 去认证上游。
+
+### 没有 API Key：沿用 Agent 已有的登录
+
+用 ChatGPT 或 Claude 订阅登录的 Agent 根本没有 API Key 可填。把 Channel 的**认证方式**设成**调用方自己的登录**，它就不需要 Key：base URL 指向厂商，每个请求都带着 Agent 自己发来的凭据转发上游，Agent 继续用它已有的登录。**Models** 留空，这个 Channel 就接受任何模型名。
+
+这种 Channel 的环境变量片段只设 base URL，不设别的 —— 在这里再设一个 token 会覆盖 Agent 已有的登录。记录和路由和有 Key 的 Channel 完全一样，只是 Gateway 从头到尾没见过任何 Key。
+
+Codex 是例外：它的 ChatGPT 登录走的是另一套 API，不是 Gateway 转发的 chat completions，所以 Codex CLI 仍然需要一个带 API Key 的 Channel。
 
 ### 停止、升级、卸载
 

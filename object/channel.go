@@ -134,6 +134,22 @@ var (
 	channelStatuses = []string{"enabled", "disabled"}
 )
 
+// The two ways a channel authenticates upstream. In ChannelAuthClient mode the
+// gateway forwards the credentials the caller sent instead of a stored key, so
+// an agent already signed in with a subscription keeps its own login.
+const (
+	ChannelAuthChannel = "channel"
+	ChannelAuthClient  = "client"
+)
+
+var channelAuthModes = []string{ChannelAuthChannel, ChannelAuthClient}
+
+// UsesClientAuth reports whether the channel authenticates with the caller's
+// own credentials. An empty AuthMode is a row written before the field existed.
+func UsesClientAuth(channel *Channel) bool {
+	return channel.AuthMode == ChannelAuthClient
+}
+
 // The wire formats the gateway can speak. A request in one of them can only be
 // forwarded to a channel whose upstream speaks the same one.
 const (
@@ -178,6 +194,8 @@ type Channel struct {
 	// ApiKey holds base64 ciphertext, not the bare key, when
 	// "apiKeyEncryptionKey" is set in app.conf, hence the wider column.
 	ApiKey string `xorm:"varchar(1000)" json:"apiKey"`
+	// AuthMode selects whose credentials reach the upstream, see UsesClientAuth.
+	AuthMode string `xorm:"varchar(100)" json:"authMode"`
 	// Models is JSON-serialized by xorm, so it needs a text column rather than
 	// a varchar: the serialized form is longer than the joined model names.
 	Models []string `xorm:"mediumtext" json:"models"`
@@ -261,12 +279,24 @@ func validateChannel(channel *Channel) error {
 	if channel.Models == nil {
 		channel.Models = []string{}
 	}
+	if channel.AuthMode == "" {
+		channel.AuthMode = ChannelAuthChannel
+	}
 
 	if !containsString(channelTypes, channel.Type) {
 		return fmt.Errorf("invalid channel type: %s", channel.Type)
 	}
 	if !containsString(channelStatuses, channel.Status) {
 		return fmt.Errorf("invalid channel status: %s", channel.Status)
+	}
+	if !containsString(channelAuthModes, channel.AuthMode) {
+		return fmt.Errorf("invalid channel auth mode: %s", channel.AuthMode)
+	}
+
+	// A channel that forwards the caller's credentials has no use for a stored
+	// key, and one left behind would be sent upstream again after a switch back.
+	if channel.AuthMode == ChannelAuthClient {
+		channel.ApiKey = ""
 	}
 
 	if channel.BaseUrl != "" {
@@ -352,6 +382,12 @@ func BuildChannelUrl(baseUrl string, protocol string, endpoint string) (string, 
 // SetChannelAuth puts the channel's credentials on an upstream request, in the
 // header the channel's protocol authenticates with.
 func SetChannelAuth(header http.Header, channel *Channel) {
+	// The caller's own credentials are already on the request, and the proxy
+	// copies them across itself.
+	if UsesClientAuth(channel) {
+		return
+	}
+
 	if ChannelProtocol(channel) == ProtocolAnthropic {
 		header.Set("X-Api-Key", channel.ApiKey)
 		return
@@ -486,6 +522,13 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 	defer resp.Body.Close()
 
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+
+	// A client-auth channel has no key to probe with, so an upstream that
+	// rejects the unauthenticated probe has still proven it is reachable.
+	if UsesClientAuth(stored) && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+		return true, resp.StatusCode, "reachable, and authenticated with the caller's own credentials"
+	}
+
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, resp.StatusCode, resp.Status
 }
 
@@ -504,7 +547,18 @@ func GetChannelsByModel(model string) ([]*Channel, error) {
 	// The models are JSON-serialized into a single column, so the match cannot
 	// be pushed down into the query.
 	matchedChannels := []*Channel{}
+	// A channel authenticated with the caller's own credentials cannot know
+	// which models the account behind them may use, so an empty model list
+	// there means "any model". Those channels are tried after the ones that
+	// name the model, so a wildcard never takes traffic from an exact match.
+	wildcardChannels := []*Channel{}
 	for _, channel := range channels {
+		if len(channel.Models) == 0 {
+			if UsesClientAuth(channel) {
+				wildcardChannels = append(wildcardChannels, channel)
+			}
+			continue
+		}
 		for _, channelModel := range channel.Models {
 			if channelModel == model {
 				matchedChannels = append(matchedChannels, channel)
@@ -512,6 +566,7 @@ func GetChannelsByModel(model string) ([]*Channel, error) {
 			}
 		}
 	}
+	matchedChannels = append(matchedChannels, wildcardChannels...)
 
 	decryptChannels(matchedChannels)
 

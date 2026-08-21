@@ -65,7 +65,7 @@ That is the whole installation. Gateway keeps its data in a SQLite file inside i
 | --- | --- | --- |
 | **Agents** | Every AI coding agent installed on this machine — Claude Code, Codex CLI, Cursor and more. Click **Patch** on one and its activity streams into the page live. | Nothing |
 | **Skills & MCP** | Every skill and MCP server of every agent in one table. Add an MCP server to one agent or to several at once, open one, delete it, or copy it into another agent. | Nothing |
-| **Channels** | One endpoint in front of your model vendors. Gateway holds the API key, so the agents never have it. | A vendor API key |
+| **Channels** | One endpoint in front of your model vendors. Gateway holds the API key, so the agents never have it — or forwards the agent's own sign-in and holds nothing. | A vendor API key, or nothing at all |
 | **LLM Records** | Every request an agent relayed: the full system prompt, every message and tool call, the schema of every tool the model was offered, plus tokens and cost. | A channel, and `llmRecordMode` — see [Recording prompts](#recording-prompts) |
 | **Advanced → Sites** | The reverse-proxy WAF: per-site routing, rules, certificates and analytics. | Turning the proxy on — see [Turning the WAF proxy on](#turning-the-waf-proxy-on) |
 
@@ -85,6 +85,14 @@ export ANTHROPIC_AUTH_TOKEN="casbin-gateway"
 ```
 
 The token is a placeholder — the agent refuses to start without one, and Gateway authenticates upstream with the channel's own key.
+
+### No API key: keep the sign-in the agent already has
+
+An agent signed in with a ChatGPT or Claude subscription has no API key to paste. Set the channel's **Authentication** to **the caller's own login** and it needs none: the base URL points at the vendor, and every request is forwarded with the credentials the agent itself sent, so it keeps its own sign-in. Leave **Models** empty and the channel accepts any model name.
+
+The environment snippet for such a channel sets the base URL and nothing else — a token there would replace the sign-in the agent already has. Gateway records and routes the traffic exactly as it does for a channel with a key; it just never sees one.
+
+Codex is the exception: its ChatGPT sign-in talks to a different API than the chat completions Gateway relays, so a Codex CLI still needs a channel with an API key.
 
 ### Stopping, upgrading, removing
 

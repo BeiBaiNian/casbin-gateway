@@ -76,6 +76,9 @@ func TestChannelUnusableReason(t *testing.T) {
 	openAi := object.ProtocolOpenAi
 	anthropic := object.ProtocolAnthropic
 
+	c, _ := newTestApiController()
+	channelUnusableReason := c.channelUnusableReason
+
 	if reason := channelUnusableReason(&object.Channel{Type: "claude", BaseUrl: "https://example.com"}, openAi); !strings.Contains(reason, "not supported") {
 		t.Errorf("the claude channel type should be rejected, got: %s", reason)
 	}
@@ -97,6 +100,21 @@ func TestChannelUnusableReason(t *testing.T) {
 	}
 	if reason := channelUnusableReason(&object.Channel{Owner: "admin", Name: "gpt", Type: "openai", BaseUrl: "https://api.openai.com/v1"}, anthropic); !strings.Contains(reason, "does not speak") {
 		t.Errorf("an openai channel should be rejected for an anthropic request, got: %s", reason)
+	}
+
+	passthrough := &object.Channel{
+		Owner:    "admin",
+		Name:     "passthrough",
+		Type:     "openai",
+		BaseUrl:  "https://api.openai.com/v1",
+		AuthMode: object.ChannelAuthClient,
+	}
+	if reason := channelUnusableReason(passthrough, openAi); !strings.Contains(reason, "carries none") {
+		t.Errorf("a client-auth channel should be rejected without a credential, got: %s", reason)
+	}
+	c.Ctx.Request.Header.Set("Authorization", "Bearer token")
+	if reason := channelUnusableReason(passthrough, openAi); reason != "" {
+		t.Errorf("a client-auth channel should be usable with a credential, got: %s", reason)
 	}
 }
 

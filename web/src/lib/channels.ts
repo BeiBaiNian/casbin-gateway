@@ -19,6 +19,14 @@ export function channelProtocol(type: string) {
   return type === "anthropic" ? "anthropic" : "openai";
 }
 
+/** Mirrors object.ChannelAuthClient on the server. */
+export const authClient = "client";
+
+/** Mirrors object.UsesClientAuth: whose credentials reach the upstream. */
+export function usesClientAuth(channel: {authMode?: string} | undefined) {
+  return channel?.authMode === authClient;
+}
+
 /** The env vars a client of one wire format reads its endpoint and key from. */
 const protocolEnv: Record<string, {baseUrl: string; token: string}> = {
   anthropic: {baseUrl: "ANTHROPIC_BASE_URL", token: "ANTHROPIC_AUTH_TOKEN"},
@@ -34,13 +42,17 @@ const placeholderToken = "casbin-gateway";
 export const shells = ["bash", "PowerShell"] as const;
 export type Shell = (typeof shells)[number];
 
-/** The lines that point a client of one wire format at a base URL. */
-export function envSnippet(protocol: string, baseUrl: string, shell: Shell) {
+/**
+ * The lines that point a client of one wire format at a base URL. A client-auth
+ * channel forwards the client's own credentials, so the token is left out
+ * there: setting it would replace the sign-in the client already has.
+ */
+export function envSnippet(protocol: string, baseUrl: string, shell: Shell, includeToken = true) {
   const env = protocolEnv[protocol] ?? protocolEnv.openai;
-  const variables: [string, string][] = [
-    [env.baseUrl, baseUrl],
-    [env.token, placeholderToken],
-  ];
+  const variables: [string, string][] = [[env.baseUrl, baseUrl]];
+  if (includeToken) {
+    variables.push([env.token, placeholderToken]);
+  }
 
   return variables
     .map(([name, value]) =>

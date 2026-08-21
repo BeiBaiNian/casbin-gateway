@@ -15,6 +15,7 @@
 package agentprovider
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -41,6 +42,11 @@ const (
 
 var codexProviderPath = []string{"model_providers", codexProviderName}
 
+// errCodexNoKey rejects a channel that forwards the caller's own credentials:
+// Codex reads its key from auth.json, and its own ChatGPT sign-in speaks a
+// different API than the chat completions this provider entry points at.
+var errCodexNoKey = errors.New("Codex needs an API key, so it cannot use a channel that forwards the credentials of the caller")
+
 type codexWriter struct {
 	id string
 }
@@ -59,6 +65,10 @@ func (w codexWriter) AgentId() string { return w.id }
 func (codexWriter) Protocol() string { return "openai" }
 
 func (w codexWriter) Plan(target Target, endpoint Endpoint) ([]File, error) {
+	if endpoint.ApiKey == "" {
+		return nil, errCodexNoKey
+	}
+
 	home, err := agentmonitor.ResolveCodexHome(target.Path, target.Owner)
 	if err != nil {
 		return nil, err
@@ -81,6 +91,10 @@ func (w codexWriter) Plan(target Target, endpoint Endpoint) ([]File, error) {
 }
 
 func (w codexWriter) Apply(target Target, endpoint Endpoint) (map[string]string, error) {
+	if endpoint.ApiKey == "" {
+		return nil, errCodexNoKey
+	}
+
 	configPath, authPath, err := w.paths(target)
 	if err != nil {
 		return nil, err

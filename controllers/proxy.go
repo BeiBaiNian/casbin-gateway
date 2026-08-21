@@ -263,7 +263,7 @@ func (c *ApiController) forwardToChannels(channels []*object.Channel, route *pro
 	usableChannels := []*object.Channel{}
 	skipReason := ""
 	for _, channel := range channels {
-		if reason := channelUnusableReason(channel, route.target.protocol); reason != "" {
+		if reason := c.channelUnusableReason(channel, route.target.protocol); reason != "" {
 			beego.Error("skipped channel", channel.GetId()+":", reason)
 			skipReason = reason
 			continue
@@ -331,6 +331,9 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 	}
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	object.SetChannelAuth(upstreamReq.Header, channel)
+	if object.UsesClientAuth(channel) {
+		c.copyClientAuthHeaders(upstreamReq.Header)
+	}
 	if route.target.protocol == object.ProtocolAnthropic {
 		c.copyAnthropicHeaders(upstreamReq.Header)
 	}
@@ -393,6 +396,38 @@ func reportChannelStatus(channel *object.Channel, statusCode int) {
 		object.ReportChannelFailure(channel.GetId(), fmt.Sprintf("upstream rejected the credentials with %d", statusCode))
 	default:
 		object.ReportChannelSuccess(channel.GetId())
+	}
+}
+
+// clientAuthHeaders are forwarded verbatim by a channel that authenticates with
+// the caller's own credentials: the credential itself, plus what the vendors
+// expect beside a token issued to a CLI rather than to an API account. It is an
+// allowlist, so nothing else the client sent (a browser cookie, say) leaks
+// upstream.
+var clientAuthHeaders = []string{
+	"Authorization",
+	"X-Api-Key",
+	"User-Agent",
+	"X-App",
+	"Openai-Beta",
+	"Openai-Organization",
+	"Openai-Project",
+	"Chatgpt-Account-Id",
+}
+
+// hasClientCredentials reports whether the client request carries a credential
+// a client-auth channel could forward.
+func (c *ApiController) hasClientCredentials() bool {
+	header := c.Ctx.Request.Header
+	return header.Get("Authorization") != "" || header.Get("X-Api-Key") != ""
+}
+
+func (c *ApiController) copyClientAuthHeaders(dst http.Header) {
+	for _, name := range clientAuthHeaders {
+		dst.Del(name)
+		for _, value := range c.Ctx.Request.Header.Values(name) {
+			dst.Add(name, value)
+		}
 	}
 }
 
@@ -491,7 +526,7 @@ func isRetryableStatus(statusCode int) bool {
 
 // channelUnusableReason reports why the proxy cannot forward to a channel, or
 // an empty string when it can.
-func channelUnusableReason(channel *object.Channel, protocol string) string {
+func (c *ApiController) channelUnusableReason(channel *object.Channel, protocol string) string {
 	if !object.IsChannelTypeSupported(channel) {
 		return fmt.Sprintf("the %s channel type is not supported", channel.Type)
 	}
@@ -500,6 +535,11 @@ func channelUnusableReason(channel *object.Channel, protocol string) string {
 	}
 	if channel.BaseUrl == "" {
 		return "channel base URL is not configured"
+	}
+	// Without a credential to forward the upstream would answer 401, which
+	// reads as a broken channel rather than a client that sent no key.
+	if object.UsesClientAuth(channel) && !c.hasClientCredentials() {
+		return fmt.Sprintf("channel %s forwards the credentials of the caller, but the request carries none", channel.GetId())
 	}
 	return ""
 }

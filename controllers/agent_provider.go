@@ -136,7 +136,12 @@ func agentEndpoint(agentId string) (agentprovider.Endpoint, error) {
 	}
 
 	endpoint.BaseUrl = gatewayAgentUrl(agentId)
-	endpoint.ApiKey = gatewayToken
+	// A client-auth channel forwards whatever the agent sends, so it must keep
+	// sending its own credentials: a placeholder token written into the agent's
+	// configuration would replace the sign-in it already has.
+	if !object.UsesClientAuth(channel) {
+		endpoint.ApiKey = gatewayToken
+	}
 	return endpoint, nil
 }
 

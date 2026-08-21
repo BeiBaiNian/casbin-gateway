@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import {Switch} from "@/components/ui/switch";
 import {agentProxyBaseUrl, agentSetupNoteKey, directMode, gatewayMode} from "@/lib/agents";
-import {channelProtocol, shellForPath} from "@/lib/channels";
+import {channelProtocol, shellForPath, usesClientAuth} from "@/lib/channels";
 import {cn} from "@/lib/utils";
 import type {Agent, AgentProviderFile, Channel, ChannelHealth} from "@/types";
 
@@ -350,8 +350,11 @@ export function ProviderCard({
                   protocol={channelProtocol(bound.type)}
                   baseUrl={agentProxyBaseUrl(agent.agentId)}
                   defaultShell={shellForPath(agent.path)}
+                  includeToken={!usesClientAuth(bound)}
                 />
-                <p className="text-sm text-muted-foreground">{i18next.t("agent:Token hint")}</p>
+                <p className="text-sm text-muted-foreground">
+                  {usesClientAuth(bound) ? i18next.t("agent:Client auth token hint") : i18next.t("agent:Token hint")}
+                </p>
                 {noteKey === "" ? null : (
                   <p className="text-sm text-muted-foreground">{i18next.t(noteKey)}</p>
                 )}

@@ -31,13 +31,15 @@ export function EnvSnippet({
   protocol,
   baseUrl,
   defaultShell = "bash",
+  includeToken = true,
 }: {
   protocol: string;
   baseUrl: string;
   defaultShell?: Shell;
+  includeToken?: boolean;
 }) {
   const [shell, setShell] = React.useState<Shell>(defaultShell);
-  const snippet = envSnippet(protocol, baseUrl, shell);
+  const snippet = envSnippet(protocol, baseUrl, shell, includeToken);
 
   return (
     <div className="space-y-2">
