@@ -1,5 +1,5 @@
 <h1 align="center" style="border-bottom: none;">📦⚡️ Casbin Gateway</h1>
-<h3 align="center">An open-source Web Application Firewall (WAF) software developed by Go and React.</h3>
+<h3 align="center">An open-source gateway for the AI coding agents and the web traffic on your machine, developed by Go and React.</h3>
 <p align="center">
   <a href="https://github.com/apache/casbin-gateway/actions/workflows/golangci-lint.yml">
     <img alt="Lint" src="https://github.com/apache/casbin-gateway/actions/workflows/golangci-lint.yml/badge.svg">
@@ -16,12 +16,6 @@
 </p>
 
 <p align="center">
-  <a href="https://hub.docker.com/r/casbin/caswaf">
-    <img alt="docker pull casbin/caswaf" src="https://img.shields.io/docker/pulls/casbin/caswaf.svg">
-  </a>
-  <a href="https://hub.docker.com/r/casbin/caswaf">
-    <img alt="Docker Image Version (latest semver)" src="https://img.shields.io/badge/Docker%20Hub-latest-brightgreen">
-  </a>
   <a href="https://github.com/apache/casbin-gateway/blob/master/LICENSE">
     <img alt="license" src="https://img.shields.io/github/license/apache/casbin-gateway">
   </a>
@@ -39,95 +33,80 @@
   </a>
 </p>
 
-## Online demo
+## Run it
 
-- Read-only site: https://door.caswaf.com (any modification operation will fail)
-- Writable site: https://demo.caswaf.com (original data will be restored for every 5 minutes)
+One command. No database, no Go, no Node, no configuration.
 
-## Documentation
-
-https://caswaf.org
-
-## Architecture
-
-Casbin Gateway contains 2 parts:
-
-| Name     | Description                            | Language               | Source code                                              |
-|----------|----------------------------------------|------------------------|----------------------------------------------------------|
-| Frontend | Web frontend UI for Casbin Gateway     | TypeScript + React + shadcn/ui | https://github.com/apache/casbin-gateway/tree/master/web |
-| Backend  | RESTful API backend for Casbin Gateway | Golang + Beego + XORM  | https://github.com/apache/casbin-gateway                 |
-
-## Installation
-
-Casbin Gateway runs standalone out of the box: it stores its data in a local SQLite file, so there is no database server to install, and it signs users in against its own user table, seeding an `admin` account with the password `123` on first start. Connecting it to a [Casdoor](https://casdoor.org) instance is optional, and enables single sign-on plus the Casdoor-backed features listed under [Optional configuration](#optional-configuration).
-
-### Deployment Options
-
-- **Docker Compose**: Use the provided `docker-compose.yml` for quick local setup
-- **Manual Installation**: Build and run from source
-- **Single binary**: Build one self-contained executable that runs with no files next to it, see [Single binary](#single-binary)
-
-The reverse-proxy gateway on ports 80 and 443 is disabled by default, so starting the management application does not take over those ports. Set `gatewayEnabled = true` in `conf/app.conf` when you are ready to use the WAF proxy. On Linux and macOS those ports also need root, so for a first try it is easier to point `gatewayHttpPort` at a high port such as `8080`.
-
-### Agent monitoring
-
-Gateway also watches the AI coding agents installed on the machine it runs on: it discovers installations of agents such as Claude Code, Codex CLI and Cursor, patches the supported ones with a command hook, and tails their local audit logs into a live activity view under **Agents** in the web UI.
-
-Discovery reads that machine's user accounts, home directories and package install paths, so it only ever sees the host Gateway itself runs on. Inside a container — `docker compose up`, `docker run`, or Podman — Gateway scans the container's own filesystem, finds nothing, and the **Agents** page stays empty even though agents are installed on the host. Run Gateway from source or as a [single binary](#single-binary) on the host to use these features; every other part of Gateway, the WAF proxy included, behaves the same in Docker.
-
-### Skills and MCP servers
-
-Every agent keeps its skills and its MCP servers in its own file, in its own format: `~/.claude/skills` and `~/.claude.json` for Claude Code, `~/.codex/skills` and the `[mcp_servers]` tables of `~/.codex/config.toml` for Codex, `~/.cursor/skills-cursor` and `~/.cursor/mcp.json` for Cursor, and so on. The **Skills & MCP** page reads all of them and puts them in one table, with a column per agent showing which of them already has each item.
-
-From there an item can be opened — the whole `SKILL.md`, or the server's entry with its credentials masked — deleted from the agent that holds it, or copied into the other agents on the same account. A copy shows what it would do at every target first, item by item, and only replaces something that is already there when told to.
-
-Gateway reads and writes these files in place. It stages a replacement and renames it over the original rather than truncating it, keeps every setting it does not own, and preserves the comments and formatting of `config.toml` by editing its text instead of re-encoding it. The MCP server Gateway registers for its own monitoring is listed like any other, but is never copied or deleted from here; turning monitoring off on the **Agents** page is what removes it.
-
-Configuration is found whether or not the agent itself was discovered, so an agent installed some way Gateway does not recognize still shows the skills it has on disk. Like agent monitoring, this only ever sees the host Gateway runs on.
-
-### What was sent to the model
-
-Agents point at Gateway instead of at the model vendor, so every request they make passes through it. The **LLM Records** page is where that traffic is read back: one row per relayed request, and behind each row the whole body that went upstream - the full system prompt, every message in order with its tool calls and tool results, and the schema of every tool the model was offered. Both wire formats are shown the same way, so an OpenAI request and an Anthropic one read alike.
-
-Each row also carries what the turn cost: input tokens billed as fresh, tokens read from and written to the prompt cache, output tokens, and the price of all four. Above the table the same window is totalled, with a cache hit rate and a per-model breakdown. Prices are built-in list prices, which vendors change and resellers do not follow; point `llmPricingFile` at a JSON file of your own rates to correct them.
-
-Turn **Live** on and the page stops polling: new requests appear at the top as Gateway writes them.
-
-Nothing is recorded until you ask for it, because a prompt can carry anything the user pasted into it. In `conf/app.conf`:
-
-```ini
-; "off" keeps nothing, "metadata" records who called which model with which
-; outcome, "full" also stores the request body - which is what the page needs
-; to show prompts, messages and tool schemas.
-llmRecordMode = "full"
-llmRecordRetentionDays = 30
-llmRecordMaxRecords = 10000
-llmRecordMaxPayloadBytes = 1048576
-```
-
-Bodies are sanitized before they are stored: anything that looks like a credential is replaced, and the count of replacements is shown with the record. Request headers, which is where the inbound API key is, never reach a record at all. A body over `llmRecordMaxPayloadBytes` keeps its structure and loses only its longest strings, so a large conversation is still listed message by message.
-
-### Quick start
-
-From nothing to a request flowing through the gateway, in four steps. No database server is needed: Gateway creates `./data/casbin-gateway.db` on first start.
-
-#### 1. Build the web UI
-
-The backend serves the compiled frontend from `web/build`, so build it once before starting the backend:
+On Linux and macOS:
 
 ```bash
-cd web && yarn install && yarn build
+curl -fsSL https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/install.sh | bash
 ```
 
-For frontend development, run `yarn dev` instead. That serves the UI on http://localhost:16002 with hot reload and proxies API calls to the backend on port 17000, so both have to be running.
+On Windows, in PowerShell:
 
-#### 2. Run the backend
+```powershell
+irm https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/install.ps1 | iex
+```
+
+Either one downloads the build for this machine, unpacks it into `~/.local/share/casbin-gateway` (`%LOCALAPPDATA%\casbin-gateway` on Windows), puts a `casbin-gateway` command on your PATH, and starts it. Then open:
+
+**http://localhost:17000** — sign in as `admin` with the password `123`, and change it from **My Account**.
+
+That is the whole installation. Gateway keeps its data in a SQLite file inside its own directory, and signs you in against its own user table.
+
+### What to do next
+
+| Page | What you get | What it needs |
+| --- | --- | --- |
+| **Agents** | Every AI coding agent installed on this machine — Claude Code, Codex CLI, Cursor and more. Click **Patch** on one and its activity streams into the page live. | Nothing |
+| **Skills & MCP** | Every skill and MCP server of every agent in one table. Open one, delete it, or copy it into another agent. | Nothing |
+| **Channels** | One endpoint in front of your model vendors. Gateway holds the API key, so the agents never have it. | A vendor API key |
+| **LLM Records** | Every request an agent relayed: the full system prompt, every message and tool call, the schema of every tool the model was offered, plus tokens and cost. | A channel, and `llmRecordMode` — see [Recording prompts](#recording-prompts) |
+| **Advanced → Sites** | The reverse-proxy WAF: per-site routing, rules, certificates and analytics. | Turning the proxy on — see [Turning the WAF proxy on](#turning-the-waf-proxy-on) |
+
+Agents are found by reading the user accounts, home directories and install paths of **the machine Gateway runs on**, so run it on the machine whose agents you want to watch.
+
+### Send an agent's traffic through Gateway
+
+This is what fills **LLM Records**, and what lets Gateway keep the vendor key instead of the agent.
+
+1. **Channels** → **Add**: pick the type (OpenAI- or Anthropic-compatible), paste the vendor base URL and API key, and list the models it serves.
+2. **Agents** → open an agent → pick that channel.
+3. Copy the environment snippet the page shows, and start the agent from a shell that has it:
 
 ```bash
-go run main.go
+export ANTHROPIC_BASE_URL="http://localhost:17000/v1/agents/claude-code"
+export ANTHROPIC_AUTH_TOKEN="casbin-gateway"
 ```
 
-It prints a summary of what it is actually doing — ports, whether the reverse proxy is on, whether the database answered, and which sign-in it will use:
+The token is a placeholder — the agent refuses to start without one, and Gateway authenticates upstream with the channel's own key.
+
+### Stopping, upgrading, removing
+
+- **Stop**: `Ctrl-C`. **Start again**: `casbin-gateway`, from any directory — the command is a wrapper that always starts Gateway in its install directory, where its data lives.
+- **Upgrade**: run the install command again. Your database and settings are untouched.
+- **Remove**: delete `~/.local/share/casbin-gateway` and `~/.local/bin/casbin-gateway` (on Windows, `%LOCALAPPDATA%\casbin-gateway` and its PATH entry).
+
+Set `INSTALL_DIR` to install somewhere else, or `NO_START=1` to install without starting.
+
+**These are nightly builds**, rebuilt from `master` on every push and published as the [`nightly`](https://github.com/apache/casbin-gateway/releases/tag/nightly) pre-release. They exist so that Gateway can be tried without a Go and Node toolchain; anything else should be built from a source release.
+
+## Configuration
+
+Everything is optional. Settings live in `conf/app.conf`, next to the executable, and each one is explained in the file itself. The ones people actually change:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `httpport` | `17000` | Port of the web UI and the REST API |
+| `driverName` / `dataSourceName` | `sqlite` / `./data/casbin-gateway.db` | Where data is stored |
+| `gatewayEnabled` | `false` | Turns the reverse-proxy WAF on |
+| `gatewayHttpPort` / `gatewayHttpsPort` | `80` / `443` | Ports the proxy listens on |
+| `llmRecordMode` | `off` | How much of each relayed LLM request is kept |
+| `apiKeyEncryptionKey` | empty | Encrypts channel API keys at rest (AES-256-GCM) |
+| `casdoorEndpoint` | empty | Switches sign-in over to [Casdoor](https://casdoor.org) SSO |
+
+Gateway prints what it is actually doing when it starts, so the result can be checked instead of the file:
 
 ```
 +----------------------------------------------------------------------------+
@@ -147,27 +126,31 @@ It prints a summary of what it is actually doing — ports, whether the reverse 
 
 If a port is taken, Gateway says which process holds it and stops, rather than starting half-configured.
 
-#### 3. Sign in and add a site
+### Recording prompts
 
-Open http://localhost:17000, sign in as `admin` with the password `123`, and change it from the "My Account" page.
+Nothing about a relayed request is stored until you ask for it, because a prompt can carry anything that was pasted into it:
 
-Then go to **Sites** → **Add**, and set:
-
-- **Domain**: the hostname clients will use, e.g. `test.example.com`
-- **Host** and **Port**: where the traffic goes, e.g. `127.0.0.1` and `8000`
-- **Mode**: `HTTP` (`HTTPS Only`, the default, redirects plain HTTP away before it reaches the backend)
-
-Save. Then set `gatewayEnabled = true` in `conf/app.conf` and restart the backend — the Sites page shows a warning while the reverse proxy is off, because site configurations do nothing until it is on.
-
-#### 4. Verify the forwarding
-
-Start anything on the backend port you configured, for example:
-
-```bash
-python -m http.server 8000
+```ini
+; "off" keeps nothing, "metadata" records who called which model with which
+; outcome, "full" also stores the request body — which is what LLM Records needs
+; to show prompts, messages and tool schemas.
+llmRecordMode = "full"
+llmRecordRetentionDays = 30
+llmRecordMaxRecords = 10000
+llmRecordMaxPayloadBytes = 1048576
 ```
 
-The gateway routes on the `Host` header, so no DNS or `hosts` entry is needed to test it:
+Bodies are sanitized before they are stored: anything that looks like a credential is replaced, and the number of replacements is shown with the record. Request headers, which is where the inbound API key is, never reach a record at all. A body over `llmRecordMaxPayloadBytes` keeps its structure and loses only its longest strings, so a large conversation is still listed message by message.
+
+The cost next to each record uses built-in list prices, which vendors change and resellers do not follow. Point `llmPricingFile` at a JSON file of your own rates to correct them.
+
+### Turning the WAF proxy on
+
+The reverse proxy is off by default, so installing Gateway does not take over ports 80 and 443. To use it:
+
+1. **Advanced → Sites → Add**. Set **Domain** to the hostname clients will use (`test.example.com`), **Host** and **Port** to where the traffic goes (`127.0.0.1` and `8000`), and **Mode** to `HTTP` — `HTTPS Only`, the default, redirects plain HTTP away before it reaches the backend.
+2. Set `gatewayEnabled = true` in `conf/app.conf` and restart. Ports 80 and 443 need root on Linux and macOS, so for a first try set `gatewayHttpPort = 8080`.
+3. Start anything on the backend port, e.g. `python -m http.server 8000`, then ask for the site by `Host` header — the gateway routes on it, so no DNS or `hosts` entry is needed:
 
 ```bash
 curl -H "Host: test.example.com" http://127.0.0.1:8080/
@@ -175,9 +158,51 @@ curl -H "Host: test.example.com" http://127.0.0.1:8080/
 
 You should get your backend's response. A `site not found for host` reply means the request reached Gateway but no site matches that `Host` value.
 
-### Single binary
+### Connecting Casdoor
 
-Normally Gateway reads three things from disk when it starts: `conf/app.conf`, the compiled web UI in `web/build`, and the IP location database `ip/17monipdb.dat`. Building with the `embed` tag bakes all three into the executable, so it can be copied somewhere on its own and started from anywhere:
+[Casdoor](https://casdoor.org) is optional and takes over member management. Create an organization and an application for Gateway in a Casdoor instance, then fill in `casdoorEndpoint`, `clientId`, `clientSecret`, `casdoorOrganization` and `casdoorApplication`. Sign-in redirects to Casdoor as soon as `casdoorEndpoint` is set, which also enables [OAuth logins](https://casdoor.org/docs/provider/oauth/overview), health-check alerts, the `CAPTCHA` rule action, per-site SSO and cloud file storage.
+
+## Development
+
+### Prerequisites
+
+Go 1.20+, and Node.js with Yarn.
+
+### Run from source
+
+The backend serves the compiled frontend out of `web/build`, so build it once first:
+
+```bash
+cd web && yarn install && yarn build
+```
+
+```bash
+go run main.go
+```
+
+Then open http://localhost:17000 and sign in as `admin` with the password `123`, same as an installed Gateway. The SQLite database is created on first start; there is no database server to install.
+
+### Frontend development
+
+```bash
+cd web && yarn dev
+```
+
+That serves the UI on http://localhost:16002 with hot reload and proxies API calls to the backend on port 17000, so both have to be running.
+
+### Using MySQL instead of SQLite
+
+XORM is used, so every database it supports works. Point Gateway at your server and it creates `dbName` on first start if it does not exist:
+
+```ini
+driverName = mysql
+dataSourceName = root:123@tcp(localhost:3306)/
+dbName = casbin_gateway
+```
+
+### Building a single binary
+
+Gateway normally reads three things from disk: `conf/app.conf`, the compiled UI in `web/build`, and the IP location database `ip/17monipdb.dat`. The `embed` build tag bakes all three into the executable, which is what the install scripts ship:
 
 ```bash
 cd web && yarn install && yarn build
@@ -187,7 +212,7 @@ cd web && yarn install && yarn build
 go build -tags embed -o casbin-gateway .
 ```
 
-Build the frontend first: everything under `web/build` goes into the binary, so `go build -tags embed` fails to compile while that directory is missing. The Vite config leaves source maps out, which keeps them out of the binary too, where they would cost several times what the code they map costs.
+Build the frontend first — everything under `web/build` goes into the binary, so `go build -tags embed` fails to compile while that directory is missing.
 
 Files on disk always win over the embedded copies, so a single binary can still be configured and developed against without rebuilding it:
 
@@ -197,93 +222,33 @@ Files on disk always win over the embedded copies, so a single binary can still 
 | `web/build` | `web/build/index.html` in the working directory, which then serves the whole UI |
 | `ip/17monipdb.dat` | `ip/17monipdb.dat` in the working directory |
 
-The startup summary reports which source each one came from:
+The startup summary reports which source each one came from.
 
-```
-| Settings       | embedded in the binary (put your own conf/app.conf next to it to override) |
-| Web UI files   | embedded in the binary                                                     |
-```
+### Where the data goes
 
-Being self-contained is about startup, not about staying read-only: a running Gateway still writes `./data` (the SQLite database, deployed apps, agent patch state), `./logs` and `./tmp` relative to its working directory. Start it from the directory where that state belongs.
+Being self-contained is about startup, not about staying read-only. A running Gateway writes `./data` (the SQLite database, deployed apps, agent patch state), `./logs` and `./tmp` relative to its working directory — which is why the installed `casbin-gateway` command is a wrapper that always starts it in its install directory. Running the executable directly from somewhere else gives you a second, empty installation there.
 
-#### Nightly builds
+## Architecture
 
-Every push to `master` rebuilds the [`nightly`](https://github.com/apache/casbin-gateway/releases/tag/nightly) pre-release, with one such archive per platform — Linux, macOS and Windows, `x86_64` — each carrying `LICENSE`, `NOTICE` and `DISCLAIMER`.
+Casbin Gateway contains 2 parts:
 
-**Nightly builds are not official releases.** They are automated builds of whatever is on `master`, and exist so that a change can be tried without a Go and Node toolchain. Anything else should be built from a source release.
+| Name     | Description                            | Language               | Source code                                              |
+|----------|----------------------------------------|------------------------|----------------------------------------------------------|
+| Frontend | Web frontend UI for Casbin Gateway     | TypeScript + React + shadcn/ui | https://github.com/apache/casbin-gateway/tree/master/web |
+| Backend  | RESTful API backend for Casbin Gateway | Golang + Beego + XORM  | https://github.com/apache/casbin-gateway                 |
 
-On Linux and macOS:
+## Online demo
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/install.sh | bash
-```
+- Read-only site: https://door.caswaf.com (any modification operation will fail)
+- Writable site: https://demo.caswaf.com (original data is restored every 5 minutes)
 
-On Windows, in PowerShell:
+## Documentation
 
-```powershell
-irm https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/install.ps1 | iex
-```
-
-Either one downloads the archive for this machine and unpacks it into `~/.local/share/casbin-gateway` (`%LOCALAPPDATA%\casbin-gateway` on Windows) and starts Gateway there. Set `INSTALL_DIR` to install somewhere else, or `NO_START=1` to install without starting.
-
-The `casbin-gateway` command they put on your PATH is a small wrapper rather than the executable itself: Gateway keeps its database, logs and temporary files in the working directory, so the wrapper always starts it in the install directory. Running the executable directly from somewhere else gives you a second, empty installation there.
-
-### Necessary configuration
-
-#### Get the code
-
-```shell
-go get github.com/apache/casbin-gateway
-```
-
-or
-
-```shell
-git clone https://github.com/apache/casbin-gateway
-```
-
-#### Setup database
-
-Casbin Gateway stores its users, nodes and topics information in a SQLite file, created on first start. Nothing has to be installed or configured for this; the defaults in https://github.com/apache/casbin-gateway/blob/master/conf/app.conf are:
-
-```ini
-driverName = sqlite
-dataSourceName =
-```
-
-An empty `dataSourceName` means `./data/casbin-gateway.db`, relative to the working directory. Set it to another path to move the file.
-
-Casbin Gateway uses XORM to connect to DB, so all DBs supported by XORM can also be used. To use MySQL instead, point it at your server and Gateway creates the database named by `dbName` if it does not exist:
-
-```ini
-driverName = mysql
-dataSourceName = root:123@tcp(localhost:3306)/
-dbName = casbin_gateway
-```
-
-#### Run Casbin Gateway
-
-- Build the web UI once with `cd web && yarn install && yarn build`, then run the backend with `go run main.go`. See [Quick start](#quick-start) for the whole path, and the [documentation](https://caswaf.org) for everything else.
-- Open browser: http://localhost:17000/ (the backend serves the compiled UI). During frontend development, `yarn dev` serves it on http://localhost:16002/ instead and proxies API calls to port 17000.
-- Sign in as `admin` with the password `123`, then change it from the "My Account" page.
-
-### Optional configuration
-
-#### Connect to Casdoor
-
-Casdoor takes over member management and single sign-on. Create an organization and an application for Casbin Gateway in a [Casdoor](https://casdoor.org) instance, then fill in `casdoorEndpoint`, `clientId`, `clientSecret`, `casdoorOrganization` and `casdoorApplication` in app.conf. The built-in user table is bypassed as soon as `casdoorEndpoint` is set, and sign-in redirects to Casdoor instead.
-
-#### Setup your WAF to enable some third-party login platform
-
-With Casdoor connected, you can log in with oauth: see the [casdoor oauth configuration](https://casdoor.org/docs/provider/oauth/overview).
-
-#### OSS, Mail, and SMS services
-
-Casbin Gateway uses Casdoor to upload files to cloud storage, send Emails and send SMSs. Health-check alerts, the `CAPTCHA` rule action, per-site Casdoor SSO and the resource storage provider are all inactive until Casdoor is configured. See Casdoor for more details.
+https://caswaf.org
 
 ## Contribute
 
-For Casbin Gateway, if you have any questions, you can open Issues, or you can also directly start Pull Requests(but we recommend opening issues first to communicate with the community).
+If you have any questions, open an issue, or start a pull request directly — though we recommend opening an issue first to talk it through with the community.
 
 ## License
 
