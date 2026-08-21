@@ -122,6 +122,22 @@ export const channelPresets: ChannelPreset[] = [
   },
 ];
 
+/**
+ * What a channel starts from when it is meant to forward the caller's own
+ * login. Anthropic is the vendor of the clients that mode exists for; Codex
+ * signs in against an API Gateway does not relay.
+ */
+export function clientAuthDefaults() {
+  const preset = channelPresets.find(item => item.type === "anthropic");
+  return {
+    type: "anthropic",
+    baseUrl: preset?.baseUrl ?? "",
+    models: [] as string[],
+    apiKey: "",
+    authMode: authClient,
+  };
+}
+
 /** The base URLs and models offered for a channel type, from the vendors of it. */
 export function baseUrlPresets(type: string) {
   return channelPresets.filter(preset => preset.type === type).map(preset => preset.baseUrl);

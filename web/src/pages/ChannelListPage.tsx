@@ -14,14 +14,13 @@
 
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
-import {CircleCheck, CircleX, Pencil, Plug, Plus, RefreshCw, Trash2} from "lucide-react";
+import {CircleCheck, CircleX, KeyRound, LogIn, Pencil, Plug, Plus, RefreshCw, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {DataTable, type Column, type SortOrder} from "@/components/shared/data-table";
-import {EmptyState} from "@/components/shared/empty-state";
 import {Field, FormDialog} from "@/components/shared/form-dialog";
 import {CodeText} from "@/components/shared/misc";
 import {PageContainer, PageHeader} from "@/components/shared/page-header";
@@ -29,7 +28,7 @@ import {PasswordInput} from "@/components/shared/password-input";
 import {SearchSelect, SimpleSelect} from "@/components/shared/simple-select";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
-import {Card} from "@/components/ui/card";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
 import {TagsInput} from "@/components/ui/tags-input";
 import {SimpleTooltip} from "@/components/ui/tooltip";
@@ -38,6 +37,7 @@ import {
   baseUrlPlaceholder,
   baseUrlPresets,
   channelPresets,
+  clientAuthDefaults,
   modelPresets,
   modelsPlaceholder,
   usesClientAuth,
@@ -59,6 +59,33 @@ function newChannel(owner: string): Channel {
     apiKey: "",
     authMode: "channel",
   };
+}
+
+/** One of the ways to get a first channel, offered while the list is empty. */
+function StartOption({
+  icon: Icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ComponentType<{className?: string}>;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="hover:border-primary hover:bg-accent/40 flex flex-col items-start gap-1 rounded-lg border p-4 text-left transition-colors"
+    >
+      <span className="flex items-center gap-2 text-sm font-medium">
+        <Icon className="size-4" />
+        {title}
+      </span>
+      <span className="text-muted-foreground text-xs">{description}</span>
+    </button>
+  );
 }
 
 export default function ChannelListPage({account}: {account: Account}) {
@@ -130,8 +157,8 @@ export default function ChannelListPage({account}: {account: Account}) {
     return () => clearInterval(interval);
   }, []);
 
-  const openAddDialog = () => {
-    setForm(newChannel(account.name));
+  const openAddDialog = (start?: Partial<Channel>) => {
+    setForm({...newChannel(account.name), ...start});
     setNameError("");
     setAddOpen(true);
   };
@@ -141,7 +168,14 @@ export default function ChannelListPage({account}: {account: Account}) {
   };
 
   const applyPreset = (preset: ChannelPreset) => {
-    setForm(prev => ({...prev, type: preset.type, baseUrl: preset.baseUrl, models: preset.models}));
+    setForm(prev => ({
+      ...prev,
+      type: preset.type,
+      baseUrl: preset.baseUrl,
+      // A client-auth channel takes any model, so the vendor's list would only
+      // narrow it.
+      models: usesClientAuth(prev) ? prev.models : preset.models,
+    }));
   };
 
   const addChannel = () => {
@@ -346,7 +380,7 @@ export default function ChannelListPage({account}: {account: Account}) {
         title={i18next.t("channel:Channels")}
         description={i18next.t("channel:Page description")}
         actions={
-          <Button onClick={openAddDialog}>
+          <Button onClick={() => openAddDialog()}>
             <Plus />
             {i18next.t("channel:New Channel")}
           </Button>
@@ -354,18 +388,28 @@ export default function ChannelListPage({account}: {account: Account}) {
       />
 
       {loaded && data.length === 0 ? (
-        <Card className="py-0">
-          <EmptyState
-            icon={Plug}
-            title={i18next.t("channel:No channels yet")}
-            description={i18next.t("channel:No channels yet detail")}
-            action={
-              <Button onClick={openAddDialog}>
-                <Plus />
-                {i18next.t("channel:New Channel")}
-              </Button>
-            }
-          />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plug className="size-4" />
+              {i18next.t("channel:No channels yet")}
+            </CardTitle>
+            <CardDescription>{i18next.t("channel:No channels yet detail")}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <StartOption
+              icon={LogIn}
+              title={i18next.t("channel:Start from a sign-in")}
+              description={i18next.t("channel:Start from a sign-in detail")}
+              onClick={() => openAddDialog(clientAuthDefaults())}
+            />
+            <StartOption
+              icon={KeyRound}
+              title={i18next.t("channel:Start from an API key")}
+              description={i18next.t("channel:Start from an API key detail")}
+              onClick={() => openAddDialog()}
+            />
+          </CardContent>
         </Card>
       ) : (
         <DataTable
