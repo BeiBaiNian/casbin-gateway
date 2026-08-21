@@ -405,11 +405,19 @@ func UpdateChannel(id string, channel *Channel) (bool, error) {
 	}
 
 	affected, err := session.AllCols().Update(channel)
+	if err == nil {
+		// The edit may be the fix for whatever the proxy last saw, so the
+		// channel starts from a clean slate.
+		ClearChannelHealth(channel.GetId())
+	}
 	return affected != 0, err
 }
 
 func DeleteChannel(channel *Channel) (bool, error) {
 	affected, err := ormer.Engine.ID(core.PK{channel.Owner, channel.Name}).Delete(&Channel{})
+	if err == nil {
+		ClearChannelHealth(channel.GetId())
+	}
 	return affected != 0, err
 }
 

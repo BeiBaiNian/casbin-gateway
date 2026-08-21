@@ -164,6 +164,25 @@ export interface ChannelTestResult {
   message: string;
 }
 
+/** One configuration file a provider switch writes, with what it will contain. */
+export interface AgentProviderFile {
+  path: string;
+  format: string;
+  preview: string;
+}
+
+/** The state of the agent's own configuration file, written by the orchestrator. */
+export interface AgentProvider {
+  supported: boolean;
+  applied: boolean;
+  channel: string;
+  mode: string;
+  baseUrl: string;
+  time: string;
+  files: string[];
+  detail: string;
+}
+
 export interface Agent {
   agentId: string;
   name: string;
@@ -178,6 +197,24 @@ export interface Agent {
   followup?: string;
   /** The "owner/name" id of the channel this agent's requests are sent to. */
   channel: string;
+  /** The channels tried, in order, when the bound one cannot answer. */
+  fallbacks: string[];
+  /** "gateway" routes through the local proxy, "direct" writes the upstream. */
+  mode: string;
+  provider: AgentProvider;
+}
+
+/** What the proxy has seen of one channel since Gateway started. */
+export interface ChannelHealth {
+  channel: string;
+  healthy: boolean;
+  successes: number;
+  failures: number;
+  consecutive: number;
+  lastError: string;
+  lastFailure: string;
+  /** When a suspended channel is tried again, empty while it is healthy. */
+  retryTime: string;
 }
 
 export interface AgentRecord {
@@ -270,6 +307,14 @@ export interface LlmModelStat {
   cost: number;
 }
 
+export interface LlmChannelStat {
+  channel: string;
+  requests: number;
+  failed: number;
+  tokens: number;
+  cost: number;
+}
+
 export interface LlmRecordStats {
   requests: number;
   failed: number;
@@ -282,6 +327,7 @@ export interface LlmRecordStats {
   /** Records whose model has no price entry. */
   unpriced: number;
   models: LlmModelStat[];
+  channels: LlmChannelStat[];
 }
 
 export interface MetricPoint {

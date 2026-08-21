@@ -74,6 +74,9 @@ func initAPI() {
 	beego.Router("/api/get-agent-config-item", &controllers.ApiController{}, "GET:GetAgentConfigItem")
 	beego.Router("/api/delete-agent-config-item", &controllers.ApiController{}, "POST:DeleteAgentConfigItem")
 	beego.Router("/api/plan-agent-config-copy", &controllers.ApiController{}, "POST:PlanAgentConfigCopy")
+	beego.Router("/api/plan-agent-provider", &controllers.ApiController{}, "POST:PlanAgentProvider")
+	beego.Router("/api/apply-agent-provider", &controllers.ApiController{}, "POST:ApplyAgentProvider")
+	beego.Router("/api/restore-agent-provider", &controllers.ApiController{}, "POST:RestoreAgentProvider")
 	beego.Router("/api/copy-agent-config", &controllers.ApiController{}, "POST:CopyAgentConfig")
 
 	beego.Router("/api/get-records", &controllers.ApiController{}, "GET:GetRecords")
@@ -98,6 +101,7 @@ func initAPI() {
 	beego.Router("/api/update-channel", &controllers.ApiController{}, "POST:UpdateChannel")
 	beego.Router("/api/delete-channel", &controllers.ApiController{}, "POST:DeleteChannel")
 	beego.Router("/api/test-channel", &controllers.ApiController{}, "POST:TestChannel")
+	beego.Router("/api/get-channel-health", &controllers.ApiController{}, "GET:GetChannelHealth")
 
 	beego.Router("/api/get-llm-records", &controllers.ApiController{}, "GET:GetLlmRecords")
 	beego.Router("/api/get-llm-record", &controllers.ApiController{}, "GET:GetLlmRecord")

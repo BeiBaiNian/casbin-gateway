@@ -31,7 +31,7 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {TagsInput} from "@/components/ui/tags-input";
 import {SimpleTooltip} from "@/components/ui/tooltip";
-import type {Account, Channel} from "@/types";
+import type {Account, Channel, ChannelHealth} from "@/types";
 
 function newChannel(owner: string): Channel {
   const randomName = Setting.getRandomName();
@@ -63,6 +63,7 @@ export default function ChannelListPage({account}: {account: Account}) {
   const [adding, setAdding] = React.useState(false);
   const [form, setForm] = React.useState<Channel>(() => newChannel(account.name));
   const [nameError, setNameError] = React.useState("");
+  const [health, setHealth] = React.useState<ChannelHealth[]>([]);
 
   const fetchChannels = React.useCallback(
     (nextPage = page, nextPageSize = pageSize, nextSort = sort) => {
@@ -98,6 +99,20 @@ export default function ChannelListPage({account}: {account: Account}) {
     fetchChannels(1, 10, {field: "", order: undefined});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.name]);
+
+  // What the proxy has seen of each channel lives in memory and changes as
+  // requests are relayed, so it is polled rather than read once.
+  React.useEffect(() => {
+    const load = () => {
+      ChannelBackend.getChannelHealth()
+        .then(res => setHealth(res.status === "ok" ? (res.data ?? []) : []))
+        .catch(() => setHealth([]));
+    };
+
+    load();
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const openAddDialog = () => {
     setForm(newChannel(account.name));
@@ -242,6 +257,43 @@ export default function ChannelListPage({account}: {account: Account}) {
             {i18next.t("channel:Disabled")}
           </Badge>
         ),
+    },
+    {
+      title: i18next.t("channel:Health"),
+      key: "health",
+      width: "150px",
+      render: (_text, record) => {
+        const item = health.find(entry => entry.channel === `${record.owner}/${record.name}`);
+        if (!item) {
+          return <span className="text-muted-foreground">{i18next.t("channel:Not used yet")}</span>;
+        }
+        // A channel that is out of its cooldown but whose last attempts failed
+        // is back in rotation without having proven anything yet.
+        const badge = !item.healthy ? (
+          <Badge variant="warning">
+            <CircleX />
+            {i18next.t("channel:Cooling down")}
+          </Badge>
+        ) : item.consecutive > 0 ? (
+          <Badge variant="muted">{i18next.t("channel:Recovering")}</Badge>
+        ) : (
+          <Badge variant="success">
+            <CircleCheck />
+            {i18next.t("channel:Healthy")}
+          </Badge>
+        );
+        return (
+          <SimpleTooltip
+            title={
+              item.healthy
+                ? `${item.successes} / ${item.successes + item.failures}`
+                : `${item.lastError} · ${i18next.t("channel:Retried at")} ${item.retryTime}`
+            }
+          >
+            {badge}
+          </SimpleTooltip>
+        );
+      },
     },
     {
       title: i18next.t("general:Action"),

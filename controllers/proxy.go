@@ -199,7 +199,7 @@ func (c *ApiController) proxyByModel(target proxyTarget) {
 	c.forwardToChannels(channels, route)
 }
 
-// proxyByAgent forwards to the single channel bound to the agent in the path.
+// proxyByAgent forwards to the channel chain bound to the agent in the path.
 func (c *ApiController) proxyByAgent(target proxyTarget) {
 	route, ok := c.readProxyRoute(target)
 	if !ok {
@@ -212,7 +212,9 @@ func (c *ApiController) proxyByAgent(target proxyTarget) {
 	}
 	defer c.finishLlmRecord(route)
 
-	channel, err := object.GetChannelByAgent(agentId)
+	// The whole chain is forwarded to, so a bound channel that is down fails
+	// over to the agent's fallbacks instead of failing the request.
+	channels, err := object.GetChannelsByAgent(agentId)
 	if err != nil {
 		if errors.Is(err, object.ErrAgentNoChannel) {
 			route.recordOutcome(http.StatusBadRequest, err.Error())
@@ -225,7 +227,7 @@ func (c *ApiController) proxyByAgent(target proxyTarget) {
 		return
 	}
 
-	c.forwardToChannels([]*object.Channel{channel}, route)
+	c.forwardToChannels(channels, route)
 }
 
 func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
@@ -278,6 +280,10 @@ func (c *ApiController) forwardToChannels(channels []*object.Channel, route *pro
 		return
 	}
 
+	// A channel inside its failure cooldown goes last, so a dead upstream stops
+	// costing every request the time it takes to time out.
+	usableChannels = object.SortChannelsByHealth(usableChannels)
+
 	// Fail over to the next channel as long as nothing has been written to the
 	// client yet. The last channel is never retried, so the client gets the
 	// real upstream answer instead of a synthesized error.
@@ -310,6 +316,7 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 
 	upstreamUrl, err := object.BuildChannelUrl(channel.BaseUrl, route.target.protocol, route.target.endpoint)
 	if err != nil {
+		object.ReportChannelFailure(channel.GetId(), err.Error())
 		return http.StatusBadGateway, err.Error(), false
 	}
 
@@ -339,11 +346,15 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 		beego.Error("upstream request to channel", channel.GetId(), "failed:", err)
 		var netErr net.Error
 		if errors.As(err, &netErr) && netErr.Timeout() {
+			object.ReportChannelFailure(channel.GetId(), "upstream timeout")
 			return http.StatusGatewayTimeout, "upstream timeout", false
 		}
+		object.ReportChannelFailure(channel.GetId(), "upstream connection failed")
 		return http.StatusBadGateway, "upstream connection failed", false
 	}
 	defer upstreamResp.Body.Close()
+
+	reportChannelStatus(channel, upstreamResp.StatusCode)
 
 	if !isLast && isRetryableStatus(upstreamResp.StatusCode) {
 		beego.Error("channel", channel.GetId(), "returned a retryable status:", upstreamResp.Status)
@@ -367,6 +378,22 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 	c.relayResponse(upstreamResp, tap, route.stream && isEventStream(upstreamResp))
 	route.recordUsage(tap.tail)
 	return 0, "", true
+}
+
+// reportChannelStatus feeds the breaker that decides in which order channels are
+// tried. A status the upstream itself rejected the request with counts as a
+// channel failure: a wrong key or an exhausted quota is not something the next
+// request will do better.
+func reportChannelStatus(channel *object.Channel, statusCode int) {
+	switch {
+	case isRetryableStatus(statusCode):
+		object.ReportChannelFailure(channel.GetId(), fmt.Sprintf("upstream returned %d", statusCode))
+	case statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden ||
+		statusCode == http.StatusPaymentRequired:
+		object.ReportChannelFailure(channel.GetId(), fmt.Sprintf("upstream rejected the credentials with %d", statusCode))
+	default:
+		object.ReportChannelSuccess(channel.GetId())
+	}
 }
 
 // copyAnthropicHeaders passes the client's API version and beta opt-ins on to

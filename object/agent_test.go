@@ -31,22 +31,22 @@ func TestSetAgentChannelBindsAndUnbinds(t *testing.T) {
 	if err := SetAgentChannel("codex", "admin/codex-upstream"); err != nil {
 		t.Fatal(err)
 	}
-	channels, err := GetAgentChannels()
+	agents, err := GetAgents()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if channels["codex"] != "admin/codex-upstream" {
-		t.Fatalf("expected the binding to be stored, got %q", channels["codex"])
+	if agents["codex"].Channel != "admin/codex-upstream" {
+		t.Fatalf("expected the binding to be stored, got %q", agents["codex"].Channel)
 	}
 
 	if err := SetAgentChannel("codex", ""); err != nil {
 		t.Fatal(err)
 	}
-	channels, err = GetAgentChannels()
+	agents, err = GetAgents()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, found := channels["codex"]; found {
+	if agents["codex"].Channel != "" {
 		t.Fatal("expected an empty channel to unbind the agent")
 	}
 }

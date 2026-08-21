@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import {itemId, query, request} from "@/backend/request";
-import type {Channel, ChannelTestResult} from "@/types";
+import type {Channel, ChannelHealth, ChannelTestResult} from "@/types";
 
 export function getChannels(
   owner: string,
@@ -51,4 +51,10 @@ export function deleteChannel(channel: Channel) {
 
 export function testChannel(owner: string, name: string) {
   return request<ChannelTestResult>("/api/test-channel", "POST", {owner: owner, name: name});
+}
+
+/** What the proxy has seen of each channel, which is what says why a request
+ * went to a fallback rather than to the bound channel. */
+export function getChannelHealth() {
+  return request<ChannelHealth[]>("/api/get-channel-health");
 }

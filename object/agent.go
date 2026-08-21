@@ -30,6 +30,13 @@ var ErrAgentNoChannel = errors.New("no channel is bound to this agent")
 // the host, and its proxy endpoint is reached without a session.
 const AgentOwner = "admin"
 
+// How an agent reaches its channel. The values are the ones agentprovider
+// writes into the agent's own configuration file.
+const (
+	ModeGateway = "gateway"
+	ModeDirect  = "direct"
+)
+
 // Agent is the Gateway-side configuration of one kind of AI agent. Installations
 // are discovered by scanning the host, so this table holds only what is chosen.
 type Agent struct {
@@ -40,6 +47,13 @@ type Agent struct {
 
 	// Channel is the "owner/name" id of the bound channel, empty when unbound.
 	Channel string `xorm:"varchar(200)" json:"channel"`
+	// Fallbacks are the channel ids tried, in order, when Channel cannot answer.
+	// They are JSON-serialized by xorm, hence the text column.
+	Fallbacks []string `xorm:"mediumtext" json:"fallbacks"`
+	// Mode is how the agent reaches its channel: ModeGateway routes it through
+	// the local proxy, ModeDirect writes the channel's own endpoint into the
+	// agent's configuration file.
+	Mode string `xorm:"varchar(20)" json:"mode"`
 }
 
 func (agent *Agent) GetId() string {
@@ -58,36 +72,51 @@ func GetAgent(agentId string) (*Agent, error) {
 	return agent, nil
 }
 
-// GetAgentChannels maps every configured agent id to its channel id.
-func GetAgentChannels() (map[string]string, error) {
+// GetAgents returns every configured agent, keyed by agent id. Installations
+// are discovered per host while the routing is stored per agent id, so the two
+// are merged by the caller.
+func GetAgents() (map[string]*Agent, error) {
 	agents := []*Agent{}
 	if err := ormer.Engine.Where("owner = ?", AgentOwner).Find(&agents); err != nil {
 		return nil, err
 	}
 
-	channels := map[string]string{}
+	result := map[string]*Agent{}
 	for _, agent := range agents {
-		if agent.Channel != "" {
-			channels[agent.Name] = agent.Channel
+		if agent.Mode == "" {
+			agent.Mode = ModeGateway
 		}
+		result[agent.Name] = agent
 	}
-	return channels, nil
+	return result, nil
 }
 
-// SetAgentChannel binds an agent to a channel, or unbinds it when channelId is
-// empty. The channel is resolved here so a typo fails at the form, not at runtime.
-func SetAgentChannel(agentId string, channelId string) error {
+// SetAgentRouting stores where one agent's requests go: the bound channel, the
+// channels to fall over to when it cannot answer, and how the agent reaches
+// them. Every channel is resolved here so a typo fails at the form rather than
+// on the next relayed request.
+func SetAgentRouting(agentId string, channelId string, fallbacks []string, mode string) error {
 	if agentId == "" {
 		return errors.New("the agent id is empty")
 	}
+	if mode == "" {
+		mode = ModeGateway
+	}
+	if mode != ModeGateway && mode != ModeDirect {
+		return fmt.Errorf("invalid agent mode: %s", mode)
+	}
 
-	if channelId != "" {
-		channel, err := getChannelById(channelId)
+	fallbacks = normalizeFallbacks(channelId, fallbacks)
+	for _, id := range append([]string{channelId}, fallbacks...) {
+		if id == "" {
+			continue
+		}
+		channel, err := getChannelById(id)
 		if err != nil {
 			return err
 		}
 		if channel == nil {
-			return fmt.Errorf("the channel does not exist: %s", channelId)
+			return fmt.Errorf("the channel does not exist: %s", id)
 		}
 	}
 
@@ -104,21 +133,52 @@ func SetAgentChannel(agentId string, channelId string) error {
 			CreatedTime: now,
 			UpdatedTime: now,
 			Channel:     channelId,
+			Fallbacks:   fallbacks,
+			Mode:        mode,
 		})
 		return err
 	}
 
 	// Cols() is what writes an empty channel: xorm skips zero values otherwise.
 	_, err = ormer.Engine.ID(core.PK{AgentOwner, agentId}).
-		Cols("channel", "updated_time").
-		Update(&Agent{Channel: channelId, UpdatedTime: now})
+		Cols("channel", "fallbacks", "mode", "updated_time").
+		Update(&Agent{Channel: channelId, Fallbacks: fallbacks, Mode: mode, UpdatedTime: now})
 	return err
 }
 
-// GetChannelByAgent resolves the channel one agent's requests go to. An unusable
-// binding fails rather than falling back to model routing, so a request never
-// reaches a different upstream than the one configured.
-func GetChannelByAgent(agentId string) (*Channel, error) {
+// SetAgentChannel binds an agent to a channel, or unbinds it when channelId is
+// empty, leaving its fallbacks and mode as they are.
+func SetAgentChannel(agentId string, channelId string) error {
+	stored, err := GetAgent(agentId)
+	if err != nil {
+		return err
+	}
+	if stored == nil {
+		return SetAgentRouting(agentId, channelId, nil, "")
+	}
+	return SetAgentRouting(agentId, channelId, stored.Fallbacks, stored.Mode)
+}
+
+// normalizeFallbacks drops empty entries, duplicates and the primary channel,
+// so the chain never tries the same upstream twice.
+func normalizeFallbacks(channelId string, fallbacks []string) []string {
+	result := []string{}
+	seen := map[string]bool{channelId: true, "": true}
+	for _, id := range fallbacks {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		result = append(result, id)
+	}
+	return result
+}
+
+// GetChannelsByAgent is the chain one agent's requests are tried against: the
+// bound channel first, then its fallbacks. A missing or disabled entry is
+// skipped rather than failing the request, which is what makes the fallbacks
+// worth configuring; a chain with nothing left in it reports why.
+func GetChannelsByAgent(agentId string) ([]*Channel, error) {
 	agent, err := GetAgent(agentId)
 	if err != nil {
 		return nil, err
@@ -127,17 +187,41 @@ func GetChannelByAgent(agentId string) (*Channel, error) {
 		return nil, fmt.Errorf("%w: %s", ErrAgentNoChannel, agentId)
 	}
 
-	channel, err := getChannelById(agent.Channel)
+	channels := []*Channel{}
+	skipped := ""
+	for _, id := range append([]string{agent.Channel}, agent.Fallbacks...) {
+		channel, err := getChannelById(id)
+		if err != nil {
+			skipped = err.Error()
+			continue
+		}
+		if channel == nil {
+			skipped = fmt.Sprintf("the channel bound to agent %s no longer exists: %s", agentId, id)
+			continue
+		}
+		if channel.Status != "enabled" {
+			skipped = fmt.Sprintf("the channel bound to agent %s is disabled: %s", agentId, id)
+			continue
+		}
+		channels = append(channels, channel)
+	}
+
+	if len(channels) == 0 {
+		if skipped == "" {
+			return nil, fmt.Errorf("%w: %s", ErrAgentNoChannel, agentId)
+		}
+		return nil, errors.New(skipped)
+	}
+	return channels, nil
+}
+
+// GetChannelByAgent resolves the first channel of an agent's chain.
+func GetChannelByAgent(agentId string) (*Channel, error) {
+	channels, err := GetChannelsByAgent(agentId)
 	if err != nil {
 		return nil, err
 	}
-	if channel == nil {
-		return nil, fmt.Errorf("the channel bound to agent %s no longer exists: %s", agentId, agent.Channel)
-	}
-	if channel.Status != "enabled" {
-		return nil, fmt.Errorf("the channel bound to agent %s is disabled: %s", agentId, agent.Channel)
-	}
-	return channel, nil
+	return channels[0], nil
 }
 
 // getChannelById is GetChannel() without its panic on a malformed id.

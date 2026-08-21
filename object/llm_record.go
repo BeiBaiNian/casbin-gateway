@@ -105,18 +105,29 @@ type LlmModelStat struct {
 	Cost     float64 `json:"cost"`
 }
 
+// LlmChannelStat is one channel's share of the window the stats cover, which is
+// what tells two providers serving the same models apart.
+type LlmChannelStat struct {
+	Channel  string  `json:"channel"`
+	Requests int64   `json:"requests"`
+	Failed   int64   `json:"failed"`
+	Tokens   int64   `json:"tokens"`
+	Cost     float64 `json:"cost"`
+}
+
 // LlmRecordStats totals the records a filter matches.
 type LlmRecordStats struct {
-	Requests         int64          `json:"requests"`
-	Failed           int64          `json:"failed"`
-	PromptTokens     int64          `json:"promptTokens"`
-	CompletionTokens int64          `json:"completionTokens"`
-	CacheReadTokens  int64          `json:"cacheReadTokens"`
-	CacheWriteTokens int64          `json:"cacheWriteTokens"`
-	TotalTokens      int64          `json:"totalTokens"`
-	Cost             float64        `json:"cost"`
-	Unpriced         int64          `json:"unpriced"`
-	Models           []LlmModelStat `json:"models"`
+	Requests         int64            `json:"requests"`
+	Failed           int64            `json:"failed"`
+	PromptTokens     int64            `json:"promptTokens"`
+	CompletionTokens int64            `json:"completionTokens"`
+	CacheReadTokens  int64            `json:"cacheReadTokens"`
+	CacheWriteTokens int64            `json:"cacheWriteTokens"`
+	TotalTokens      int64            `json:"totalTokens"`
+	Cost             float64          `json:"cost"`
+	Unpriced         int64            `json:"unpriced"`
+	Models           []LlmModelStat   `json:"models"`
+	Channels         []LlmChannelStat `json:"channels"`
 }
 
 // LlmRecordStatus is what the management page shows about the recorder itself,
@@ -579,6 +590,7 @@ func GetLlmRecordStats(filter LlmRecordFilter, topModels int) (*LlmRecordStats, 
 		Cost:             cost,
 		Unpriced:         unpriced,
 		Models:           []LlmModelStat{},
+		Channels:         []LlmChannelStat{},
 	}
 
 	modelSession := llmRecordSession(filter)
@@ -589,6 +601,21 @@ func GetLlmRecordStats(filter LlmRecordFilter, topModels int) (*LlmRecordStats, 
 		Desc("requests").
 		Limit(topModels).
 		Find(&stats.Models)
+	if err != nil {
+		return nil, err
+	}
+
+	channelSession := llmRecordSession(filter)
+	defer channelSession.Close()
+	err = channelSession.Table("llm_record").
+		Select("channel as channel, COUNT(*) as requests, " +
+			"SUM(CASE WHEN status >= 200 AND status < 300 THEN 0 ELSE 1 END) as failed, " +
+			"SUM(total_tokens) as tokens, SUM(cost) as cost").
+		Where("channel <> ''").
+		GroupBy("channel").
+		Desc("requests").
+		Limit(topModels).
+		Find(&stats.Channels)
 	if err != nil {
 		return nil, err
 	}

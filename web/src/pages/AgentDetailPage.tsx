@@ -20,40 +20,37 @@ import i18next from "i18next";
 
 import * as AgentBackend from "@/backend/AgentBackend";
 import * as ChannelBackend from "@/backend/ChannelBackend";
+import * as LlmRecordBackend from "@/backend/LlmRecordBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
 import {DataTable, type Column} from "@/components/shared/data-table";
-import {EnvSnippet} from "@/components/EnvSnippet";
+import {ProviderCard} from "@/components/ProviderCard";
 import {ResultScreen, UnauthorizedResult} from "@/components/shared/misc";
 import {Alert, AlertDescription} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {AiDots} from "@/components/shared/loading";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import {
   agentKey,
-  agentProxyBaseUrl,
-  agentSetupNoteKey,
   getOutcomeVariant,
   monitorAgentId,
   useAgents,
   useAgentSessions,
 } from "@/lib/agents";
-import {channelProtocol, shellForPath} from "@/lib/channels";
-import type {Account, Agent, AgentRecord, AgentSession, Channel} from "@/types";
-
-/** Radix rejects an empty item value, so "unbound" needs a stand-in. */
-const noChannel = "-";
+import {formatCost, formatTokens} from "@/lib/usage";
+import type {
+  Account,
+  Agent,
+  AgentRecord,
+  AgentSession,
+  Channel,
+  ChannelHealth,
+  LlmRecordStats,
+} from "@/types";
 
 const tabs = ["Agent Sessions", "Agent Records"] as const;
 type Tab = (typeof tabs)[number];
@@ -124,66 +121,51 @@ function MonitoringCard({
   );
 }
 
-/** Which upstream this agent's requests go to, and how to point it at them. */
-function ChannelCard({
-  agent,
-  channels,
-  busy,
-  onChange,
-}: {
-  agent: Agent;
-  channels: Channel[];
-  busy: boolean;
-  onChange: (channel: string) => void;
-}) {
-  // The bound channel decides the wire format, and with it the variable names
-  // the agent has to be given. It is undefined while the channels load.
-  const bound = channels.find(channel => `${channel.owner}/${channel.name}` === agent.channel);
-  const noteKey = agentSetupNoteKey(agent.agentId);
-
+/** What this agent has spent through the proxy, and on which channel. */
+function UsageCard({stats}: {stats: LlmRecordStats | null}) {
   return (
     <Card>
       <CardHeader className="p-4 pb-2">
-        <CardTitle className="text-base">{i18next.t("agent:Channel")}</CardTitle>
+        <CardTitle className="text-base">{i18next.t("agent:Usage")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0">
-        <Select
-          value={agent.channel === "" ? noChannel : agent.channel}
-          disabled={busy}
-          onValueChange={value => onChange(value === noChannel ? "" : value)}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={noChannel}>
-              <span className="text-muted-foreground">{i18next.t("agent:No channel")}</span>
-            </SelectItem>
-            {channels.map(channel => (
-              <SelectItem key={`${channel.owner}/${channel.name}`} value={`${channel.owner}/${channel.name}`}>
-                {channel.displayName || channel.name}
-                {/* The type is the wire format, which has to match the one the agent speaks. */}
-                <span className="ml-2 text-xs text-muted-foreground">{channel.type}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <div className="text-xs text-muted-foreground">{i18next.t("llm:Requests")}</div>
+            <div className="text-lg font-semibold">{(stats?.requests ?? 0).toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">{i18next.t("llm:Tokens")}</div>
+            <div className="text-lg font-semibold">{formatTokens(stats?.totalTokens ?? 0)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">{i18next.t("llm:Cost")}</div>
+            <div className="text-lg font-semibold">{formatCost(stats?.cost ?? 0)}</div>
+          </div>
+        </div>
 
-        {agent.channel === "" ? (
-          <p className="text-sm text-muted-foreground">{i18next.t("agent:Channel hint")}</p>
-        ) : bound === undefined ? null : (
-          <>
-            <p className="text-sm text-muted-foreground">{i18next.t("agent:Base URL hint")}</p>
-            <EnvSnippet
-              protocol={channelProtocol(bound.type)}
-              baseUrl={agentProxyBaseUrl(agent.agentId)}
-              defaultShell={shellForPath(agent.path)}
-            />
-            <p className="text-sm text-muted-foreground">{i18next.t("agent:Token hint")}</p>
-            {noteKey === "" ? null : (
-              <p className="text-sm text-muted-foreground">{i18next.t(noteKey)}</p>
-            )}
-          </>
+        {stats && stats.failed > 0 ? (
+          <p className="text-sm text-warning">
+            {`${stats.failed.toLocaleString()} ${i18next.t("llm:failed")}`}
+          </p>
+        ) : null}
+
+        {/* The per-channel split is what says whether the fallbacks are carrying
+            traffic the bound channel could not. */}
+        {stats && stats.channels.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {stats.channels.map(channel => (
+              <Badge key={channel.channel} variant="muted" className="gap-2">
+                <span className="font-mono">{channel.channel}</span>
+                <span>{channel.requests.toLocaleString()}</span>
+                <span className="text-muted-foreground">
+                  {formatTokens(channel.tokens)} · {formatCost(channel.cost)}
+                </span>
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">{i18next.t("agent:No usage yet")}</p>
         )}
       </CardContent>
     </Card>
@@ -194,11 +176,14 @@ export default function AgentDetailPage({account}: {account: Account}) {
   const params = useParams();
   const [searchParams] = useSearchParams();
   const isAdmin = Setting.isAdminUser(account);
-  const {agents, error, busyKey, scanned, scan, togglePatch, setChannel} = useAgents(isAdmin);
+  const {agents, error, busyKey, scanned, scan, togglePatch, setRouting, writeProvider} =
+    useAgents(isAdmin);
   const [tab, setTab] = React.useState<Tab>("Agent Sessions");
   const [records, setRecords] = React.useState<AgentRecord[]>([]);
   const [recordError, setRecordError] = React.useState("");
   const [channels, setChannels] = React.useState<Channel[]>([]);
+  const [health, setHealth] = React.useState<ChannelHealth[]>([]);
+  const [stats, setStats] = React.useState<LlmRecordStats | null>(null);
 
   const agentId = params.agentId ?? "";
   const path = searchParams.get("path") ?? "";
@@ -221,7 +206,24 @@ export default function AgentDetailPage({account}: {account: Account}) {
         }
       })
       .catch(() => setChannels([]));
+
+    ChannelBackend.getChannelHealth()
+      .then(res => {
+        if (res.status === "ok") {
+          setHealth(res.data ?? []);
+        }
+      })
+      .catch(() => setHealth([]));
   }, [isAdmin, account.name]);
+
+  React.useEffect(() => {
+    if (!isAdmin || agentId === "") {
+      return;
+    }
+    LlmRecordBackend.getLlmRecordStats({agent: agentId})
+      .then(res => setStats(res.status === "ok" ? (res.data ?? null) : null))
+      .catch(() => setStats(null));
+  }, [isAdmin, agentId]);
 
   const monitorId = agent ? monitorAgentId(agent.agentId) : "";
   const watching = Boolean(agent?.patched);
@@ -388,12 +390,16 @@ export default function AgentDetailPage({account}: {account: Account}) {
           onToggle={() => togglePatch(agent)}
         />
 
-        <ChannelCard
+        <ProviderCard
           agent={agent}
           channels={channels}
+          health={health}
           busy={busyKey === agentKey(agent)}
-          onChange={value => setChannel(agent, value)}
+          onRouting={routing => setRouting(agent, routing)}
+          onWrite={restore => writeProvider(agent, restore)}
         />
+
+        <UsageCard stats={stats} />
 
         <Card>
           <CardHeader className="p-4 pb-2">

@@ -32,6 +32,7 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Switch} from "@/components/ui/switch";
+import {formatCost, formatTokens} from "@/lib/usage";
 import type {Account, LlmPrice, LlmRecord, LlmRecordStats, LlmRecordStatus} from "@/types";
 
 /** How often the totals are recomputed while the live feed is open. */
@@ -45,29 +46,6 @@ function statusVariant(status: number): BadgeVariant {
     return "warning";
   }
   return "danger";
-}
-
-function formatCost(cost: number) {
-  if (cost <= 0) {
-    return "$0";
-  }
-  if (cost < 0.01) {
-    return `$${cost.toFixed(4)}`;
-  }
-  if (cost < 1) {
-    return `$${cost.toFixed(3)}`;
-  }
-  return `$${cost.toFixed(2)}`;
-}
-
-function formatTokens(tokens: number) {
-  if (tokens < 1000) {
-    return String(tokens);
-  }
-  if (tokens < 1000000) {
-    return `${(tokens / 1000).toFixed(1)}k`;
-  }
-  return `${(tokens / 1000000).toFixed(2)}M`;
 }
 
 /** Share of the input tokens served out of the prompt cache. */

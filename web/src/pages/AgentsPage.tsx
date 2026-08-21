@@ -26,7 +26,7 @@ import {MessageAlert} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {SimpleTooltip} from "@/components/ui/tooltip";
-import {agentDetailPath, agentKey, monitorAgentId, useAgents} from "@/lib/agents";
+import {agentDetailPath, agentKey, directMode, monitorAgentId, useAgents} from "@/lib/agents";
 import type {Account, Agent} from "@/types";
 
 export default function AgentsPage({account}: {account: Account}) {
@@ -77,11 +77,27 @@ export default function AgentsPage({account}: {account: Account}) {
       title: i18next.t("agent:Channel"),
       key: "channel",
       dataIndex: "channel",
-      render: (value: string) =>
+      render: (value: string, record) =>
         value ? (
-          <Link to={`/channels/${value}`} className="text-primary hover:underline">
-            {value}
-          </Link>
+          <div className="flex flex-col items-start gap-1">
+            <Link to={`/channels/${value}`} className="text-primary hover:underline">
+              {value}
+            </Link>
+            <span className="flex flex-wrap items-center gap-1">
+              {record.fallbacks?.length ? (
+                <SimpleTooltip title={record.fallbacks.join(", ")}>
+                  <Badge variant="muted">{`+${record.fallbacks.length}`}</Badge>
+                </SimpleTooltip>
+              ) : null}
+              {record.provider?.applied ? (
+                <SimpleTooltip title={record.provider.detail}>
+                  <Badge variant="success">
+                    {i18next.t(record.mode === directMode ? "agent:Direct" : "agent:Gateway")}
+                  </Badge>
+                </SimpleTooltip>
+              ) : null}
+            </span>
+          </div>
         ) : (
           <span className="text-muted-foreground">{i18next.t("agent:No channel")}</span>
         ),

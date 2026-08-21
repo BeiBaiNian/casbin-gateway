@@ -20,6 +20,10 @@ import * as Setting from "@/Setting";
 import type {BadgeVariant} from "@/components/ui/badge";
 import type {Agent, AgentSession} from "@/types";
 
+/** Routing through the local proxy, which is what makes a switch hot. */
+export const gatewayMode = "gateway";
+export const directMode = "direct";
+
 /** The monitor keys the two Codex front ends under one agent id. */
 export function monitorAgentId(agentId: string) {
   return agentId === "codex_vscode" || agentId === "codex-vscode" ? "codex-cli" : agentId;
@@ -133,23 +137,71 @@ export function useAgents(enabled = true) {
     [scan],
   );
 
-  const setChannel = React.useCallback(
-    (agent: Agent, channel: string) => {
+  /**
+   * setRouting saves where an agent's requests go. Only the changed part is
+   * passed in; the rest of the routing is carried over from the agent so a
+   * fallback list is not dropped by a channel change.
+   */
+  const setRouting = React.useCallback(
+    (agent: Agent, routing: Partial<AgentBackend.AgentRouting>) => {
+      const next: AgentBackend.AgentRouting = {
+        channel: routing.channel ?? agent.channel,
+        fallbacks: routing.fallbacks ?? agent.fallbacks ?? [],
+        mode: routing.mode ?? agent.mode ?? gatewayMode,
+      };
+
       setBusyKey(agentKey(agent));
-      AgentBackend.updateAgentChannel(agent.agentId, channel)
+      AgentBackend.updateAgentChannel(agent.agentId, next)
         .then(res => {
           if (res.status === "ok") {
             Setting.showMessage(
               "success",
-              channel === ""
+              next.channel === ""
                 ? i18next.t("agent:Channel cleared")
-                : `${i18next.t("agent:Channel saved")}: ${channel}`,
+                : `${i18next.t("agent:Channel saved")}: ${next.channel}`,
             );
             scan();
           } else {
             Setting.showMessage(
               "error",
               res.msg || i18next.t("agent:Failed to update agent channel"),
+            );
+            // The routing itself may already be stored: only writing the agent's
+            // own configuration file failed, and the page has to show that.
+            scan();
+          }
+        })
+        .catch(err => Setting.showMessage("error", err.message || String(err)))
+        .then(() => setBusyKey(""));
+    },
+    [scan],
+  );
+
+  /**
+   * writeProvider writes the bound channel into the agent's own config file, or
+   * puts back what the file held before Gateway first wrote it.
+   */
+  const writeProvider = React.useCallback(
+    (agent: Agent, restore = false) => {
+      const target = {agentId: agent.agentId, path: agent.path, owner: agent.owner};
+
+      setBusyKey(agentKey(agent));
+      (restore
+        ? AgentBackend.restoreAgentProvider(target)
+        : AgentBackend.applyAgentProvider(target))
+        .then(res => {
+          if (res.status === "ok") {
+            Setting.showMessage(
+              "success",
+              restore
+                ? i18next.t("agent:Configuration restored")
+                : i18next.t("agent:Configuration written"),
+            );
+            scan();
+          } else {
+            Setting.showMessage(
+              "error",
+              res.msg || i18next.t("agent:Failed to write the agent configuration"),
             );
           }
         })
@@ -159,7 +211,7 @@ export function useAgents(enabled = true) {
     [scan],
   );
 
-  return {agents, loading, error, busyKey, scanned, scan, togglePatch, setChannel};
+  return {agents, loading, error, busyKey, scanned, scan, togglePatch, setRouting, writeProvider};
 }
 
 /** What one agent has been up to, derived from its monitoring sessions. */
