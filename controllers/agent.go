@@ -81,7 +81,7 @@ func (c *ApiController) GetAgents() {
 		}
 		result = append(result, item)
 	}
-	c.ResponseOk(result)
+	c.ResponseOk(result, agent.InContainer())
 }
 
 // UpdateAgentChannel binds one agent to the channel its requests are forwarded

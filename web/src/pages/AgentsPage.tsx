@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import {Link} from "react-router-dom";
-import {Bot, RefreshCw} from "lucide-react";
+import {Bot, Container, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
 import * as Setting from "@/Setting";
@@ -31,7 +31,7 @@ import type {Account, Agent} from "@/types";
 
 export default function AgentsPage({account}: {account: Account}) {
   const isAdmin = Setting.isAdminUser(account);
-  const {agents, loading, error, busyKey, scan, togglePatch} = useAgents(isAdmin);
+  const {agents, loading, error, busyKey, inContainer, scan, togglePatch} = useAgents(isAdmin);
 
   if (!isAdmin) {
     return <UnauthorizedResult />;
@@ -183,8 +183,10 @@ export default function AgentsPage({account}: {account: Account}) {
         loading={loading}
         pageSize={0}
         searchable
-        emptyIcon={Bot}
-        emptyText={i18next.t("agent:No supported agents found")}
+        emptyIcon={inContainer ? Container : Bot}
+        emptyText={i18next.t(
+          inContainer ? "agent:Running in a container detail" : "agent:No supported agents found",
+        )}
         toolbar={
           <Button variant="outline" size="sm" onClick={() => scan(true)} loading={loading}>
             <RefreshCw />

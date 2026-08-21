@@ -31,21 +31,16 @@ import {MessageAlert} from "@/components/ui/alert";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {TagsInput} from "@/components/ui/tags-input";
-import {channelProtocol, gatewayBaseUrl, localShell} from "@/lib/channels";
+import {
+  baseUrlPlaceholder,
+  baseUrlPresets,
+  channelProtocol,
+  gatewayBaseUrl,
+  localShell,
+  modelPresets,
+  modelsPlaceholder,
+} from "@/lib/channels";
 import type {Channel, ChannelTestResult} from "@/types";
-
-// Hard-coded presets for milestone 1.1 (per channel type).
-const BASE_URL_PRESETS: Record<string, string[]> = {
-  openai: ["https://api.openai.com/v1"],
-  anthropic: ["https://api.anthropic.com"],
-  custom: ["https://oneapi.example.com", "https://api.deepseek.com/v1", "https://api.moonshot.cn/v1"],
-};
-
-const MODEL_PRESETS: Record<string, string[]> = {
-  openai: ["gpt-5.5", "gpt-5", "gpt-5-mini", "o3", "o4-mini"],
-  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
-  custom: ["deepseek-chat", "deepseek-reasoner", "moonshot-v1-8k", "qwen-max"],
-};
 
 // Mirrors object.BuildOpenAiUrl on the server.
 function buildOpenAiUrl(baseUrl: string, endpoint: string) {
@@ -249,8 +244,8 @@ export default function ChannelEditPage() {
           <SearchSelect
             allowCustomValue
             value={channel.baseUrl}
-            placeholder={channel.type === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"}
-            options={(BASE_URL_PRESETS[channel.type] ?? []).map(url => ({label: url, value: url}))}
+            placeholder={baseUrlPlaceholder(channel.type)}
+            options={baseUrlPresets(channel.type)}
             onChange={value => setField("baseUrl", value)}
           />
         </Field>
@@ -269,8 +264,8 @@ export default function ChannelEditPage() {
         <Field label={i18next.t("channel:Models")}>
           <TagsInput
             value={channel.models}
-            placeholder={channel.type === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini"}
-            suggestions={MODEL_PRESETS[channel.type] ?? []}
+            placeholder={modelsPlaceholder(channel.type)}
+            suggestions={modelPresets(channel.type)}
             onChange={value => setField("models", value)}
           />
         </Field>

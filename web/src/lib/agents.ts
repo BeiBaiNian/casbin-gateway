@@ -76,6 +76,9 @@ export function useAgents(enabled = true) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [busyKey, setBusyKey] = React.useState("");
+  // A scan inside a container reads the container's filesystem, not the host's,
+  // which is why it can come back empty on a machine full of agents.
+  const [inContainer, setInContainer] = React.useState(false);
   // A scan is only "done" once the first response has landed, which is what
   // tells an empty list apart from a list that has not arrived yet.
   const [scanned, setScanned] = React.useState(false);
@@ -92,6 +95,7 @@ export function useAgents(enabled = true) {
         .then(res => {
           if (res.status === "ok") {
             setAgents(res.data ?? []);
+            setInContainer(res.data2 === true);
           } else {
             setError(res.msg || i18next.t("agent:Failed to scan agents"));
           }
@@ -211,7 +215,18 @@ export function useAgents(enabled = true) {
     [scan],
   );
 
-  return {agents, loading, error, busyKey, scanned, scan, togglePatch, setRouting, writeProvider};
+  return {
+    agents,
+    loading,
+    error,
+    busyKey,
+    scanned,
+    inContainer,
+    scan,
+    togglePatch,
+    setRouting,
+    writeProvider,
+  };
 }
 
 /** What one agent has been up to, derived from its monitoring sessions. */

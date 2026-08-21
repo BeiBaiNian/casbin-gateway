@@ -14,9 +14,19 @@
 
 import * as React from "react";
 import {Link} from "react-router-dom";
-import {Bot, ChevronRight, FileSearch, MessageSquare, RefreshCw, ShieldCheck} from "lucide-react";
+import {
+  Bot,
+  Check,
+  ChevronRight,
+  Container,
+  FileSearch,
+  MessageSquare,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 import i18next from "i18next";
 
+import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
@@ -32,6 +42,7 @@ import {Card, CardContent, CardHeader} from "@/components/ui/card";
 import {Switch} from "@/components/ui/switch";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {activityOf, agentDetailPath, agentKey, useAgents, useAgentSessions} from "@/lib/agents";
+import {cn} from "@/lib/utils";
 import type {Account, Agent} from "@/types";
 
 /** One labelled line inside an agent card. */
@@ -152,10 +163,70 @@ function AgentCard({
   );
 }
 
+/** The two steps between a fresh install and an agent running on your own key. */
+function SetupGuide({hasChannel, agents}: {hasChannel: boolean; agents: Agent[]}) {
+  const steps = [
+    {
+      done: hasChannel,
+      title: i18next.t("agent:Add a channel"),
+      hint: i18next.t("agent:Add a channel hint"),
+      to: "/channels",
+    },
+    {
+      done: agents.some(agent => agent.channel !== ""),
+      title: i18next.t("agent:Bind the channel"),
+      hint: i18next.t("agent:Bind the channel hint"),
+      // With nothing scanned there is no agent to open, only the list saying so.
+      to: agents.length > 0 ? agentDetailPath(agents[0]) : "/agents",
+    },
+  ];
+
+  return (
+    <Card className="gap-3 py-4">
+      <CardHeader className="flex flex-col gap-1 px-4">
+        <span className="font-semibold">{i18next.t("agent:Use your own API")}</span>
+        <span className="text-muted-foreground text-sm">{i18next.t("agent:Use your own API hint")}</span>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-4">
+        {steps.map((step, index) => (
+          <div key={step.title} className="flex items-center gap-3">
+            <span
+              className={cn(
+                "flex size-6 shrink-0 items-center justify-center rounded-full text-xs",
+                step.done ? "bg-success/15 text-success" : "bg-muted text-muted-foreground",
+              )}
+            >
+              {step.done ? <Check className="size-3.5" /> : index + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{step.title}</p>
+              <p className="text-muted-foreground text-xs">{step.hint}</p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link to={step.to}>{i18next.t("general:Open")}</Link>
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AgentDashboardPage({account}: {account: Account}) {
   const isAdmin = Setting.isAdminUser(account);
-  const {agents, loading, error, busyKey, scanned, scan, togglePatch} = useAgents(isAdmin);
+  const {agents, loading, error, busyKey, scanned, inContainer, scan, togglePatch} = useAgents(isAdmin);
   const {activity, recordCount} = useAgentSessions(isAdmin, "", 5000);
+  // null until the channel count is known, so the guide never flashes.
+  const [hasChannel, setHasChannel] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+    ChannelBackend.getChannels(account.name, 1, 1)
+      .then(res => setHasChannel(res.status === "ok" && (res.data2 ?? 0) > 0))
+      .catch(() => setHasChannel(false));
+  }, [isAdmin, account.name]);
 
   if (!isAdmin) {
     return <UnauthorizedResult />;
@@ -163,6 +234,7 @@ export default function AgentDashboardPage({account}: {account: Account}) {
 
   const patchedCount = agents.filter(agent => agent.patched).length;
   const sessionCount = Object.values(activity).reduce((total, entry) => total + entry.sessionCount, 0);
+  const setupDone = hasChannel === true && agents.some(agent => agent.channel !== "");
 
   return (
     <PageContainer>
@@ -186,14 +258,22 @@ export default function AgentDashboardPage({account}: {account: Account}) {
         <StatCard label={i18next.t("agent:Records")} value={recordCount} icon={FileSearch} />
       </div>
 
+      {scanned && hasChannel !== null && !setupDone ? (
+        <SetupGuide hasChannel={hasChannel} agents={agents} />
+      ) : null}
+
       {!scanned ? (
         <Loading tip={i18next.t("agent:Scan")} />
       ) : agents.length === 0 ? (
         <Card className="py-0">
           <EmptyState
-            icon={Bot}
-            title={i18next.t("agent:No supported agents found")}
-            description={i18next.t("agent:Install an AI agent on this machine, then scan again")}
+            icon={inContainer ? Container : Bot}
+            title={i18next.t(inContainer ? "agent:Running in a container" : "agent:No supported agents found")}
+            description={i18next.t(
+              inContainer
+                ? "agent:Running in a container detail"
+                : "agent:Install an AI agent on this machine, then scan again",
+            )}
             action={
               <Button variant="outline" onClick={() => scan(true)} loading={loading}>
                 <RefreshCw />

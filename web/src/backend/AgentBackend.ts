@@ -21,8 +21,9 @@ export interface PatchTarget {
   owner: string;
 }
 
+/** `data2` tells whether the scan ran inside a container. */
 export function getAgents(forceRefresh = false) {
-  return request<Agent[]>(`/api/get-agents${forceRefresh ? "?refresh=true" : ""}`);
+  return request<Agent[], boolean>(`/api/get-agents${forceRefresh ? "?refresh=true" : ""}`);
 }
 
 export function patchAgent(target: PatchTarget) {

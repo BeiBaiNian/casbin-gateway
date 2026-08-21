@@ -21,16 +21,26 @@ import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {DataTable, type Column, type SortOrder} from "@/components/shared/data-table";
+import {EmptyState} from "@/components/shared/empty-state";
 import {Field, FormDialog} from "@/components/shared/form-dialog";
 import {CodeText} from "@/components/shared/misc";
 import {PageContainer, PageHeader} from "@/components/shared/page-header";
 import {PasswordInput} from "@/components/shared/password-input";
-import {SimpleSelect} from "@/components/shared/simple-select";
+import {SearchSelect, SimpleSelect} from "@/components/shared/simple-select";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
+import {Card} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
 import {TagsInput} from "@/components/ui/tags-input";
 import {SimpleTooltip} from "@/components/ui/tooltip";
+import {
+  baseUrlPlaceholder,
+  baseUrlPresets,
+  channelPresets,
+  modelPresets,
+  modelsPlaceholder,
+  type ChannelPreset,
+} from "@/lib/channels";
 import type {Account, Channel, ChannelHealth} from "@/types";
 
 function newChannel(owner: string): Channel {
@@ -53,6 +63,7 @@ export default function ChannelListPage({account}: {account: Account}) {
   const [data, setData] = React.useState<Channel[]>([]);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
   const [sort, setSort] = React.useState<{field: string; order: SortOrder}>({
@@ -77,6 +88,7 @@ export default function ChannelListPage({account}: {account: Account}) {
       )
         .then(res => {
           setLoading(false);
+          setLoaded(true);
           if (res.status === "ok") {
             setData(res.data ?? []);
             setTotal(res.data2 ?? 0);
@@ -89,6 +101,7 @@ export default function ChannelListPage({account}: {account: Account}) {
         })
         .catch(error => {
           setLoading(false);
+          setLoaded(true);
           Setting.showMessage("error", `${i18next.t("channel:Failed to get channels")}: ${error}`);
         });
     },
@@ -122,6 +135,10 @@ export default function ChannelListPage({account}: {account: Account}) {
 
   const setFormField = <K extends keyof Channel>(key: K, value: Channel[K]) => {
     setForm(prev => ({...prev, [key]: value}));
+  };
+
+  const applyPreset = (preset: ChannelPreset) => {
+    setForm(prev => ({...prev, type: preset.type, baseUrl: preset.baseUrl, models: preset.models}));
   };
 
   const addChannel = () => {
@@ -324,6 +341,7 @@ export default function ChannelListPage({account}: {account: Account}) {
     <PageContainer>
       <PageHeader
         title={i18next.t("channel:Channels")}
+        description={i18next.t("channel:Page description")}
         actions={
           <Button onClick={openAddDialog}>
             <Plus />
@@ -332,29 +350,45 @@ export default function ChannelListPage({account}: {account: Account}) {
         }
       />
 
-      <DataTable
-        columns={columns}
-        dataSource={data}
-        // An admin sees channels across owners, where names may collide.
-        rowKey={record => `${record.owner}/${record.name}`}
-        loading={loading}
-        onSort={(field, order) => fetchChannels(1, pageSize, {field: field, order: order})}
-        serverPagination={{
-          page: page,
-          pageSize: pageSize,
-          total: total,
-          onChange: (nextPage, nextPageSize) => fetchChannels(nextPage, nextPageSize),
-        }}
-        title={i18next.t("channel:Channels")}
-        description={`${total} ${i18next.t("channel:Channels")}`}
-        emptyIcon={Plug}
-        toolbar={
-          <Button variant="outline" size="sm" onClick={() => fetchChannels()} loading={loading}>
-            <RefreshCw />
-            {i18next.t("general:Refresh")}
-          </Button>
-        }
-      />
+      {loaded && data.length === 0 ? (
+        <Card className="py-0">
+          <EmptyState
+            icon={Plug}
+            title={i18next.t("channel:No channels yet")}
+            description={i18next.t("channel:No channels yet detail")}
+            action={
+              <Button onClick={openAddDialog}>
+                <Plus />
+                {i18next.t("channel:New Channel")}
+              </Button>
+            }
+          />
+        </Card>
+      ) : (
+        <DataTable
+          columns={columns}
+          dataSource={data}
+          // An admin sees channels across owners, where names may collide.
+          rowKey={record => `${record.owner}/${record.name}`}
+          loading={loading}
+          onSort={(field, order) => fetchChannels(1, pageSize, {field: field, order: order})}
+          serverPagination={{
+            page: page,
+            pageSize: pageSize,
+            total: total,
+            onChange: (nextPage, nextPageSize) => fetchChannels(nextPage, nextPageSize),
+          }}
+          title={i18next.t("channel:Channels")}
+          description={`${total} ${i18next.t("channel:Channels")}`}
+          emptyIcon={Plug}
+          toolbar={
+            <Button variant="outline" size="sm" onClick={() => fetchChannels()} loading={loading}>
+              <RefreshCw />
+              {i18next.t("general:Refresh")}
+            </Button>
+          }
+        />
+      )}
 
       <FormDialog
         open={addOpen}
@@ -380,6 +414,21 @@ export default function ChannelListPage({account}: {account: Account}) {
             onChange={event => setFormField("displayName", event.target.value)}
           />
         </Field>
+        <Field label={i18next.t("channel:Vendor")} hint={i18next.t("channel:Vendor hint")}>
+          <div className="flex flex-wrap gap-2">
+            {channelPresets.map(preset => (
+              <Button
+                key={preset.label}
+                type="button"
+                size="sm"
+                variant={form.baseUrl === preset.baseUrl ? "default" : "outline"}
+                onClick={() => applyPreset(preset)}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
+        </Field>
         <Field label={i18next.t("channel:Type")}>
           <SimpleSelect
             value={form.type}
@@ -392,14 +441,20 @@ export default function ChannelListPage({account}: {account: Account}) {
           />
         </Field>
         <Field label={i18next.t("channel:Base URL")} htmlFor="channel-base-url">
-          <Input
+          <SearchSelect
+            allowCustomValue
             id="channel-base-url"
             value={form.baseUrl}
-            placeholder={form.type === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"}
-            onChange={event => setFormField("baseUrl", event.target.value)}
+            placeholder={baseUrlPlaceholder(form.type)}
+            options={baseUrlPresets(form.type)}
+            onChange={value => setFormField("baseUrl", value)}
           />
         </Field>
-        <Field label={i18next.t("channel:API Key")} htmlFor="channel-api-key">
+        <Field
+          label={i18next.t("channel:API Key")}
+          htmlFor="channel-api-key"
+          hint={i18next.t("channel:API Key ownership hint")}
+        >
           <PasswordInput
             id="channel-api-key"
             placeholder="sk-..."
@@ -407,10 +462,11 @@ export default function ChannelListPage({account}: {account: Account}) {
             onChange={event => setFormField("apiKey", event.target.value)}
           />
         </Field>
-        <Field label={i18next.t("channel:Models")}>
+        <Field label={i18next.t("channel:Models")} hint={i18next.t("channel:Models hint")}>
           <TagsInput
             value={form.models}
-            placeholder={form.type === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini"}
+            placeholder={modelsPlaceholder(form.type)}
+            suggestions={modelPresets(form.type)}
             onChange={value => setFormField("models", value)}
           />
         </Field>

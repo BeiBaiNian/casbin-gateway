@@ -68,3 +68,61 @@ export function shellForPath(path: string): Shell {
 export function localShell(): Shell {
   return navigator.userAgent.includes("Windows") ? "PowerShell" : "bash";
 }
+
+/** A vendor the channel forms can fill themselves in from. */
+export interface ChannelPreset {
+  label: string;
+  type: string;
+  baseUrl: string;
+  models: string[];
+}
+
+export const channelPresets: ChannelPreset[] = [
+  {
+    label: "OpenAI",
+    type: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-5.5", "gpt-5", "gpt-5-mini", "o3", "o4-mini"],
+  },
+  {
+    label: "Anthropic",
+    type: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    models: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  },
+  {
+    label: "DeepSeek",
+    type: "custom",
+    baseUrl: "https://api.deepseek.com/v1",
+    models: ["deepseek-chat", "deepseek-reasoner"],
+  },
+  {
+    label: "Moonshot",
+    type: "custom",
+    baseUrl: "https://api.moonshot.cn/v1",
+    models: ["moonshot-v1-8k", "moonshot-v1-32k"],
+  },
+  {
+    label: "Qwen",
+    type: "custom",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    models: ["qwen-max", "qwen-plus"],
+  },
+];
+
+/** The base URLs and models offered for a channel type, from the vendors of it. */
+export function baseUrlPresets(type: string) {
+  return channelPresets.filter(preset => preset.type === type).map(preset => preset.baseUrl);
+}
+
+export function modelPresets(type: string) {
+  return channelPresets.filter(preset => preset.type === type).flatMap(preset => preset.models);
+}
+
+export function baseUrlPlaceholder(type: string) {
+  return channelProtocol(type) === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1";
+}
+
+export function modelsPlaceholder(type: string) {
+  return channelProtocol(type) === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini";
+}
