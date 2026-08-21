@@ -35,9 +35,9 @@ type LlmPrice struct {
 	CacheRead  float64 `json:"cacheRead"`
 }
 
-// llmPrices are published list prices, keyed by the part of a model name that
+// builtInLlmPrices are published list prices, keyed by the part of a model name that
 // identifies the model. They go stale, so llmPricingFile overrides them.
-var llmPrices = map[string]LlmPrice{
+var builtInLlmPrices = map[string]LlmPrice{
 	"claude-opus-4":     {15, 75, 18.75, 1.5},
 	"claude-3-opus":     {15, 75, 18.75, 1.5},
 	"claude-sonnet-4":   {3, 15, 3.75, 0.3},
@@ -61,13 +61,46 @@ var llmPrices = map[string]LlmPrice{
 }
 
 var (
-	pricingOnce sync.Once
-	pricingKeys []string
+	pricingMutex  sync.RWMutex
+	pricingLoaded bool
+	pricingKeys   []string
+	llmPrices     map[string]LlmPrice
 )
 
+// ReloadLlmPrices re-reads the override file, so changing "llmPricingFile" on
+// the Settings page costs the next request rather than the next restart.
+func ReloadLlmPrices() {
+	pricingMutex.Lock()
+	defer pricingMutex.Unlock()
+
+	loadLlmPrices()
+}
+
+func ensureLlmPrices() {
+	pricingMutex.RLock()
+	loaded := pricingLoaded
+	pricingMutex.RUnlock()
+	if loaded {
+		return
+	}
+
+	pricingMutex.Lock()
+	defer pricingMutex.Unlock()
+	if !pricingLoaded {
+		loadLlmPrices()
+	}
+}
+
 // loadLlmPrices merges the override file over the built-in table, longest key
-// first so a specific model wins over the family it belongs to.
+// first so a specific model wins over the family it belongs to. It rebuilds the
+// table from the built-in one, so a price dropped from the file is dropped here
+// too. The caller holds the write lock.
 func loadLlmPrices() {
+	prices := make(map[string]LlmPrice, len(builtInLlmPrices))
+	for model, price := range builtInLlmPrices {
+		prices[model] = price
+	}
+
 	path := conf.GetLlmPricingFile()
 	if path != "" {
 		if data, err := os.ReadFile(path); err != nil {
@@ -80,24 +113,29 @@ func loadLlmPrices() {
 				beego.Error("LLM pricing file is not valid JSON:", err)
 			} else {
 				for model, price := range overrides {
-					llmPrices[strings.ToLower(model)] = price
+					prices[strings.ToLower(model)] = price
 				}
 			}
 		}
 	}
 
-	pricingKeys = make([]string, 0, len(llmPrices))
-	for key := range llmPrices {
-		pricingKeys = append(pricingKeys, key)
+	keys := make([]string, 0, len(prices))
+	for key := range prices {
+		keys = append(keys, key)
 	}
-	sort.Slice(pricingKeys, func(i, j int) bool { return len(pricingKeys[i]) > len(pricingKeys[j]) })
+	sort.Slice(keys, func(i, j int) bool { return len(keys[i]) > len(keys[j]) })
+
+	llmPrices, pricingKeys, pricingLoaded = prices, keys, true
 }
 
 // GetLlmPrice matches a model name in any of the shapes it arrives in, e.g.
 // "claude-sonnet-4-20250514" or "us.anthropic.claude-sonnet-4-v1:0". It reports
 // false when nothing matches, so an unpriced model is not costed at zero.
 func GetLlmPrice(model string) (LlmPrice, bool) {
-	pricingOnce.Do(loadLlmPrices)
+	ensureLlmPrices()
+
+	pricingMutex.RLock()
+	defer pricingMutex.RUnlock()
 
 	name := strings.ToLower(strings.TrimSpace(model))
 	for _, key := range pricingKeys {

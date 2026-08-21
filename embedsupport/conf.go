@@ -65,7 +65,7 @@ func setupConf(appConf string) {
 	conf.ApplyEnvOverrides()
 
 	usingEmbeddedConf = true
-	fmt.Println("Using the conf/app.conf embedded in this binary. To change any setting, put your own conf/app.conf next to the executable.")
+	fmt.Println("Using the conf/app.conf embedded in this binary. Settings can be changed on the Settings page of the web UI.")
 }
 
 // onDiskConfPath returns the config file beego found on disk, or "" when there

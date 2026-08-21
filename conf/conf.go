@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/beego/beego"
 )
@@ -48,8 +49,37 @@ func ApplyEnvOverrides() {
 	}
 }
 
+var (
+	settingOverrides = map[string]string{}
+	settingMutex     sync.RWMutex
+)
+
+// SetSettingOverrides hands over the settings held in the database. The
+// built-in Setting row is the source of truth for everything the web UI can
+// change, so a key it carries wins over conf/app.conf even when it is empty:
+// the row was seeded from the file, and clearing a value in the UI has to
+// clear it for good rather than fall back to what the file still says.
+func SetSettingOverrides(overrides map[string]string) {
+	settingMutex.Lock()
+	defer settingMutex.Unlock()
+
+	settingOverrides = overrides
+}
+
+func getSettingOverride(key string) (string, bool) {
+	settingMutex.RLock()
+	defer settingMutex.RUnlock()
+
+	value, ok := settingOverrides[key]
+	return value, ok
+}
+
 func GetConfigString(key string) string {
 	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+
+	if value, ok := getSettingOverride(key); ok {
 		return value
 	}
 
@@ -63,6 +93,12 @@ func GetConfigString(key string) string {
 	}
 
 	return res
+}
+
+// GetConfigStringUnquoted drops the quotes conf/app.conf writes around a value.
+// Settings stored in the database never carry them.
+func GetConfigStringUnquoted(key string) string {
+	return strings.Trim(GetConfigString(key), `"' `)
 }
 
 func GetConfigBool(key string) bool {

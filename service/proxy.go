@@ -16,13 +16,16 @@ package service
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/object"
@@ -320,85 +323,197 @@ func nextHandle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Start() {
+// The reverse proxy can be switched on and off while Gateway runs, so nobody
+// has to edit conf/app.conf and restart to get their sites proxied. Both
+// servers are held here; an empty slice means the proxy is off.
+var (
+	gatewayMutex   sync.Mutex
+	gatewayServers []*http.Server
+	gatewayError   string
+)
+
+// ListenError names the port that could not be bound. It is reported to the
+// browser rather than being fatal, so a port conflict leaves the management UI
+// reachable and the proxy can be turned off there.
+type ListenError struct {
+	Port int
+	Err  error
+}
+
+func (e *ListenError) Error() string {
+	if holder := util.DescribePortHolder(e.Port); holder != "" {
+		return fmt.Sprintf("port %d is already in use by %s", e.Port, holder)
+	}
+
+	if e.Port < 1024 && runtime.GOOS != "windows" {
+		return fmt.Sprintf("cannot listen on port %d: %v (ports below 1024 need root, so Gateway has to be started with sudo)", e.Port, e.Err)
+	}
+
+	return fmt.Sprintf("cannot listen on port %d: %v", e.Port, e.Err)
+}
+
+func newGatewayMux() *http.ServeMux {
 	serverMux := http.NewServeMux()
 	serverMux.HandleFunc("/", handleRequest)
 	serverMux.HandleFunc("/_sso-callback", handleAuthCallback)
 	serverMux.HandleFunc("/_captcha-verify", handleCaptchaCallback)
+	return serverMux
+}
 
+func Start() {
 	if !conf.IsGatewayEnabled() {
 		fmt.Printf("Casbin Gateway reverse proxy is not enabled (gatewayEnabled = false), so site configurations will not take effect\n")
 		return
 	}
 
+	// A port conflict here does not end the process: the management UI is what
+	// the reverse proxy is turned off in, so exiting would leave editing
+	// conf/app.conf by hand as the only way out.
+	if err := StartGateway(); err != nil {
+		var listenErr *ListenError
+		if !errors.As(err, &listenErr) {
+			panic(err)
+		}
+
+		fmt.Printf("Casbin Gateway reverse proxy could not start: %s\n", listenErr.Error())
+		fmt.Printf("  Free the port, or turn the reverse proxy off on the Sites page to run the management UI only.\n")
+	}
+}
+
+// GatewayError explains why the proxy is not running although it is enabled.
+// It is empty when there is nothing to explain.
+func GatewayError() string {
+	gatewayMutex.Lock()
+	defer gatewayMutex.Unlock()
+
+	return gatewayError
+}
+
+// IsGatewayRunning reports whether the proxy is serving right now, which is not
+// the same as "gatewayEnabled = true": the ports may have refused to bind.
+func IsGatewayRunning() bool {
+	gatewayMutex.Lock()
+	defer gatewayMutex.Unlock()
+
+	return len(gatewayServers) > 0
+}
+
+// StartGateway binds the two gateway ports and serves on them. It is a no-op
+// when the proxy already runs, and leaves nothing bound when it fails.
+func StartGateway() error {
+	gatewayMutex.Lock()
+	defer gatewayMutex.Unlock()
+
+	if len(gatewayServers) > 0 {
+		return nil
+	}
+
+	gatewayError = ""
 	gatewayHttpPort := conf.GetGatewayHttpPort()
 	gatewayHttpsPort := conf.GetGatewayHttpsPort()
 
 	// Both ports are bound up front and the listeners are handed to the servers
-	// below. Binding here turns a port conflict into one readable line before
-	// anything else starts, and holding on to the listeners means nothing can
-	// take the port between this check and the server that serves on it.
+	// below. Binding here turns a port conflict into one readable error before
+	// anything serves, and holding on to the listeners means nothing can take
+	// the port between this check and the server that serves on it.
 	httpListener, err := util.ListenTcp(gatewayHttpPort)
 	if err != nil {
-		util.FatalListenError(gatewayHttpPort, `set "gatewayEnabled = false" in conf/app.conf to run the management UI only`, err)
+		return failedToListen(gatewayHttpPort, err)
 	}
 
 	httpsListener, err := util.ListenTcp(gatewayHttpsPort)
 	if err != nil {
 		httpListener.Close()
-		util.FatalListenError(gatewayHttpsPort, `set "gatewayEnabled = false" in conf/app.conf to run the management UI only`, err)
+		return failedToListen(gatewayHttpsPort, err)
 	}
+
+	serverMux := newGatewayMux()
+	httpServer := &http.Server{Handler: serverMux}
+	httpsServer := newHttpsServer(serverMux)
+	gatewayServers = []*http.Server{httpServer, httpsServer}
 
 	go func() {
 		fmt.Printf("Casbin Gateway running on: http://127.0.0.1:%d\n", gatewayHttpPort)
-		err := http.Serve(httpListener, serverMux)
-		if err != nil {
-			panic(err)
-		}
+		serveGateway(httpServer.Serve(httpListener))
 	}()
 
 	go func() {
 		fmt.Printf("Casbin Gateway running on: https://127.0.0.1:%d\n", gatewayHttpsPort)
-		server := &http.Server{
-			Handler: serverMux,
-			TLSConfig: &tls.Config{
-				// Minimum TLS version 1.2, TLS 1.3 is automatically supported
-				MinVersion: tls.VersionTLS12,
-				// Prefer server's cipher suite order for better security
-				PreferServerCipherSuites: true,
-				// Secure cipher suites for TLS 1.2 (excluding 3DES to prevent Sweet32 attack)
-				// TLS 1.3 cipher suites are automatically configured by Go
-				CipherSuites: []uint16{
-					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-					tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
-				},
-				// Prefer strong elliptic curves
-				CurvePreferences: []tls.CurveID{
-					tls.X25519,
-					tls.CurveP256,
-					tls.CurveP384,
-				},
-			},
-		}
-
-		// start https server and set how to get certificate
-		server.TLSConfig.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			domain := info.ServerName
-			cert, err := getX509CertByDomain(domain)
-			if err != nil {
-				return nil, err
-			}
-
-			return cert, nil
-		}
-
-		err := server.ServeTLS(httpsListener, "", "")
-		if err != nil {
-			panic(err)
-		}
+		serveGateway(httpsServer.ServeTLS(httpsListener, "", ""))
 	}()
+
+	return nil
+}
+
+// failedToListen remembers why the proxy is not running, so the Sites page can
+// say so instead of only showing it to whoever pressed the button.
+func failedToListen(port int, err error) error {
+	listenErr := &ListenError{Port: port, Err: err}
+	gatewayError = listenErr.Error()
+	return listenErr
+}
+
+// StopGateway releases the two gateway ports. Sites stay configured; nothing is
+// proxied until StartGateway() is called again.
+func StopGateway() {
+	gatewayMutex.Lock()
+	defer gatewayMutex.Unlock()
+
+	for _, server := range gatewayServers {
+		server.Close()
+	}
+	gatewayServers = nil
+	gatewayError = ""
+
+	fmt.Printf("Casbin Gateway reverse proxy stopped, site configurations no longer take effect\n")
+}
+
+// serveGateway handles what a gateway server returned. StopGateway() closing it
+// is the normal way out; anything else is a failure worth crashing on, so the
+// supervisor restarts a proxy that died on its own.
+func serveGateway(err error) {
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		panic(err)
+	}
+}
+
+func newHttpsServer(serverMux *http.ServeMux) *http.Server {
+	server := &http.Server{
+		Handler: serverMux,
+		TLSConfig: &tls.Config{
+			// Minimum TLS version 1.2, TLS 1.3 is automatically supported
+			MinVersion: tls.VersionTLS12,
+			// Prefer server's cipher suite order for better security
+			PreferServerCipherSuites: true,
+			// Secure cipher suites for TLS 1.2 (excluding 3DES to prevent Sweet32 attack)
+			// TLS 1.3 cipher suites are automatically configured by Go
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			},
+			// Prefer strong elliptic curves
+			CurvePreferences: []tls.CurveID{
+				tls.X25519,
+				tls.CurveP256,
+				tls.CurveP384,
+			},
+		},
+	}
+
+	// start https server and set how to get certificate
+	server.TLSConfig.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		domain := info.ServerName
+		cert, err := getX509CertByDomain(domain)
+		if err != nil {
+			return nil, err
+		}
+
+		return cert, nil
+	}
+
+	return server
 }

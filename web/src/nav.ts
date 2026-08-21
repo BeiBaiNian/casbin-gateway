@@ -26,6 +26,7 @@ import {
   ScrollText,
   Server,
   Settings,
+  SlidersHorizontal,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -80,7 +81,7 @@ export const navGroups: NavGroup[] = [
   {
     key: "/advanced",
     label: "general:Advanced",
-    icon: Settings,
+    icon: SlidersHorizontal,
     children: [
       {key: "/sites", label: "general:Sites", path: "/sites", icon: Globe},
       {key: "/certs", label: "general:Certs", path: "/certs", icon: ShieldCheck},
@@ -90,6 +91,7 @@ export const navGroups: NavGroup[] = [
       {key: "/dashboard", label: "general:Gateway Analytics", path: "/dashboard", icon: ChartColumn},
     ],
   },
+  {key: "/settings", label: "setting:Settings", icon: Settings, path: "/settings", adminOnly: true},
 ];
 
 /** All leaf entries, flattened, for lookups by first path segment. */

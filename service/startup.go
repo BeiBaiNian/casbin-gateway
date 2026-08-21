@@ -49,12 +49,15 @@ func PrintStartupSummary() {
 	printSummaryTable("Casbin Gateway", rows)
 }
 
+// describeConf names where the settings were seeded from. They live in the
+// database from the first start onwards, so this is only the origin of the
+// values the Settings page now owns.
 func describeConf() string {
 	if embedsupport.IsEmbeddedConf() {
-		return "embedded in the binary (put your own conf/app.conf next to it to override)"
+		return "Settings page, seeded from the conf/app.conf embedded in this binary"
 	}
 
-	return "conf/app.conf"
+	return "Settings page, seeded from conf/app.conf"
 }
 
 func describeWebBuild() string {
@@ -76,7 +79,7 @@ func describeGateway() string {
 
 	// Start() prints the consequence right after this table, so the row itself
 	// only has to say how to turn the proxy on.
-	return "disabled (set \"gatewayEnabled = true\" in conf/app.conf)"
+	return "disabled (turn it on on the Sites or Settings page of the web UI)"
 }
 
 func describeGatewayPort(port int) string {

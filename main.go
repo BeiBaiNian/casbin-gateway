@@ -45,6 +45,9 @@ func main() {
 	object.InitFlag()
 	object.InitAdapter()
 	object.CreateTables()
+	// The built-in Setting row answers conf from here on, so it has to be loaded
+	// before anything reads a setting out of conf.
+	object.InitBuiltInSetting()
 	object.StartLlmRecordWriter()
 	defer object.StopLlmRecordWriter()
 	casdoor.InitCasdoorConfig()

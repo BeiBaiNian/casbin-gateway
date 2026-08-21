@@ -13,10 +13,11 @@
 // limitations under the License.
 
 import * as React from "react";
-import {Activity, CircleDollarSign, Database, Hash, Logs, RefreshCw, Trash2} from "lucide-react";
+import {Activity, CircleDollarSign, Database, Hash, Logs, Play, RefreshCw, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import * as LlmRecordBackend from "@/backend/LlmRecordBackend";
+import * as SettingBackend from "@/backend/SettingBackend";
 import * as Setting from "@/Setting";
 import {RequestInspector} from "@/components/llm/request-inspector";
 import {DataTable, type Column} from "@/components/shared/data-table";
@@ -151,6 +152,7 @@ export default function LlmRecordsPage({account}: {account: Account}) {
   const isAdmin = Setting.isAdminUser(account);
   const [records, setRecords] = React.useState<LlmRecord[]>([]);
   const [status, setStatus] = React.useState<LlmRecordStatus | null>(null);
+  const [changingMode, setChangingMode] = React.useState(false);
   const [stats, setStats] = React.useState<LlmRecordStats | null>(null);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
@@ -227,6 +229,33 @@ export default function LlmRecordsPage({account}: {account: Account}) {
       }
     });
   }, [isAdmin]);
+
+  // Recording is off until someone asks for it. The Settings page holds the
+  // same field; changing it here is the shortcut, and it applies to the next
+  // request rather than the next restart.
+  const setRecordMode = (mode: string) => {
+    setChangingMode(true);
+    SettingBackend.getSetting()
+      .then(res => {
+        if (res.status !== "ok") {
+          throw new Error(res.msg);
+        }
+        return SettingBackend.updateSetting({...res.data, llmRecordMode: mode as LlmRecordStatus["mode"]});
+      })
+      .then(res => {
+        setChangingMode(false);
+        if (res.status === "ok") {
+          loadStatus();
+          Setting.showMessage("success", mode === "off" ? i18next.t("llm:Recording is off") : i18next.t("llm:Recording is on"));
+        } else {
+          Setting.showMessage("error", res.msg);
+        }
+      })
+      .catch(error => {
+        setChangingMode(false);
+        Setting.showMessage("error", `${error}`);
+      });
+  };
 
   React.useEffect(() => {
     load(1, pageSize);
@@ -443,6 +472,19 @@ export default function LlmRecordsPage({account}: {account: Account}) {
         description={description}
         actions={
           <>
+            {isAdmin && status ? (
+              <SimpleSelect
+                className="w-[220px]"
+                value={status.mode}
+                disabled={changingMode}
+                onChange={setRecordMode}
+                options={[
+                  {label: i18next.t("llm:Recording off"), value: "off"},
+                  {label: i18next.t("llm:Record metadata"), value: "metadata"},
+                  {label: i18next.t("llm:Record metadata and bodies"), value: "full"},
+                ]}
+              />
+            ) : null}
             <SimpleSelect
               className="w-[150px]"
               value={windowHours}
@@ -480,8 +522,38 @@ export default function LlmRecordsPage({account}: {account: Account}) {
         }
       />
 
-      {modeOff ? <MessageAlert variant="info" title={i18next.t("llm:Recording is off")} description={i18next.t("llm:Recording is off detail")} /> : null}
-      {modeMetadata ? <MessageAlert variant="info" title={i18next.t("llm:Bodies are not stored")} description={i18next.t("llm:Bodies are not stored detail")} /> : null}
+      {modeOff ? (
+        <MessageAlert
+          variant="info"
+          title={i18next.t("llm:Recording is off")}
+          description={i18next.t("llm:Recording is off detail")}
+          action={
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setRecordMode("metadata")} loading={changingMode}>
+                <Play />
+                {i18next.t("llm:Record metadata")}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setRecordMode("full")} loading={changingMode}>
+                <Play />
+                {i18next.t("llm:Record metadata and bodies")}
+              </Button>
+            </div>
+          }
+        />
+      ) : null}
+      {modeMetadata ? (
+        <MessageAlert
+          variant="info"
+          title={i18next.t("llm:Bodies are not stored")}
+          description={i18next.t("llm:Bodies are not stored detail")}
+          action={
+            <Button size="sm" variant="outline" onClick={() => setRecordMode("full")} loading={changingMode}>
+              <Play />
+              {i18next.t("llm:Record metadata and bodies")}
+            </Button>
+          }
+        />
+      ) : null}
       {status && status.dropped > 0 ? (
         <MessageAlert
           variant="warning"

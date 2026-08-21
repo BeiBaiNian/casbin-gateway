@@ -16,11 +16,12 @@ package controllers
 
 import (
 	"github.com/apache/casbin-gateway/conf"
+	"github.com/apache/casbin-gateway/service"
 )
 
 // GetGatewayStatus tells the web UI whether the reverse-proxy gateway is
-// actually running. Without it, a Gateway started with "gatewayEnabled = false"
-// accepts every site and rule and silently proxies nothing.
+// actually running. Without it, a Gateway whose reverse proxy is off accepts
+// every site and rule and silently proxies nothing.
 func (c *ApiController) GetGatewayStatus() {
 	if c.RequireSignedIn() {
 		return
@@ -28,6 +29,8 @@ func (c *ApiController) GetGatewayStatus() {
 
 	c.ResponseOk(map[string]interface{}{
 		"gatewayEnabled": conf.IsGatewayEnabled(),
+		"gatewayRunning": service.IsGatewayRunning(),
+		"gatewayError":   service.GatewayError(),
 		"httpPort":       conf.GetGatewayHttpPort(),
 		"httpsPort":      conf.GetGatewayHttpsPort(),
 	})

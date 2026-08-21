@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/proxy"
-	"github.com/beego/beego"
 	"github.com/casbin/lego/v4/acme"
 	"github.com/casbin/lego/v4/certcrypto"
 	"github.com/casbin/lego/v4/lego"
@@ -112,8 +112,8 @@ func getAcmeClient(email string, privateKey string, devMode bool, useProxy bool)
 }
 
 func GetAcmeClient(useProxy bool) (*lego.Client, error) {
-	acmeEmail := beego.AppConfig.String("acmeEmail")
-	acmePrivateKey := beego.AppConfig.String("acmePrivateKey")
+	acmeEmail := conf.GetConfigStringUnquoted("acmeEmail")
+	acmePrivateKey := conf.GetConfigStringUnquoted("acmePrivateKey")
 	if acmeEmail == "" {
 		return nil, fmt.Errorf("acmeEmail should not be empty")
 	}

@@ -18,6 +18,7 @@ import {Globe, Pencil, Plus, RefreshCw, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import * as MiscBackend from "@/backend/MiscBackend";
+import * as SettingBackend from "@/backend/SettingBackend";
 import * as SiteBackend from "@/backend/SiteBackend";
 import * as Setting from "@/Setting";
 import {DataTable, type Column} from "@/components/shared/data-table";
@@ -27,10 +28,12 @@ import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {Input} from "@/components/ui/input";
+import {Label} from "@/components/ui/label";
 import {NumberInput} from "@/components/shared/number-input";
 import {PageContainer, PageHeader} from "@/components/shared/page-header";
 import {SimpleTooltip} from "@/components/ui/tooltip";
-import type {Account, Site} from "@/types";
+import {Switch} from "@/components/ui/switch";
+import type {Account, GatewayStatus, Site} from "@/types";
 
 function newSite(owner: string): Site {
   const randomName = Setting.getRandomName();
@@ -67,7 +70,8 @@ export default function SiteListPage({account}: {account: Account}) {
   const navigate = useNavigate();
   const [data, setData] = React.useState<Site[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [gatewayEnabled, setGatewayEnabled] = React.useState<boolean | null>(null);
+  const [gatewayStatus, setGatewayStatus] = React.useState<GatewayStatus | null>(null);
+  const [switchingGateway, setSwitchingGateway] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
   const [form, setForm] = React.useState<Site>(() => newSite(account.name));
@@ -85,17 +89,54 @@ export default function SiteListPage({account}: {account: Account}) {
     });
   }, [account.name]);
 
+  const loadGatewayStatus = React.useCallback(() => {
+    MiscBackend.getGatewayStatus().then(res => {
+      if (res.status === "ok") {
+        setGatewayStatus(res.data);
+      }
+    });
+  }, []);
+
   React.useEffect(() => {
     fetchSites();
     // The sites below only do something when the reverse proxy is running, so
     // the page has to say when it is off. Otherwise every site here looks
     // configured and nothing is actually proxied.
-    MiscBackend.getGatewayStatus().then(res => {
-      if (res.status === "ok") {
-        setGatewayEnabled(res.data.gatewayEnabled);
-      }
-    });
-  }, [fetchSites]);
+    loadGatewayStatus();
+  }, [fetchSites, loadGatewayStatus]);
+
+  // A shortcut for the one setting this page is about: the Settings page holds
+  // the same field, and the backend stores it and takes the two gateway ports
+  // straight away, or gives them back.
+  const switchGateway = (enabled: boolean) => {
+    setSwitchingGateway(true);
+    SettingBackend.getSetting()
+      .then(res => {
+        if (res.status !== "ok") {
+          throw new Error(res.msg);
+        }
+        return SettingBackend.updateSetting({...res.data, gatewayEnabled: enabled});
+      })
+      .then(res => {
+        setSwitchingGateway(false);
+        // A port that refuses to bind still leaves the setting saved, so the
+        // banner below is told what the state really is either way.
+        loadGatewayStatus();
+        if (res.status === "ok") {
+          Setting.showMessage(
+            "success",
+            enabled ? i18next.t("site:The reverse proxy is now running") : i18next.t("site:The reverse proxy is now stopped"),
+          );
+        } else {
+          Setting.showMessage("error", res.msg);
+        }
+      })
+      .catch(error => {
+        setSwitchingGateway(false);
+        loadGatewayStatus();
+        Setting.showMessage("error", `${error}`);
+      });
+  };
 
   const openAddDialog = () => {
     setForm(newSite(account.name));
@@ -333,20 +374,36 @@ export default function SiteListPage({account}: {account: Account}) {
       <PageHeader
         title={i18next.t("general:Sites")}
         actions={
-          <Button onClick={openAddDialog}>
-            <Plus />
-            {i18next.t("general:Add")}
-          </Button>
+          <>
+            {account.isAdmin && gatewayStatus !== null ? (
+              <Label className="text-sm font-normal">
+                <Switch checked={gatewayStatus.gatewayEnabled} disabled={switchingGateway} onCheckedChange={switchGateway} />
+                {i18next.t("site:Reverse proxy")}
+              </Label>
+            ) : null}
+            <Button onClick={openAddDialog}>
+              <Plus />
+              {i18next.t("general:Add")}
+            </Button>
+          </>
         }
       />
 
-      {gatewayEnabled === false && (
+      {gatewayStatus?.gatewayEnabled === false && (
         <MessageAlert
           variant="warning"
           title={i18next.t("site:The reverse proxy is not enabled")}
-          description={i18next.t(
-            "site:The sites below will not be proxied. Set gatewayEnabled = true in conf/app.conf and restart Casbin Gateway to enable it.",
-          )}
+          description={i18next.t("site:The sites below will not be proxied until it is turned on.")}
+        />
+      )}
+
+      {gatewayStatus?.gatewayEnabled && !gatewayStatus.gatewayRunning && (
+        <MessageAlert
+          variant="destructive"
+          title={i18next.t("site:The reverse proxy could not start")}
+          description={[gatewayStatus.gatewayError, i18next.t("site:Free the port and switch it on again, or leave it off to run the management UI only.")]
+            .filter(Boolean)
+            .join(" ")}
         />
       )}
 

@@ -114,9 +114,9 @@ Podman reads the same file:
 podman compose up -d
 ```
 
-Either way the UI is on http://localhost:17000, the SQLite database lives in a named volume that survives `down`, and `conf/app.conf` is mounted from the repository, so settings can be changed and the container restarted without rebuilding it.
+Either way the UI is on http://localhost:17000, the SQLite database lives in a named volume that survives `down`, and `conf/app.conf` is mounted from the repository, so the settings it seeds can be edited before the first start without rebuilding the image.
 
-To serve the WAF proxy from a container, set `gatewayEnabled = true` in that mounted `conf/app.conf` and publish its ports too, by adding them next to `17000:17000` in `docker-compose.yml`:
+To serve the WAF proxy from a container, turn the reverse proxy on on the **Settings** page and publish its ports too, by adding them next to `17000:17000` in `docker-compose.yml`:
 
 ```yaml
     ports:
@@ -127,7 +127,7 @@ To serve the WAF proxy from a container, set `gatewayEnabled = true` in that mou
 
 ## Configuration
 
-Everything is optional. Settings live in `conf/app.conf`, next to the executable, and each one is explained in the file itself. The ones people actually change:
+Everything is optional. Settings are changed on the **Settings** page of the web UI and stored in the database, so nothing has to be edited by hand and nothing has to be restarted. `conf/app.conf`, next to the executable, seeds them on the very first start and explains each one; the one-step install has no file beside it and seeds from the copy baked into the binary instead. Editing the file after that first start does nothing, except for the keys read before the database is open: `httpport`, `driverName`, `dataSourceName`, `dbName` and `redisEndpoint`. The settings people actually change:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -146,7 +146,7 @@ Gateway prints what it is actually doing when it starts, so the result can be ch
 | Casbin Gateway                                                              |
 +----------------+-----------------------------------------------------------+
 | Management UI  | http://localhost:17000                                     |
-| Settings       | conf/app.conf                                              |
+| Settings       | Settings page, seeded from conf/app.conf                   |
 | Web UI files   | web/build                                                  |
 | Reverse proxy  | enabled                                                    |
 | Gateway HTTP   | :8080                                                      |
@@ -161,7 +161,7 @@ If a port is taken, Gateway says which process holds it and stops, rather than s
 
 ### Recording prompts
 
-Nothing about a relayed request is stored until you ask for it, because a prompt can carry anything that was pasted into it:
+Nothing about a relayed request is stored until you ask for it, because a prompt can carry anything that was pasted into it. **Record metadata** and **Record metadata and bodies**, the buttons on the LLM Records page, turn it on for the next request; the Settings page holds the same choice and the limits around it, seeded from:
 
 ```ini
 ; "off" keeps nothing, "metadata" records who called which model with which
@@ -182,7 +182,7 @@ The cost next to each record uses built-in list prices, which vendors change and
 The reverse proxy is off by default, so installing Gateway does not take over ports 80 and 443. To use it:
 
 1. **Advanced → Sites → Add**. Set **Domain** to the hostname clients will use (`test.example.com`), **Host** and **Port** to where the traffic goes (`127.0.0.1` and `8000`), and **Mode** to `HTTP` — `HTTPS Only`, the default, redirects plain HTTP away before it reaches the backend.
-2. Set `gatewayEnabled = true` in `conf/app.conf` and restart. Ports 80 and 443 need root on Linux and macOS, so for a first try set `gatewayHttpPort = 8080`.
+2. Flip **Reverse proxy**, the switch at the top of the Sites page. It takes effect at once and is remembered across restarts. Ports 80 and 443 need root on Linux and macOS, so for a first try set the gateway HTTP port to `8080` on the **Settings** page.
 3. Start anything on the backend port, e.g. `python -m http.server 8000`, then ask for the site by `Host` header — the gateway routes on it, so no DNS or `hosts` entry is needed:
 
 ```bash
@@ -193,7 +193,7 @@ You should get your backend's response. A `site not found for host` reply means 
 
 ### Connecting Casdoor
 
-[Casdoor](https://casdoor.org) is optional and takes over member management. Create an organization and an application for Gateway in a Casdoor instance, then fill in `casdoorEndpoint`, `clientId`, `clientSecret`, `casdoorOrganization` and `casdoorApplication`. Sign-in redirects to Casdoor as soon as `casdoorEndpoint` is set, which also enables [OAuth logins](https://casdoor.org/docs/provider/oauth/overview), health-check alerts, the `CAPTCHA` rule action, per-site SSO and cloud file storage.
+[Casdoor](https://casdoor.org) is optional and takes over member management. Create an organization and an application for Gateway in a Casdoor instance, then fill in the five fields of **Settings → Sign-in**. Sign-in redirects to Casdoor as soon as `casdoorEndpoint` is set, which also enables [OAuth logins](https://casdoor.org/docs/provider/oauth/overview), health-check alerts, the `CAPTCHA` rule action, per-site SSO and cloud file storage.
 
 ## Development
 

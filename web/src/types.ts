@@ -350,7 +350,57 @@ export interface GatewayStatus {
   /** False while enabled means the ports refused to bind; "gatewayError" says why. */
   gatewayRunning: boolean;
   gatewayError: string;
+}
+
+/**
+ * The one built-in row of the Setting table, holding everything that used to be
+ * hand-edited in conf/app.conf. The file only seeds it on the first start.
+ */
+export interface Setting {
+  owner: string;
+  name: string;
+  createdTime: string;
+  displayName: string;
+
+  gatewayEnabled: boolean;
+  gatewayHttpPort: number;
+  gatewayHttpsPort: number;
+
   llmRecordMode: "off" | "metadata" | "full";
+  llmRecordQueueCapacity: number;
+  llmRecordRetentionDays: number;
+  llmRecordMaxRecords: number;
+  llmRecordMaxPayloadBytes: number;
+  llmPricingFile: string;
+
+  agentPatchStateDir: string;
+  agentRecordCapacity: number;
+  agentMonitorPollSeconds: number;
+
+  casdoorEndpoint: string;
+  clientId: string;
+  clientSecret: string;
+  casdoorOrganization: string;
+  casdoorApplication: string;
+
+  apiKeyEncryptionKey: string;
+
+  httpProxy: string;
+  acmeEmail: string;
+  acmePrivateKey: string;
+
+  appDir: string;
+  language: string;
+  appMap: string;
+  clientIdPrefix: string;
+  clientSecretPrefix: string;
+  dbRegionId: string;
+  dbAccessKeyId: string;
+  dbAccessKeySecret: string;
+  dbInstanceId: string;
+  dbHost: string;
+  dbUser: string;
+  dbPass: string;
 }
 
 /** The two kinds of configuration the Skills & MCP page manages. */

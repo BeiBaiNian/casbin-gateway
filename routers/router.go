@@ -39,7 +39,8 @@ func initAPI() {
 	beego.Router("/api/update-account", &controllers.ApiController{}, "POST:UpdateAccount")
 	beego.Router("/api/get-providers", &controllers.ApiController{}, "GET:GetProviders")
 	beego.Router("/api/get-gateway-status", &controllers.ApiController{}, "GET:GetGatewayStatus")
-	beego.Router("/api/update-system-settings", &controllers.ApiController{}, "POST:UpdateSystemSettings")
+	beego.Router("/api/get-setting", &controllers.ApiController{}, "GET:GetSetting")
+	beego.Router("/api/update-setting", &controllers.ApiController{}, "POST:UpdateSetting")
 
 	beego.Router("/api/get-global-nodes", &controllers.ApiController{}, "GET:GetGlobalNodes")
 	beego.Router("/api/get-nodes", &controllers.ApiController{}, "GET:GetNodes")

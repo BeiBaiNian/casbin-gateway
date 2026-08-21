@@ -251,6 +251,12 @@ func (a *Ormer) createTable() {
 		panic(err)
 	}
 
+	// The settings the web UI can change, held in one built-in row.
+	err = a.Engine.Sync2(new(Setting))
+	if err != nil {
+		panic(err)
+	}
+
 	// Local users, used for sign-in when no Casdoor is configured.
 	err = a.Engine.Sync2(new(User))
 	if err != nil {

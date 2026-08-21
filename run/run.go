@@ -19,8 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/util"
-	"github.com/beego/beego"
 )
 
 func isTargetRepo(siteName string) bool {
@@ -52,7 +52,7 @@ func CreateRepo(siteName string, needStart bool, diff string, providerName strin
 			return wrapRepoError("gitClone", path, err)
 		}
 
-		dbInstanceId := beego.AppConfig.String("dbInstanceId")
+		dbInstanceId := conf.GetConfigStringUnquoted("dbInstanceId")
 		if dbInstanceId == "" {
 			_, err = gitCreateDatabase(siteName)
 			if err != nil {

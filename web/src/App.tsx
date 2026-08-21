@@ -45,6 +45,7 @@ import RecordEditPage from "@/pages/RecordEditPage";
 import RecordListPage from "@/pages/RecordListPage";
 import RuleEditPage from "@/pages/RuleEditPage";
 import RuleListPage from "@/pages/RuleListPage";
+import SettingPage from "@/pages/SettingPage";
 import SigninPage from "@/pages/SigninPage";
 import SiteEditPage from "@/pages/SiteEditPage";
 import SiteListPage from "@/pages/SiteListPage";
@@ -274,6 +275,7 @@ export default function App() {
                 />
                 <Route path="/nodes" element={requireSignin(user => <NodeListPage account={user} />)} />
                 <Route path="/nodes/:owner/:nodeName" element={requireSignin(() => <NodeEditPage />)} />
+                <Route path="/settings" element={requireSignin(user => <SettingPage account={user} />)} />
                 <Route path="/sites" element={requireSignin(user => <SiteListPage account={user} />)} />
                 <Route
                   path="/sites/:owner/:siteName"

@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/beego/beego"
+	"github.com/apache/casbin-gateway/conf"
 )
 
 var username string
@@ -41,7 +41,7 @@ func init() {
 }
 
 func InitAppMap() {
-	res := beego.AppConfig.String("appMap")
+	res := conf.GetConfigStringUnquoted("appMap")
 	if res != "" {
 		err := json.Unmarshal([]byte(res), &appMap)
 		if err != nil {
@@ -70,14 +70,14 @@ func getMappedName(name string) string {
 
 func GetRepoPath(name string) string {
 	name = getMappedName(name)
-	appDir := beego.AppConfig.String("appDir")
+	appDir := conf.GetConfigStringUnquoted("appDir")
 	res := filepath.Join(appDir, name)
 	return res
 }
 
 func getCodeAppConfPath(name string) string {
 	name = getMappedName(name)
-	appDir := beego.AppConfig.String("appDir")
+	appDir := conf.GetConfigStringUnquoted("appDir")
 	return fmt.Sprintf("%s/%s/conf/app.conf", appDir, name)
 }
 

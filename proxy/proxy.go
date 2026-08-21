@@ -24,7 +24,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/beego/beego"
+	"github.com/apache/casbin-gateway/conf"
 )
 
 // ProxyHttpClient sends its requests through the configured proxy.
@@ -71,7 +71,7 @@ func Transport() *http.Transport {
 // "socks5h://", "http://" and "https://" addresses are honoured as written, and
 // may carry credentials.
 func initProxyUrl() {
-	httpProxy := strings.TrimSpace(beego.AppConfig.String("httpProxy"))
+	httpProxy := strings.TrimSpace(conf.GetConfigStringUnquoted("httpProxy"))
 	if httpProxy == "" {
 		return
 	}

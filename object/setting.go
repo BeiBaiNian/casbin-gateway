@@ -1,0 +1,237 @@
+// Copyright 2026 The casbin Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package object
+
+import (
+	"strconv"
+
+	"github.com/apache/casbin-gateway/conf"
+	"github.com/apache/casbin-gateway/util"
+	"github.com/xorm-io/core"
+)
+
+// BuiltInSettingId is the one row this table holds. Settings are global, so
+// there is nothing to add or delete: the row is created on first start from
+// conf/app.conf and edited from the Settings page afterwards.
+const BuiltInSettingId = "admin/setting-built-in"
+
+type Setting struct {
+	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
+	Name        string `xorm:"varchar(100) notnull pk" json:"name"`
+	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
+	DisplayName string `xorm:"varchar(100)" json:"displayName"`
+
+	GatewayEnabled   bool `xorm:"bool" json:"gatewayEnabled"`
+	GatewayHttpPort  int  `xorm:"int" json:"gatewayHttpPort"`
+	GatewayHttpsPort int  `xorm:"int" json:"gatewayHttpsPort"`
+
+	LlmRecordMode            string `xorm:"varchar(100)" json:"llmRecordMode"`
+	LlmRecordQueueCapacity   int    `xorm:"int" json:"llmRecordQueueCapacity"`
+	LlmRecordRetentionDays   int    `xorm:"int" json:"llmRecordRetentionDays"`
+	LlmRecordMaxRecords      int    `xorm:"int" json:"llmRecordMaxRecords"`
+	LlmRecordMaxPayloadBytes int    `xorm:"int" json:"llmRecordMaxPayloadBytes"`
+	LlmPricingFile           string `xorm:"varchar(500)" json:"llmPricingFile"`
+
+	AgentPatchStateDir      string `xorm:"varchar(500)" json:"agentPatchStateDir"`
+	AgentRecordCapacity     int    `xorm:"int" json:"agentRecordCapacity"`
+	AgentMonitorPollSeconds int    `xorm:"int" json:"agentMonitorPollSeconds"`
+
+	CasdoorEndpoint     string `xorm:"varchar(500)" json:"casdoorEndpoint"`
+	ClientId            string `xorm:"varchar(100)" json:"clientId"`
+	ClientSecret        string `xorm:"varchar(200)" json:"clientSecret"`
+	CasdoorOrganization string `xorm:"varchar(100)" json:"casdoorOrganization"`
+	CasdoorApplication  string `xorm:"varchar(100)" json:"casdoorApplication"`
+
+	ApiKeyEncryptionKey string `xorm:"varchar(200)" json:"apiKeyEncryptionKey"`
+
+	HttpProxy      string `xorm:"varchar(200)" json:"httpProxy"`
+	AcmeEmail      string `xorm:"varchar(200)" json:"acmeEmail"`
+	AcmePrivateKey string `xorm:"mediumtext" json:"acmePrivateKey"`
+
+	AppDir             string `xorm:"varchar(500)" json:"appDir"`
+	Language           string `xorm:"varchar(100)" json:"language"`
+	AppMap             string `xorm:"varchar(1000)" json:"appMap"`
+	ClientIdPrefix     string `xorm:"varchar(100)" json:"clientIdPrefix"`
+	ClientSecretPrefix string `xorm:"varchar(100)" json:"clientSecretPrefix"`
+	DbRegionId         string `xorm:"varchar(100)" json:"dbRegionId"`
+	DbAccessKeyId      string `xorm:"varchar(200)" json:"dbAccessKeyId"`
+	DbAccessKeySecret  string `xorm:"varchar(200)" json:"dbAccessKeySecret"`
+	DbInstanceId       string `xorm:"varchar(100)" json:"dbInstanceId"`
+	DbHost             string `xorm:"varchar(200)" json:"dbHost"`
+	DbUser             string `xorm:"varchar(100)" json:"dbUser"`
+	DbPass             string `xorm:"varchar(200)" json:"dbPass"`
+}
+
+// SyncSettingToConf makes the row the answer conf.GetConfigString() gives, so
+// every existing caller of conf keeps working and none of them has to know that
+// the value now comes from the database. Keys not listed here stay in
+// conf/app.conf: the database connection and the management port are read
+// before this row can be, and "isDemoMode" turns the API read-only, which would
+// take the Settings page that turns it off down with it.
+func SyncSettingToConf(setting *Setting) {
+	conf.SetSettingOverrides(map[string]string{
+		"gatewayEnabled":   strconv.FormatBool(setting.GatewayEnabled),
+		"gatewayHttpPort":  strconv.Itoa(setting.GatewayHttpPort),
+		"gatewayHttpsPort": strconv.Itoa(setting.GatewayHttpsPort),
+
+		"llmRecordMode":            setting.LlmRecordMode,
+		"llmRecordQueueCapacity":   strconv.Itoa(setting.LlmRecordQueueCapacity),
+		"llmRecordRetentionDays":   strconv.Itoa(setting.LlmRecordRetentionDays),
+		"llmRecordMaxRecords":      strconv.Itoa(setting.LlmRecordMaxRecords),
+		"llmRecordMaxPayloadBytes": strconv.Itoa(setting.LlmRecordMaxPayloadBytes),
+		"llmPricingFile":           setting.LlmPricingFile,
+
+		"agentPatchStateDir":      setting.AgentPatchStateDir,
+		"agentRecordCapacity":     strconv.Itoa(setting.AgentRecordCapacity),
+		"agentMonitorPollSeconds": strconv.Itoa(setting.AgentMonitorPollSeconds),
+
+		"casdoorEndpoint":     setting.CasdoorEndpoint,
+		"clientId":            setting.ClientId,
+		"clientSecret":        setting.ClientSecret,
+		"casdoorOrganization": setting.CasdoorOrganization,
+		"casdoorApplication":  setting.CasdoorApplication,
+
+		"apiKeyEncryptionKey": setting.ApiKeyEncryptionKey,
+
+		"httpProxy":      setting.HttpProxy,
+		"acmeEmail":      setting.AcmeEmail,
+		"acmePrivateKey": setting.AcmePrivateKey,
+
+		"appDir":             setting.AppDir,
+		"language":           setting.Language,
+		"appMap":             setting.AppMap,
+		"clientIdPrefix":     setting.ClientIdPrefix,
+		"clientSecretPrefix": setting.ClientSecretPrefix,
+		"dbRegionId":         setting.DbRegionId,
+		"dbAccessKeyId":      setting.DbAccessKeyId,
+		"dbAccessKeySecret":  setting.DbAccessKeySecret,
+		"dbInstanceId":       setting.DbInstanceId,
+		"dbHost":             setting.DbHost,
+		"dbUser":             setting.DbUser,
+		"dbPass":             setting.DbPass,
+	})
+}
+
+func getSetting(owner string, name string) (*Setting, error) {
+	setting := Setting{Owner: owner, Name: name}
+	existed, err := ormer.Engine.Get(&setting)
+	if err != nil {
+		return nil, err
+	}
+
+	if existed {
+		return &setting, nil
+	}
+	return nil, nil
+}
+
+func GetSetting(id string) (*Setting, error) {
+	owner, name := util.GetOwnerAndNameFromId(id)
+	return getSetting(owner, name)
+}
+
+func GetBuiltInSetting() (*Setting, error) {
+	return GetSetting(BuiltInSettingId)
+}
+
+func UpdateSetting(id string, setting *Setting) (bool, error) {
+	owner, name := util.GetOwnerAndNameFromId(id)
+	if s, err := getSetting(owner, name); err != nil {
+		return false, err
+	} else if s == nil {
+		return false, nil
+	}
+
+	setting.Owner, setting.Name = owner, name
+	_, err := ormer.Engine.ID(core.PK{owner, name}).AllCols().Update(setting)
+	if err != nil {
+		return false, err
+	}
+
+	SyncSettingToConf(setting)
+	return true, nil
+}
+
+// InitBuiltInSetting creates the row on first start, seeded from conf/app.conf
+// so an existing installation keeps the settings it already had, and loads it
+// into conf. It runs before anything else reads conf, because from here on the
+// row is what conf answers with.
+func InitBuiltInSetting() {
+	setting, err := GetBuiltInSetting()
+	if err != nil {
+		panic(err)
+	}
+
+	if setting == nil {
+		setting = newSettingFromConf()
+		if _, err = ormer.Engine.Insert(setting); err != nil {
+			panic(err)
+		}
+	}
+
+	SyncSettingToConf(setting)
+}
+
+// newSettingFromConf reads the defaults through conf's own getters, so a key
+// that conf/app.conf never mentioned is stored as the default the code would
+// have used anyway rather than as an empty value.
+func newSettingFromConf() *Setting {
+	return &Setting{
+		Owner:       "admin",
+		Name:        "setting-built-in",
+		CreatedTime: util.GetCurrentTime(),
+		DisplayName: "Built-in Setting",
+
+		GatewayEnabled:   conf.IsGatewayEnabled(),
+		GatewayHttpPort:  conf.GetGatewayHttpPort(),
+		GatewayHttpsPort: conf.GetGatewayHttpsPort(),
+
+		LlmRecordMode:            conf.GetLlmRecordMode(),
+		LlmRecordQueueCapacity:   conf.GetLlmRecordQueueCapacity(),
+		LlmRecordRetentionDays:   conf.GetLlmRecordRetentionDays(),
+		LlmRecordMaxRecords:      conf.GetLlmRecordMaxRecords(),
+		LlmRecordMaxPayloadBytes: conf.GetLlmRecordMaxPayloadBytes(),
+		LlmPricingFile:           conf.GetLlmPricingFile(),
+
+		AgentPatchStateDir:      conf.GetAgentPatchStateDir(),
+		AgentRecordCapacity:     conf.GetAgentRecordCapacity(),
+		AgentMonitorPollSeconds: conf.GetAgentMonitorPollSeconds(),
+
+		CasdoorEndpoint:     conf.GetConfigStringUnquoted("casdoorEndpoint"),
+		ClientId:            conf.GetConfigStringUnquoted("clientId"),
+		ClientSecret:        conf.GetConfigStringUnquoted("clientSecret"),
+		CasdoorOrganization: conf.GetConfigStringUnquoted("casdoorOrganization"),
+		CasdoorApplication:  conf.GetConfigStringUnquoted("casdoorApplication"),
+
+		ApiKeyEncryptionKey: conf.GetConfigStringUnquoted("apiKeyEncryptionKey"),
+
+		HttpProxy:      conf.GetConfigStringUnquoted("httpProxy"),
+		AcmeEmail:      conf.GetConfigStringUnquoted("acmeEmail"),
+		AcmePrivateKey: conf.GetConfigStringUnquoted("acmePrivateKey"),
+
+		AppDir:             conf.GetConfigStringUnquoted("appDir"),
+		Language:           conf.GetConfigStringUnquoted("language"),
+		AppMap:             conf.GetConfigStringUnquoted("appMap"),
+		ClientIdPrefix:     conf.GetConfigStringUnquoted("clientIdPrefix"),
+		ClientSecretPrefix: conf.GetConfigStringUnquoted("clientSecretPrefix"),
+		DbRegionId:         conf.GetConfigStringUnquoted("dbRegionId"),
+		DbAccessKeyId:      conf.GetConfigStringUnquoted("dbAccessKeyId"),
+		DbAccessKeySecret:  conf.GetConfigStringUnquoted("dbAccessKeySecret"),
+		DbInstanceId:       conf.GetConfigStringUnquoted("dbInstanceId"),
+		DbHost:             conf.GetConfigStringUnquoted("dbHost"),
+		DbUser:             conf.GetConfigStringUnquoted("dbUser"),
+		DbPass:             conf.GetConfigStringUnquoted("dbPass"),
+	}
+}

@@ -21,15 +21,15 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/beego/beego"
+	"github.com/apache/casbin-gateway/conf"
 )
 
 var rdsClient *rds.Client
 
 func InitRdsClient() {
-	dbRegionId := beego.AppConfig.String("dbRegionId")
-	dbAccessKeyId := beego.AppConfig.String("dbAccessKeyId")
-	dbAccessKeySecret := beego.AppConfig.String("dbAccessKeySecret")
+	dbRegionId := conf.GetConfigStringUnquoted("dbRegionId")
+	dbAccessKeyId := conf.GetConfigStringUnquoted("dbAccessKeyId")
+	dbAccessKeySecret := conf.GetConfigStringUnquoted("dbAccessKeySecret")
 
 	if dbRegionId == "" || dbAccessKeyId == "" || dbAccessKeySecret == "" {
 		return
@@ -48,7 +48,7 @@ func InitRdsClient() {
 func gitCreateDatabaseCloud(name string) (bool, error) {
 	fmt.Printf("gitCreateDatabaseCloud(): [%s]\n", name)
 
-	dbInstanceId := beego.AppConfig.String("dbInstanceId")
+	dbInstanceId := conf.GetConfigStringUnquoted("dbInstanceId")
 
 	// https://help.aliyun.com/document_detail/26258.htm
 	r := rds.CreateCreateDatabaseRequest()
@@ -72,8 +72,8 @@ func gitCreateDatabaseCloud(name string) (bool, error) {
 }
 
 func addDatabaseUser(dbName string) error {
-	dbInstanceId := beego.AppConfig.String("dbInstanceId")
-	dbUser := beego.AppConfig.String("dbUser")
+	dbInstanceId := conf.GetConfigStringUnquoted("dbInstanceId")
+	dbUser := conf.GetConfigStringUnquoted("dbUser")
 
 	// https://help.aliyun.com/document_detail/26266.html
 	r := rds.CreateGrantAccountPrivilegeRequest()

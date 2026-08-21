@@ -114,9 +114,9 @@ Podman 读同一个文件：
 podman compose up -d
 ```
 
-两种方式下管理界面都在 http://localhost:17000，SQLite 数据库存在一个命名卷里，`down` 之后依然保留；`conf/app.conf` 从仓库挂载进去，改完配置重启容器即可生效，不用重新构建镜像。
+两种方式下管理界面都在 http://localhost:17000，SQLite 数据库存在一个命名卷里，`down` 之后依然保留；`conf/app.conf` 从仓库挂载进去，首次启动前可以先改它播下的那份初始配置，不用重新构建镜像。
 
-想在容器里用 WAF 反向代理，把挂载的 `conf/app.conf` 里的 `gatewayEnabled` 设为 `true`，并在 `docker-compose.yml` 里 `17000:17000` 旁边补上它的端口：
+想在容器里用 WAF 反向代理，在 **设置** 页面里打开反向代理，并在 `docker-compose.yml` 里 `17000:17000` 旁边补上它的端口：
 
 ```yaml
     ports:
@@ -127,7 +127,7 @@ podman compose up -d
 
 ## 配置
 
-所有配置都是可选的。设置位于可执行文件旁边的 `conf/app.conf`，每一项在文件里都有说明。真正常被改动的是这些：
+所有配置都是可选的。设置在 Web UI 的 **设置** 页面里修改，保存在数据库中，既不用手工改文件，也不用重启。可执行文件旁边的 `conf/app.conf` 只在第一次启动时播下这些值，每一项在文件里都有说明；一步安装装出来的单个可执行文件旁边没有这个文件，播的是编进二进制里的那一份。第一次启动之后再改这个文件不会有任何效果，只有在数据库打开之前就要读的那几项例外：`httpport`、`driverName`、`dataSourceName`、`dbName` 和 `redisEndpoint`。真正常被改动的是这些：
 
 | 配置项 | 默认值 | 作用 |
 | --- | --- | --- |
@@ -146,7 +146,7 @@ Gateway 启动时会打印它实际在做什么，所以可以直接看结果而
 | Casbin Gateway                                                              |
 +----------------+-----------------------------------------------------------+
 | Management UI  | http://localhost:17000                                     |
-| Settings       | conf/app.conf                                              |
+| Settings       | Settings page, seeded from conf/app.conf                   |
 | Web UI files   | web/build                                                  |
 | Reverse proxy  | enabled                                                    |
 | Gateway HTTP   | :8080                                                      |
@@ -161,7 +161,7 @@ Gateway 启动时会打印它实际在做什么，所以可以直接看结果而
 
 ### 记录提示词
 
-在你主动要求之前，转发请求的内容一概不存储，因为提示词里可能粘进任何东西：
+在你主动要求之前，转发请求的内容一概不存储，因为提示词里可能粘进任何东西。LLM Records 页面上的 **只记录元数据** 和 **记录元数据和正文** 两个按钮会从下一次请求起打开记录；设置页面里有同样的选项和相关的上限，它们的初始值来自：
 
 ```ini
 ; "off" 什么都不留，"metadata" 记录谁调用了哪个模型、结果如何，
@@ -182,7 +182,7 @@ llmRecordMaxPayloadBytes = 1048576
 反向代理默认关闭，所以安装 Gateway 不会占用 80 和 443 端口。要使用它：
 
 1. **Advanced → Sites → Add**。**Domain** 填客户端会使用的主机名（`test.example.com`），**Host** 和 **Port** 填流量的去向（`127.0.0.1` 和 `8000`），**Mode** 选 `HTTP` —— 默认的 `HTTPS Only` 会在请求到达后端之前把明文 HTTP 重定向走。
-2. 在 `conf/app.conf` 里设 `gatewayEnabled = true` 并重启。Linux 和 macOS 上 80/443 端口需要 root，所以第一次尝试可以设 `gatewayHttpPort = 8080`。
+2. 打开 Sites 页面顶部的 **反向代理** 开关。它立即生效，重启后依然保持。Linux 和 macOS 上 80/443 端口需要 root，所以第一次尝试可以在 **设置** 页面里把网关 HTTP 端口改成 `8080`。
 3. 在后端端口上起点什么，例如 `python -m http.server 8000`，然后用 `Host` 头请求这个站点 —— 网关就是按它路由的，所以不需要 DNS 或 `hosts` 记录：
 
 ```bash
@@ -193,7 +193,7 @@ curl -H "Host: test.example.com" http://127.0.0.1:8080/
 
 ### 接入 Casdoor
 
-[Casdoor](https://casdoor.org) 是可选的，接管成员管理。在一个 Casdoor 实例里为 Gateway 创建组织和应用，然后填好 `casdoorEndpoint`、`clientId`、`clientSecret`、`casdoorOrganization` 和 `casdoorApplication`。只要设置了 `casdoorEndpoint`，登录就会跳转到 Casdoor，同时还会启用 [OAuth 登录](https://casdoor.org/docs/provider/oauth/overview)、健康检查告警、`CAPTCHA` 规则动作、按站点的 SSO 以及云端文件存储。
+[Casdoor](https://casdoor.org) 是可选的，接管成员管理。在一个 Casdoor 实例里为 Gateway 创建组织和应用，然后在 **设置 → 登录** 里填好那五项。只要设置了 `casdoorEndpoint`，登录就会跳转到 Casdoor，同时还会启用 [OAuth 登录](https://casdoor.org/docs/provider/oauth/overview)、健康检查告警、`CAPTCHA` 规则动作、按站点的 SSO 以及云端文件存储。
 
 ## 开发
 
