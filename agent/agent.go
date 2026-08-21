@@ -25,6 +25,17 @@ type Installation struct {
 	Owner         string `json:"owner"`
 }
 
+// DisplayNameOf is the human-readable name of a known agent id, empty for an id
+// no fingerprint declares.
+func DisplayNameOf(id string) string {
+	for i := range fingerprints {
+		if fingerprints[i].ID == id {
+			return fingerprints[i].DisplayName
+		}
+	}
+	return ""
+}
+
 // IsKnownAgentId reads the fingerprints rather than a host scan, so an agent
 // stays configurable while it is not installed.
 func IsKnownAgentId(id string) bool {

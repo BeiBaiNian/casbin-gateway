@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/apache/casbin-gateway/agenthome"
 	"github.com/apache/casbin-gateway/agentmonitor"
 )
 
@@ -118,7 +119,7 @@ type openclawLayout struct {
 }
 
 func (p openclawPatcher) layoutOf(target Target) (openclawLayout, error) {
-	home, err := homeOf(target)
+	home, err := agenthome.Resolve(target.Owner)
 	if err != nil {
 		return openclawLayout{}, err
 	}

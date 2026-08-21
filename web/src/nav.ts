@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import {
+  Blocks,
   Bot,
   ChartColumn,
   FileSearch,
@@ -59,6 +60,13 @@ export interface NavGroup {
 export const navGroups: NavGroup[] = [
   {key: "/", label: "general:Dashboard", icon: LayoutDashboard, path: "/"},
   {key: "/agents", label: "agent:Agents", icon: Bot, path: "/agents", adminOnly: true},
+  {
+    key: "/agent-configs",
+    label: "agentConfig:Skills & MCP",
+    icon: Blocks,
+    path: "/agent-configs",
+    adminOnly: true,
+  },
   {
     key: "/agent-sessions",
     label: "agent:Agent Sessions",

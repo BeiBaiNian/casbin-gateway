@@ -27,6 +27,7 @@ import {Loading} from "@/components/shared/loading";
 import {TooltipProvider} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import AccountPage from "@/pages/AccountPage";
+import AgentConfigsPage from "@/pages/AgentConfigsPage";
 import AgentDashboardPage from "@/pages/AgentDashboardPage";
 import AgentDetailPage from "@/pages/AgentDetailPage";
 import AgentRecordsPage from "@/pages/AgentRecordsPage";
@@ -254,6 +255,10 @@ export default function App() {
                 <Route
                   path="/agents/:agentId"
                   element={requireSignin(user => <AgentDetailPage account={user} />)}
+                />
+                <Route
+                  path="/agent-configs"
+                  element={requireSignin(user => <AgentConfigsPage account={user} />)}
                 />
                 <Route
                   path="/agent-records"

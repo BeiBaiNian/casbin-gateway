@@ -26,12 +26,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/casbin-gateway/agentconfig"
 	"github.com/apache/casbin-gateway/conf"
 )
 
 // gatewayEntryName is the identifier Gateway writes into every agent
-// configuration it touches, so operators can find and remove it by hand.
-const gatewayEntryName = "casbin-gateway-agent-monitor"
+// configuration it touches, so operators can find and remove it by hand. The
+// skill and MCP listings recognize it by the same name.
+const gatewayEntryName = agentconfig.ManagedEntryName
 
 type changeKind string
 

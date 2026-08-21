@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/apache/casbin-gateway/agenthome"
 	"github.com/apache/casbin-gateway/agenthook"
 )
 
@@ -120,7 +121,7 @@ func (claudeCodePatcher) Status(target Target) (Status, error) {
 }
 
 func claudeCodeConfigPath(target Target) (string, error) {
-	home, err := homeOf(target)
+	home, err := agenthome.Resolve(target.Owner)
 	if err != nil {
 		return "", err
 	}

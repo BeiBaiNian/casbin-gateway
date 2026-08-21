@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package agentpatch
+// Package agenthome resolves the home directory of an agent installation's
+// owner. Both the monitoring patches and the skill/MCP configuration reader
+// write into that home, and neither should own the account lookup.
+package agenthome
 
 import (
 	"fmt"
@@ -22,12 +25,12 @@ import (
 	"strings"
 )
 
-// homeOf resolves the home directory of the installation owner. Patching writes
-// into that home, so guessing here would silently modify the wrong account's
-// configuration: an unresolvable owner is an error rather than a fallback to
-// whichever account happens to run Gateway.
-func homeOf(target Target) (string, error) {
-	owner := strings.TrimSpace(target.Owner)
+// Resolve returns the home directory of owner. Callers write into that home, so
+// guessing here would silently modify the wrong account's configuration: an
+// unresolvable owner is an error rather than a fallback to whichever account
+// happens to run Gateway.
+func Resolve(owner string) (string, error) {
+	owner = strings.TrimSpace(owner)
 	if owner == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {

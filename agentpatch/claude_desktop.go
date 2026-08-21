@@ -19,10 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/apache/casbin-gateway/agentconfig"
+	"github.com/apache/casbin-gateway/agenthome"
 	"github.com/apache/casbin-gateway/agentmonitor"
 	"github.com/apache/casbin-gateway/mcpserver"
 )
@@ -160,18 +161,15 @@ func (p claudeDesktopPatcher) PatchNotice(patched bool) (string, string) {
 }
 
 func (p claudeDesktopPatcher) configPath(target Target) (string, error) {
-	home, err := homeOf(target)
+	home, err := agenthome.Resolve(target.Owner)
 	if err != nil {
 		return "", err
 	}
-	switch runtime.GOOS {
-	case "windows":
-		return filepath.Join(home, "AppData", "Roaming", "Claude", "claude_desktop_config.json"), nil
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"), nil
-	default:
-		return filepath.Join(home, ".config", "Claude", "claude_desktop_config.json"), nil
+	path, ok := agentconfig.McpConfigPath(p.AgentId(), home)
+	if !ok {
+		return "", errors.New("Gateway does not know where Claude Desktop keeps its MCP servers")
 	}
+	return path, nil
 }
 
 func (p claudeDesktopPatcher) serverEntry(target Target) (map[string]any, error) {

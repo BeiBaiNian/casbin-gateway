@@ -262,3 +262,63 @@ export interface Application {
 export interface GatewayStatus {
   gatewayEnabled: boolean;
 }
+
+/** The two kinds of configuration the Skills & MCP page manages. */
+export type AgentConfigKind = "skill" | "mcp";
+
+export interface AgentConfigItem {
+  agentId: string;
+  owner: string;
+  kind: AgentConfigKind;
+  name: string;
+  description?: string;
+  /** The skill's own folder, or the config file the MCP server is an entry of. */
+  path: string;
+  transport?: string;
+  command?: string;
+  url?: string;
+  files?: number;
+  bytes?: number;
+  /** Written by Gateway's own agent monitoring, and not the operator's to move. */
+  managed?: boolean;
+}
+
+/** One installation's skills and MCP servers, as they exist in its own files. */
+export interface AgentConfigInventory {
+  agentId: string;
+  owner: string;
+  name: string;
+  path?: string;
+  /** The account directory the locations below were resolved under. */
+  home?: string;
+  /** False when the configuration exists but no installation was detected. */
+  installed: boolean;
+  /** Other agents reading the same files, e.g. Cursor and its CLI. */
+  sharedWith?: string[];
+  skillsDir?: string;
+  mcpFile?: string;
+  skillsSupported: boolean;
+  mcpSupported: boolean;
+  mcpWritable: boolean;
+  mcpReadOnly?: string;
+  skills: AgentConfigItem[];
+  mcpServers: AgentConfigItem[];
+  errors?: string[];
+}
+
+export interface AgentConfigDetail {
+  item: AgentConfigItem;
+  content: string;
+  files?: string[];
+}
+
+export type AgentConfigAction = "create" | "overwrite" | "skip" | "failed";
+
+/** What a copy would do, or did, to one item at one target agent. */
+export interface AgentConfigPlanItem {
+  agentId: string;
+  name: string;
+  action: AgentConfigAction;
+  reason?: string;
+  path?: string;
+}

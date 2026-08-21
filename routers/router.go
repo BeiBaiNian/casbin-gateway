@@ -70,6 +70,11 @@ func initAPI() {
 	beego.Router("/api/get-agent-records", &controllers.ApiController{}, "GET:GetAgentRecords")
 	beego.Router("/api/get-agent-sessions", &controllers.ApiController{}, "GET:GetAgentSessions")
 	beego.Router("/api/add-agent-record", &controllers.ApiController{}, "POST:AddAgentRecord")
+	beego.Router("/api/get-agent-configs", &controllers.ApiController{}, "GET:GetAgentConfigs")
+	beego.Router("/api/get-agent-config-item", &controllers.ApiController{}, "GET:GetAgentConfigItem")
+	beego.Router("/api/delete-agent-config-item", &controllers.ApiController{}, "POST:DeleteAgentConfigItem")
+	beego.Router("/api/plan-agent-config-copy", &controllers.ApiController{}, "POST:PlanAgentConfigCopy")
+	beego.Router("/api/copy-agent-config", &controllers.ApiController{}, "POST:CopyAgentConfig")
 
 	beego.Router("/api/get-records", &controllers.ApiController{}, "GET:GetRecords")
 	beego.Router("/api/get-record", &controllers.ApiController{}, "GET:GetRecord")

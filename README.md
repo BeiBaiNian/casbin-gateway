@@ -75,6 +75,16 @@ Gateway also watches the AI coding agents installed on the machine it runs on: i
 
 Discovery reads that machine's user accounts, home directories and package install paths, so it only ever sees the host Gateway itself runs on. Inside a container — `docker compose up`, `docker run`, or Podman — Gateway scans the container's own filesystem, finds nothing, and the **Agents** page stays empty even though agents are installed on the host. Run Gateway from source or as a [single binary](#single-binary) on the host to use these features; every other part of Gateway, the WAF proxy included, behaves the same in Docker.
 
+### Skills and MCP servers
+
+Every agent keeps its skills and its MCP servers in its own file, in its own format: `~/.claude/skills` and `~/.claude.json` for Claude Code, `~/.codex/skills` and the `[mcp_servers]` tables of `~/.codex/config.toml` for Codex, `~/.cursor/skills-cursor` and `~/.cursor/mcp.json` for Cursor, and so on. The **Skills & MCP** page reads all of them and puts them in one table, with a column per agent showing which of them already has each item.
+
+From there an item can be opened — the whole `SKILL.md`, or the server's entry with its credentials masked — deleted from the agent that holds it, or copied into the other agents on the same account. A copy shows what it would do at every target first, item by item, and only replaces something that is already there when told to.
+
+Gateway reads and writes these files in place. It stages a replacement and renames it over the original rather than truncating it, keeps every setting it does not own, and preserves the comments and formatting of `config.toml` by editing its text instead of re-encoding it. The MCP server Gateway registers for its own monitoring is listed like any other, but is never copied or deleted from here; turning monitoring off on the **Agents** page is what removes it.
+
+Configuration is found whether or not the agent itself was discovered, so an agent installed some way Gateway does not recognize still shows the skills it has on disk. Like agent monitoring, this only ever sees the host Gateway runs on.
+
 ### Quick start
 
 From nothing to a request flowing through the gateway, in four steps. No database server is needed: Gateway creates `./data/casbin-gateway.db` on first start.
