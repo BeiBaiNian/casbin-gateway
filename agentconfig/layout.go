@@ -36,15 +36,76 @@ type layout struct {
 	mcp    *mcpLayout
 }
 
-// skillLayout is a directory of skill folders, each with a SKILL.md. Every
-// agent Gateway supports uses that same layout, which is what makes copying a
-// skill between two of them a plain directory copy.
+// Where a skill came from. A plugin's skills are read like any other but are
+// not Gateway's to delete: the plugin owns them. A project's skills belong to a
+// checkout the agent has been run in, not to the account.
+const (
+	ScopeUser    = "user"
+	ScopePlugin  = "plugin"
+	ScopeProject = "project"
+)
+
+// skillLayout is every place one agent finds skills. Each is a directory of
+// skill folders with a SKILL.md, which is what makes copying a skill between
+// two agents a plain directory copy.
 type skillLayout struct {
-	segments []string
+	sources []skillSource
 }
 
+// skillSource is one such place: the agent's own skills directory, a plugin
+// tree that is searched for the skills folders the plugins ship, or the same
+// directory inside every project the agent has been run in.
+type skillSource struct {
+	segments []string
+	scope    string
+	scan     bool
+	// projects lists the checkouts to look in instead of the home directory.
+	// A project keeps its skills beside its other agent configuration, and the
+	// agent reads them there, so a listing without them is short.
+	projects func(home string) []string
+}
+
+func (s skillSource) dir(home string) string {
+	return filepath.Join(append([]string{home}, s.segments...)...)
+}
+
+// roots is every directory this source contributes: one under the home
+// directory, or one under each project the agent has worked in.
+func (s skillSource) roots(home string) []string {
+	if s.projects == nil {
+		return []string{s.dir(home)}
+	}
+
+	roots := []string{}
+	for _, project := range s.projects(home) {
+		roots = append(roots, filepath.Join(append([]string{project}, s.segments...)...))
+	}
+	return roots
+}
+
+// dir is where Gateway writes a skill it copies into this agent: the agent's
+// own skills directory, never a plugin's.
 func (l *skillLayout) dir(home string) string {
-	return filepath.Join(append([]string{home}, l.segments...)...)
+	for _, source := range l.sources {
+		if source.scope == ScopeUser && !source.scan && source.projects == nil {
+			return source.dir(home)
+		}
+	}
+	return ""
+}
+
+func userSkills(segments ...string) skillSource {
+	return skillSource{segments: segments, scope: ScopeUser}
+}
+
+func pluginSkills(segments ...string) skillSource {
+	return skillSource{segments: segments, scope: ScopePlugin, scan: true}
+}
+
+// projectSkills reads the same folder inside every project the agent lists in
+// its own configuration, which is where a skill checked into a repository sits.
+func projectSkills(projects func(home string) []string, segments ...string) skillSource {
+	return skillSource{segments: segments, scope: ScopeProject, projects: projects}
 }
 
 // mcpLayout is one config file holding named MCP server entries.
@@ -74,8 +135,12 @@ type mcpStore interface {
 // Cursor and its CLI share one ~/.cursor, so those ids share a layout.
 var layouts = map[string]layout{
 	"claude-code": {
-		skills: &skillLayout{segments: []string{".claude", "skills"}},
-		mcp:    &mcpLayout{file: under(".claude.json"), store: &jsonStore{paths: [][]string{{"mcpServers"}}}},
+		skills: &skillLayout{sources: []skillSource{
+			userSkills(".claude", "skills"),
+			pluginSkills(".claude", "plugins"),
+			projectSkills(jsonProjects(".claude.json"), ".claude", "skills"),
+		}},
+		mcp: &mcpLayout{file: under(".claude.json"), store: &jsonStore{paths: [][]string{{"mcpServers"}}}},
 	},
 	"claude-desktop": {
 		mcp: &mcpLayout{file: claudeDesktopConfig, store: &jsonStore{paths: [][]string{{"mcpServers"}}}},
@@ -93,7 +158,11 @@ var layouts = map[string]layout{
 		},
 	},
 	"openclaw": {
-		skills: &skillLayout{segments: []string{".openclaw", "skills"}},
+		skills: &skillLayout{sources: []skillSource{
+			userSkills(".openclaw", "skills"),
+			pluginSkills(".openclaw", "plugins"),
+			projectSkills(jsonProjects(".openclaw", "openclaw.json"), ".openclaw", "skills"),
+		}},
 		mcp: &mcpLayout{
 			file: under(".openclaw", "openclaw.json"),
 			// OpenClaw has spelled this three ways across versions, and reads
@@ -104,13 +173,19 @@ var layouts = map[string]layout{
 }
 
 var codexLayout = layout{
-	skills: &skillLayout{segments: []string{".codex", "skills"}},
-	mcp:    &mcpLayout{file: under(".codex", "config.toml"), store: &tomlStore{table: "mcp_servers"}},
+	skills: &skillLayout{sources: []skillSource{
+		userSkills(".codex", "skills"),
+		pluginSkills(".codex", "plugins"),
+	}},
+	mcp: &mcpLayout{file: under(".codex", "config.toml"), store: &tomlStore{table: "mcp_servers"}},
 }
 
 var cursorLayout = layout{
-	skills: &skillLayout{segments: []string{".cursor", "skills-cursor"}},
-	mcp:    &mcpLayout{file: under(".cursor", "mcp.json"), store: &jsonStore{paths: [][]string{{"mcpServers"}}}},
+	skills: &skillLayout{sources: []skillSource{
+		userSkills(".cursor", "skills-cursor"),
+		pluginSkills(".cursor", "plugins"),
+	}},
+	mcp: &mcpLayout{file: under(".cursor", "mcp.json"), store: &jsonStore{paths: [][]string{{"mcpServers"}}}},
 }
 
 func layoutOf(agentId string) (layout, bool) {
@@ -180,8 +255,14 @@ func Configured(agentId string, owner string) bool {
 		return false
 	}
 
-	if found.skills != nil && exists(found.skills.dir(home)) {
-		return true
+	if found.skills != nil {
+		for _, source := range found.skills.sources {
+			for _, root := range source.roots(home) {
+				if exists(root) {
+					return true
+				}
+			}
+		}
 	}
 	return found.mcp != nil && exists(found.mcp.path(home))
 }

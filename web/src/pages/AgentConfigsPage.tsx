@@ -13,7 +13,18 @@
 // limitations under the License.
 
 import * as React from "react";
-import {Check, Eye, Minus, Package, Plus, RefreshCw, Send, Trash2} from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDownToLine,
+  Check,
+  Eye,
+  Minus,
+  Package,
+  Plus,
+  RefreshCw,
+  Send,
+  Trash2,
+} from "lucide-react";
 import i18next from "i18next";
 
 import * as AgentConfigBackend from "@/backend/AgentConfigBackend";
@@ -22,6 +33,7 @@ import {AgentIcon} from "@/components/AgentIcon";
 import {AddMcpDialog} from "@/components/agent-config/add-mcp-dialog";
 import {CopyDialog} from "@/components/agent-config/copy-dialog";
 import {DetailDialog, type DetailTarget} from "@/components/agent-config/detail-dialog";
+import {TrashDialog} from "@/components/agent-config/trash-dialog";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {DataTable, type Column} from "@/components/shared/data-table";
 import {EmptyState} from "@/components/shared/empty-state";
@@ -35,15 +47,23 @@ import {SimpleTooltip} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import {
   blockedReason,
+  canUpdate,
+  compareVersions,
+  copiesOf,
   counted,
   endpointOf,
   formatBytes,
+  formatModified,
   inventoryKey,
   itemsOf,
   locationOf,
-  presenceOf,
+  newerHolders,
+  originTitle,
+  sharedName,
   supports,
+  updateBadge,
   useAgentConfigs,
+  type VersionState,
 } from "@/lib/agent-configs";
 import type {Account, AgentConfigInventory, AgentConfigItem, AgentConfigKind} from "@/types";
 
@@ -94,6 +114,36 @@ function SourcePicker({
   );
 }
 
+/**
+ * What one other agent holds of the item on this row. A tick means the same
+ * content; a warning means the same name with different content, which is the
+ * version question the page exists to answer.
+ */
+function PeerCell({state}: {state: VersionState | "missing"}) {
+  if (state === "missing") {
+    return <Minus className="text-muted-foreground/40 mx-auto size-4" />;
+  }
+  if (state === "same") {
+    return (
+      <SimpleTooltip title={i18next.t("agentConfig:Same version")}>
+        <Check className="text-success mx-auto size-4" />
+      </SimpleTooltip>
+    );
+  }
+
+  const title =
+    state === "newer"
+      ? i18next.t("agentConfig:Newer version here")
+      : state === "older"
+        ? i18next.t("agentConfig:Older version here")
+        : i18next.t("agentConfig:Different version here");
+  return (
+    <SimpleTooltip title={title}>
+      <AlertTriangle className="text-warning mx-auto size-4" />
+    </SimpleTooltip>
+  );
+}
+
 export default function AgentConfigsPage({account}: {account: Account}) {
   const isAdmin = Setting.isAdminUser(account);
   const {inventories, loading, error, scanned, refresh} = useAgentConfigs();
@@ -104,7 +154,9 @@ export default function AgentConfigsPage({account}: {account: Account}) {
   const [detail, setDetail] = React.useState<DetailTarget | null>(null);
   const [copyOpen, setCopyOpen] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
+  const [trashOpen, setTrashOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState("");
+  const [updating, setUpdating] = React.useState("");
 
   // The scan replaces every inventory, so the chosen source is re-resolved by
   // key rather than held as an object that would go stale on every refresh.
@@ -131,8 +183,9 @@ export default function AgentConfigsPage({account}: {account: Account}) {
 
   const peers = source ? inventories.filter(inventory => inventoryKey(inventory) !== inventoryKey(source)) : [];
   const items = source ? itemsOf(source, kind) : [];
-  const presence = presenceOf(inventories, kind);
+  const copies = copiesOf(inventories, kind);
   const selectable = items.filter(item => !item.managed);
+  const agentNames = new Map(inventories.map(inventory => [inventory.agentId, inventory.name]));
   const allSelected = selectable.length > 0 && selected.length === selectable.length;
 
   const toggleAll = () => {
@@ -150,7 +203,7 @@ export default function AgentConfigsPage({account}: {account: Account}) {
     return AgentConfigBackend.deleteAgentConfigItem(item.agentId, item.owner, item.kind, item.name)
       .then(res => {
         if (res.status === "ok") {
-          Setting.showMessage("success", `${i18next.t("agentConfig:Deleted")}: ${item.name}`);
+          Setting.showMessage("success", `${i18next.t("agentConfig:Moved to the recycle bin")}: ${item.name}`);
           refresh();
         } else {
           Setting.showMessage("error", res.msg || i18next.t("agentConfig:Failed to delete"));
@@ -158,6 +211,21 @@ export default function AgentConfigsPage({account}: {account: Account}) {
       })
       .catch(err => Setting.showMessage("error", err.message || String(err)))
       .then(() => setDeleting(""));
+  };
+
+  const updateItem = (item: AgentConfigItem) => {
+    setUpdating(item.name);
+    return AgentConfigBackend.updateAgentConfigSkill(item.agentId, item.owner, item.name)
+      .then(res => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", `${i18next.t("agentConfig:Updated")}: ${item.name}`);
+          refresh();
+        } else {
+          Setting.showMessage("error", res.msg || i18next.t("agentConfig:Failed to update"));
+        }
+      })
+      .catch(err => Setting.showMessage("error", err.message || String(err)))
+      .then(() => setUpdating(""));
   };
 
   const columns: Column<AgentConfigItem>[] = [
@@ -190,21 +258,44 @@ export default function AgentConfigsPage({account}: {account: Account}) {
       dataIndex: "name",
       title: i18next.t("general:Name"),
       sorter: (a, b) => a.name.localeCompare(b.name),
-      render: (_value, record) => (
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate font-medium">{record.name}</span>
-            {record.managed ? (
-              <SimpleTooltip title={i18next.t("agentConfig:Managed by Gateway detail")}>
-                <Badge variant="info">{i18next.t("agentConfig:Managed by Gateway")}</Badge>
-              </SimpleTooltip>
+      render: (_value, record) => {
+        const outdated = newerHolders(record, copies, peers);
+        const version = updateBadge(record);
+        return (
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="truncate font-medium">{sharedName(record.name)}</span>
+              {record.origin ? (
+                <SimpleTooltip title={originTitle(record)}>
+                  <Badge variant="muted">{record.origin}</Badge>
+                </SimpleTooltip>
+              ) : null}
+              {version ? (
+                <SimpleTooltip title={version.title}>
+                  <Badge variant={version.variant}>{version.label}</Badge>
+                </SimpleTooltip>
+              ) : null}
+              {outdated.length > 0 ? (
+                <SimpleTooltip
+                  title={i18next
+                    .t("agentConfig:Out of date detail")
+                    .replace("{agents}", outdated.join(", "))}
+                >
+                  <Badge variant="warning">{i18next.t("agentConfig:Out of date")}</Badge>
+                </SimpleTooltip>
+              ) : null}
+              {record.managed ? (
+                <SimpleTooltip title={i18next.t("agentConfig:Managed by Gateway detail")}>
+                  <Badge variant="info">{i18next.t("agentConfig:Managed by Gateway")}</Badge>
+                </SimpleTooltip>
+              ) : null}
+            </div>
+            {record.description ? (
+              <p className="text-muted-foreground line-clamp-2 text-xs">{record.description}</p>
             ) : null}
           </div>
-          {record.description ? (
-            <p className="text-muted-foreground line-clamp-2 text-xs">{record.description}</p>
-          ) : null}
-        </div>
-      ),
+        );
+      },
     },
     {
       key: "summary",
@@ -215,6 +306,12 @@ export default function AgentConfigsPage({account}: {account: Account}) {
           <span className="text-muted-foreground text-xs">
             {counted(record.files ?? 0, "agentConfig:1 file", "agentConfig:{files} files", "{files}")}
             {record.bytes ? ` · ${formatBytes(record.bytes)}` : ""}
+            {record.modified ? (
+              <>
+                <br />
+                {`${i18next.t("agentConfig:Changed")} ${formatModified(record.modified)}`}
+              </>
+            ) : null}
           </span>
         ) : (
           <div className="flex min-w-0 items-center gap-1.5">
@@ -237,14 +334,13 @@ export default function AgentConfigsPage({account}: {account: Account}) {
           </span>
         </SimpleTooltip>
       ),
-      render: (_value, record) =>
-        !supports(peer, kind) ? (
-          <span className="text-muted-foreground/50 text-xs">—</span>
-        ) : presence.get(record.name)?.has(inventoryKey(peer)) ? (
-          <Check className="text-success mx-auto size-4" />
-        ) : (
-          <Minus className="text-muted-foreground/40 mx-auto size-4" />
-        ),
+      render: (_value, record) => {
+        if (!supports(peer, kind)) {
+          return <span className="text-muted-foreground/50 text-xs">—</span>;
+        }
+        const other = copies.get(sharedName(record.name))?.get(inventoryKey(peer));
+        return <PeerCell state={other ? compareVersions(record, other) : "missing"} />;
+      },
     })),
     {
       key: "actions",
@@ -253,6 +349,32 @@ export default function AgentConfigsPage({account}: {account: Account}) {
       title: i18next.t("general:Action"),
       render: (_value, record) => (
         <div className="flex justify-end gap-1">
+          {canUpdate(record) ? (
+            <ConfirmDialog
+              title={i18next.t("agentConfig:Update this skill?")}
+              description={
+                <span className="flex flex-col gap-1">
+                  <span>{i18next.t("agentConfig:Update description")}</span>
+                  <code className="text-foreground font-mono text-xs break-all">{record.update?.source}</code>
+                  <span>{i18next.t("agentConfig:Update undo hint")}</span>
+                </span>
+              }
+              onConfirm={() => updateItem(record)}
+              disabled={updating === record.name}
+            >
+              <SimpleTooltip title={i18next.t("agentConfig:Update from source")}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-warning"
+                  aria-label={i18next.t("agentConfig:Update from source")}
+                  disabled={updating === record.name}
+                >
+                  <ArrowDownToLine className="size-4" />
+                </Button>
+              </SimpleTooltip>
+            </ConfirmDialog>
+          ) : null}
           <SimpleTooltip title={i18next.t("agentConfig:View")}>
             <Button
               variant="ghost"
@@ -271,20 +393,23 @@ export default function AgentConfigsPage({account}: {account: Account}) {
               <span className="flex flex-col gap-1">
                 <span>{i18next.t("agentConfig:Delete description")}</span>
                 <code className="text-foreground font-mono text-xs break-all">{record.path}</code>
+                <span>{i18next.t("agentConfig:Delete undo hint")}</span>
               </span>
             }
             onConfirm={() => deleteItem(record)}
-            disabled={record.managed || deleting === record.name}
+            disabled={record.managed || Boolean(record.readOnly) || deleting === record.name}
           >
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="text-destructive"
-              aria-label={i18next.t("general:Delete")}
-              disabled={record.managed || deleting === record.name}
-            >
-              <Trash2 className="size-4" />
-            </Button>
+            <SimpleTooltip title={record.readOnly || i18next.t("general:Delete")}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-destructive"
+                aria-label={i18next.t("general:Delete")}
+                disabled={record.managed || Boolean(record.readOnly) || deleting === record.name}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </SimpleTooltip>
           </ConfirmDialog>
         </div>
       ),
@@ -305,6 +430,12 @@ export default function AgentConfigsPage({account}: {account: Account}) {
               <Button onClick={() => setAddOpen(true)}>
                 <Plus className="size-4" />
                 {i18next.t("agentConfig:Add MCP server")}
+              </Button>
+            ) : null}
+            {inventories.length > 0 ? (
+              <Button variant="outline" onClick={() => setTrashOpen(true)}>
+                <Trash2 className="size-4" />
+                {i18next.t("agentConfig:Recycle bin")}
               </Button>
             ) : null}
             <Button variant="outline" onClick={() => refresh(true)} disabled={loading}>
@@ -353,6 +484,21 @@ export default function AgentConfigsPage({account}: {account: Account}) {
               <span className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground">{i18next.t("agentConfig:Read from")}</span>
                 <CodeText copyable>{location}</CodeText>
+                {kind === "skill" && (source.skillsDirs?.length ?? 0) > 1 ? (
+                  <SimpleTooltip
+                    title={
+                      <span className="flex flex-col gap-0.5">
+                        {source.skillsDirs?.map(dir => <span key={dir}>{dir}</span>)}
+                      </span>
+                    }
+                  >
+                    <Badge variant="muted">
+                      {i18next
+                        .t("agentConfig:and {count} more folders")
+                        .replace("{count}", String((source.skillsDirs?.length ?? 1) - 1))}
+                    </Badge>
+                  </SimpleTooltip>
+                ) : null}
               </span>
             ) : null}
           </div>
@@ -412,6 +558,14 @@ export default function AgentConfigsPage({account}: {account: Account}) {
           onDone={refresh}
         />
       ) : null}
+
+      <TrashDialog
+        open={trashOpen}
+        onOpenChange={setTrashOpen}
+        owner={source?.owner ?? ""}
+        agentNames={agentNames}
+        onRestored={refresh}
+      />
 
       <DetailDialog target={detail} onOpenChange={open => !open && setDetail(null)} />
     </PageContainer>

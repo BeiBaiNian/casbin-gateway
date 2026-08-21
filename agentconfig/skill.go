@@ -15,6 +15,8 @@
 package agentconfig
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -33,17 +35,99 @@ const (
 	maxSkillFileBytes = 256 * 1024
 	// maxSkillFiles bounds the file list shown beside a skill's manifest.
 	maxSkillFiles = 200
+	// maxDigestFileBytes bounds what the digest reads; a larger file is
+	// identified by its size and modification time instead of its content.
+	maxDigestFileBytes = 1 << 20
+	// A plugin tree is somebody else's checkout, so the search for the skills
+	// folders in it is bounded in both depth and result count.
+	maxPluginDepth    = 6
+	maxPluginSkillDir = 200
 )
 
-// readSkills lists the skill folders in dir. A directory that does not exist is
-// an agent with no skills yet, not an error.
-func readSkills(agentId string, owner string, dir string) ([]*Item, error) {
-	entries, err := os.ReadDir(dir)
+// pluginNoise is what a plugin checkout carries besides its own files. The
+// agents' own plugin cache is not on this list: an installed plugin lives under
+// it, and skipping it hid every skill of an agent that caches its plugins that
+// way.
+var pluginNoise = map[string]bool{
+	"node_modules": true, "dist": true, "build": true,
+	"vendor": true, "__pycache__": true, ".venv": true, "venv": true,
+}
+
+// skillDir is one directory of skill folders, and what the skills read from it
+// are called.
+type skillDir struct {
+	path  string
+	scope string
+	// owner is the plugin shipping these skills, empty for the agent's own
+	// skills directory. It qualifies their names the way the agents do.
+	owner string
+}
+
+// skillScan is one agent's skills and the directories they were read from.
+type skillScan struct {
+	items    []*Item
+	dirs     []string
+	problems []string
+}
+
+// readSkills lists the skills of one agent, across every place it keeps them. A
+// directory that does not exist is an agent with no skills there, not an error.
+func readSkills(agentId string, owner string, found *skillLayout, home string) skillScan {
+	scan := skillScan{items: []*Item{}, dirs: []string{}, problems: []string{}}
+	seen := map[string]bool{}
+
+	for _, source := range found.sources {
+		for _, root := range source.roots(home) {
+			dirs := []skillDir{{path: root, scope: source.scope}}
+			switch {
+			case source.scan:
+				dirs = pluginSkillDirs(root, source.scope)
+			case source.scope == ScopeProject:
+				// A project's skills are named after the checkout they are in,
+				// so two projects can hold a skill of the same name and the
+				// listing still says which is which.
+				if !exists(root) {
+					continue
+				}
+				dirs[0].owner = filepath.Base(filepath.Dir(filepath.Dir(root)))
+				scan.dirs = append(scan.dirs, root)
+			default:
+				scan.dirs = append(scan.dirs, root)
+			}
+
+			for _, dir := range dirs {
+				items, err := readSkillDir(agentId, owner, dir)
+				if err != nil {
+					scan.problems = append(scan.problems, err.Error())
+					continue
+				}
+				if source.scan && len(items) > 0 {
+					scan.dirs = append(scan.dirs, dir.path)
+				}
+				for _, item := range items {
+					if seen[item.Name] {
+						continue
+					}
+					seen[item.Name] = true
+					scan.items = append(scan.items, item)
+				}
+			}
+		}
+	}
+	sortItems(scan.items)
+	return scan
+}
+
+// readSkillDir reads one directory of skill folders. A folder without a
+// manifest is looked into one level further: a skills directory may group its
+// skills, and a grouped skill is a skill like any other.
+func readSkillDir(agentId string, owner string, dir skillDir) ([]*Item, error) {
+	entries, err := os.ReadDir(dir.path)
 	if os.IsNotExist(err) {
-		return []*Item{}, nil
+		return nil, nil
 	}
 	if err != nil {
-		return []*Item{}, err
+		return nil, err
 	}
 
 	items := []*Item{}
@@ -53,40 +137,101 @@ func readSkills(agentId string, owner string, dir string) ([]*Item, error) {
 		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
-		path := filepath.Join(dir, entry.Name())
-		manifest, ok := manifestPath(path)
-		if !ok {
+
+		path := filepath.Join(dir.path, entry.Name())
+		if _, ok := manifestPath(path); ok {
+			items = append(items, newSkillItem(agentId, owner, dir, entry.Name(), path))
 			continue
 		}
 
-		item := &Item{
-			AgentId: agentId,
-			Owner:   owner,
-			Kind:    KindSkill,
-			Name:    entry.Name(),
-			Path:    path,
+		nested, err := os.ReadDir(path)
+		if err != nil {
+			continue
 		}
+		for _, child := range nested {
+			if !child.IsDir() || strings.HasPrefix(child.Name(), ".") {
+				continue
+			}
+			childPath := filepath.Join(path, child.Name())
+			if _, ok := manifestPath(childPath); ok {
+				items = append(items, newSkillItem(agentId, owner, dir, entry.Name()+"/"+child.Name(), childPath))
+			}
+		}
+	}
+	return items, nil
+}
+
+func newSkillItem(agentId string, owner string, dir skillDir, name string, path string) *Item {
+	item := &Item{
+		AgentId: agentId,
+		Owner:   owner,
+		Kind:    KindSkill,
+		Name:    name,
+		Path:    path,
+		Scope:   dir.scope,
+		Origin:  dir.owner,
+	}
+	if dir.owner != "" {
+		item.Name = dir.owner + ":" + name
+	}
+	if dir.scope == ScopePlugin {
+		item.ReadOnly = "this skill belongs to a plugin; uninstall the plugin to remove it"
+	}
+	if dir.scope == ScopeProject {
+		item.Project = filepath.Dir(filepath.Dir(dir.path))
+	}
+
+	if manifest, ok := manifestPath(path); ok {
 		if raw, err := os.ReadFile(manifest); err == nil {
 			_, item.Description = parseFrontMatter(string(raw))
 		}
-		item.Files, item.Bytes = measure(path)
-		items = append(items, item)
 	}
-	sortItems(items)
-	return items, nil
+	stat := measure(path)
+	item.Files, item.Bytes, item.Digest, item.Modified = stat.files, stat.bytes, stat.digest, stat.modified
+	return item
+}
+
+// pluginSkillDirs finds the skills folders inside a plugin tree. Agents read
+// the skills their plugins ship, so those are on the machine exactly like the
+// hand-written ones and a listing that leaves them out is wrong.
+func pluginSkillDirs(root string, scope string) []skillDir {
+	dirs := []skillDir{}
+	filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || !entry.IsDir() || path == root {
+			return nil
+		}
+		if strings.HasPrefix(entry.Name(), ".") || pluginNoise[strings.ToLower(entry.Name())] {
+			return fs.SkipDir
+		}
+		if len(dirs) >= maxPluginSkillDir {
+			return filepath.SkipAll
+		}
+		if strings.EqualFold(entry.Name(), "skills") {
+			dirs = append(dirs, skillDir{path: path, scope: scope, owner: filepath.Base(filepath.Dir(path))})
+			return fs.SkipDir
+		}
+		if depthUnder(root, path) >= maxPluginDepth {
+			return fs.SkipDir
+		}
+		return nil
+	})
+	return dirs
+}
+
+func depthUnder(root string, path string) int {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return maxPluginDepth
+	}
+	return len(strings.Split(filepath.ToSlash(relative), "/"))
 }
 
 // skillDetail loads one skill's manifest and the names of the files shipped
 // with it.
-func skillDetail(agentId string, owner string, dir string, name string) (*Detail, error) {
-	if err := checkName(name); err != nil {
-		return nil, err
-	}
-
-	path := filepath.Join(dir, name)
-	manifest, ok := manifestPath(path)
+func skillDetail(item *Item) (*Detail, error) {
+	manifest, ok := manifestPath(item.Path)
 	if !ok {
-		return nil, fmt.Errorf("no %s in %s", skillFile, path)
+		return nil, fmt.Errorf("no %s in %s", skillFile, item.Path)
 	}
 
 	raw, err := os.ReadFile(manifest)
@@ -97,34 +242,7 @@ func skillDetail(agentId string, owner string, dir string, name string) (*Detail
 	if len(raw) > maxSkillFileBytes {
 		content = string(raw[:maxSkillFileBytes]) + "\n\n... truncated by Gateway ..."
 	}
-
-	_, description := parseFrontMatter(content)
-	files, bytes := measure(path)
-	item := &Item{
-		AgentId:     agentId,
-		Owner:       owner,
-		Kind:        KindSkill,
-		Name:        name,
-		Description: description,
-		Path:        path,
-		Files:       files,
-		Bytes:       bytes,
-	}
-	return &Detail{Item: item, Content: content, Files: listFiles(path)}, nil
-}
-
-// deleteSkill removes one skill folder. It refuses a directory without a
-// manifest, so a mistyped name cannot delete something that is not a skill.
-func deleteSkill(dir string, name string) error {
-	if err := checkName(name); err != nil {
-		return err
-	}
-
-	path := filepath.Join(dir, name)
-	if _, ok := manifestPath(path); !ok {
-		return fmt.Errorf("%s is not a skill folder", path)
-	}
-	return os.RemoveAll(path)
+	return &Detail{Item: item, Content: content, Files: listFiles(item.Path)}, nil
 }
 
 // copySkill copies one skill folder into another agent's skills directory,
@@ -187,20 +305,59 @@ func manifestPath(dir string) (string, bool) {
 	return "", false
 }
 
-func measure(dir string) (int, int64) {
-	files := 0
-	var bytes int64
-	filepath.WalkDir(dir, func(_ string, entry fs.DirEntry, err error) error {
+// treeStat summarizes a skill folder. digest identifies its content and
+// modified is its newest file, which is what lets two agents' copies of one
+// skill be told apart and put in order.
+type treeStat struct {
+	files    int
+	bytes    int64
+	digest   string
+	modified int64
+}
+
+func measure(dir string) treeStat {
+	stat := treeStat{}
+	hash := sha256.New()
+	// WalkDir visits in lexical order, so one folder digests the same wherever
+	// it is read from.
+	filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return nil
 		}
-		files++
-		if info, err := entry.Info(); err == nil {
-			bytes += info.Size()
+		info, err := entry.Info()
+		if err != nil {
+			return nil
 		}
+		stat.files++
+		stat.bytes += info.Size()
+		if modified := info.ModTime().Unix(); modified > stat.modified {
+			stat.modified = modified
+		}
+
+		relative, err := filepath.Rel(dir, path)
+		if err != nil {
+			return nil
+		}
+		fmt.Fprintf(hash, "%s\x00%d\x00", filepath.ToSlash(relative), info.Size())
+		if !entry.Type().IsRegular() || info.Size() > maxDigestFileBytes {
+			fmt.Fprintf(hash, "%d\x00", info.ModTime().UnixNano())
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		io.Copy(hash, file)
+		file.Close()
 		return nil
 	})
-	return files, bytes
+	stat.digest = shortDigest(hash.Sum(nil))
+	return stat
+}
+
+func shortDigest(sum []byte) string {
+	return hex.EncodeToString(sum)[:16]
 }
 
 // listFiles names what a skill ships besides its manifest, in slash form so the

@@ -16,8 +16,10 @@ import {query, request} from "@/backend/request";
 import type {
   AgentConfigDetail,
   AgentConfigInventory,
+  AgentConfigItem,
   AgentConfigKind,
   AgentConfigPlanItem,
+  AgentConfigTrashEntry,
   McpTransport,
 } from "@/types";
 
@@ -65,6 +67,34 @@ export function deleteAgentConfigItem(agentId: string, owner: string, kind: Agen
     kind: kind,
     name: name,
   });
+}
+
+/** What deleting removed and can still be put back. */
+export function getAgentConfigTrash(owner: string) {
+  return request<AgentConfigTrashEntry[]>(`/api/get-agent-config-trash${query({owner: owner})}`);
+}
+
+/** Puts one deleted item back. `replace` recycles whatever took its place first. */
+export function restoreAgentConfigItem(owner: string, id: string, replace = false) {
+  return request<AgentConfigTrashEntry>("/api/restore-agent-config-item", "POST", {
+    owner: owner,
+    id: id,
+    replace: replace,
+  });
+}
+
+/** Replaces one skill with the current content of the source it was copied from. */
+export function updateAgentConfigSkill(agentId: string, owner: string, name: string) {
+  return request<AgentConfigItem>("/api/update-agent-config-skill", "POST", {
+    agentId: agentId,
+    owner: owner,
+    name: name,
+  });
+}
+
+/** Deletes one trashed item for good, or all of them when no id is given. */
+export function purgeAgentConfigTrash(owner: string, id = "") {
+  return request("/api/purge-agent-config-trash", "POST", {owner: owner, id: id});
 }
 
 /** What a copy would do, asked for before anything is written. */

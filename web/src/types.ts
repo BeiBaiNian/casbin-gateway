@@ -344,8 +344,13 @@ export interface Application {
   name: string;
 }
 
+/** The settings the web UI can change, so nobody has to edit conf/app.conf. */
 export interface GatewayStatus {
   gatewayEnabled: boolean;
+  /** False while enabled means the ports refused to bind; "gatewayError" says why. */
+  gatewayRunning: boolean;
+  gatewayError: string;
+  llmRecordMode: "off" | "metadata" | "full";
 }
 
 /** The two kinds of configuration the Skills & MCP page manages. */
@@ -364,8 +369,44 @@ export interface AgentConfigItem {
   url?: string;
   files?: number;
   bytes?: number;
+  /**
+   * "user" for a skill the operator wrote, "plugin" for one a plugin ships,
+   * "project" for one that belongs to a checkout the agent works in.
+   */
+  scope?: string;
+  /** The plugin or project folder a skill came from. */
+  origin?: string;
+  /** The checkout a project skill belongs to. */
+  project?: string;
+  /** Identifies the content: two agents with different digests hold different versions. */
+  digest?: string;
+  /** The newest file behind the item, in seconds. */
+  modified?: number;
+  /** Where a skill came from, and whether that source still holds the same content. */
+  update?: AgentConfigSkillUpdate;
   /** Written by Gateway's own agent monitoring, and not the operator's to move. */
   managed?: boolean;
+  /** Why Gateway will not delete this item. Empty when it may. */
+  readOnly?: string;
+}
+
+/**
+ * How one skill stands against the copy it came from: the same content, an
+ * update waiting in the source, edits made here, or both at once.
+ */
+export type AgentConfigUpdateState = "current" | "available" | "modified" | "diverged" | "unknown";
+
+export interface AgentConfigSkillUpdate {
+  state: AgentConfigUpdateState;
+  /** The folder this skill was copied from, and the agent that folder belongs to. */
+  source?: string;
+  sourceAgentId?: string;
+  sourceName?: string;
+  /** True when Gateway matched the source by name instead of recording the copy. */
+  inferred?: boolean;
+  sourceDigest?: string;
+  sourceModified?: number;
+  copiedAt?: number;
 }
 
 /** One installation's skills and MCP servers, as they exist in its own files. */
@@ -380,7 +421,9 @@ export interface AgentConfigInventory {
   installed: boolean;
   /** Other agents reading the same files, e.g. Cursor and its CLI. */
   sharedWith?: string[];
+  /** Where a copied skill is written; skillsDirs is everything the listing was read from. */
   skillsDir?: string;
+  skillsDirs?: string[];
   mcpFile?: string;
   skillsSupported: boolean;
   mcpSupported: boolean;
@@ -395,6 +438,21 @@ export interface AgentConfigDetail {
   item: AgentConfigItem;
   content: string;
   files?: string[];
+}
+
+/** One deleted item, waiting in Gateway's trash until it is restored or expires. */
+export interface AgentConfigTrashEntry {
+  id: string;
+  agentId: string;
+  owner: string;
+  kind: AgentConfigKind;
+  name: string;
+  description?: string;
+  /** Where it was, and where restoring puts it back. */
+  path: string;
+  files?: number;
+  bytes?: number;
+  deletedAt: number;
 }
 
 /** How an MCP server is reached: a spawned command, or an HTTP endpoint. */

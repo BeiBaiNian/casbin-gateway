@@ -157,6 +157,96 @@ func (c *ApiController) DeleteAgentConfigItem() {
 	c.ResponseOk(form.Name)
 }
 
+// GetAgentConfigTrash lists the skills and MCP servers deleting has removed and
+// that can still be put back.
+func (c *ApiController) GetAgentConfigTrash() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	entries, err := agentconfig.ListTrash(c.GetString("owner"))
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(entries)
+}
+
+// RestoreAgentConfigItem puts one deleted item back where it came from. It
+// refuses when something is there again unless replace says otherwise, and that
+// replaced item goes to the recycle bin in its turn.
+func (c *ApiController) RestoreAgentConfigItem() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	var form struct {
+		Owner   string `json:"owner"`
+		Id      string `json:"id"`
+		Replace bool   `json:"replace"`
+	}
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &form); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	entry, err := agentconfig.RestoreTrash(form.Owner, form.Id, form.Replace)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(entry)
+}
+
+// PurgeAgentConfigTrash deletes one trashed item for good, or all of them when
+// no id is given.
+func (c *ApiController) PurgeAgentConfigTrash() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	var form struct {
+		Owner string `json:"owner"`
+		Id    string `json:"id"`
+	}
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &form); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if err := agentconfig.PurgeTrash(form.Owner, form.Id); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(form.Id)
+}
+
+// UpdateAgentConfigSkill replaces one skill with the current content of the
+// source it was copied from, after putting the version it replaces in the
+// recycle bin.
+func (c *ApiController) UpdateAgentConfigSkill() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	var form struct {
+		AgentId string `json:"agentId"`
+		Owner   string `json:"owner"`
+		Name    string `json:"name"`
+	}
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &form); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	item, err := agentconfig.UpdateSkill(form.AgentId, form.Owner, form.Name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(item)
+}
+
 // AddAgentConfigMcp writes one new MCP server into the agents it names, so a
 // server can be set up from Gateway instead of by hand in each agent's file.
 func (c *ApiController) AddAgentConfigMcp() {

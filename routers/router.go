@@ -39,6 +39,7 @@ func initAPI() {
 	beego.Router("/api/update-account", &controllers.ApiController{}, "POST:UpdateAccount")
 	beego.Router("/api/get-providers", &controllers.ApiController{}, "GET:GetProviders")
 	beego.Router("/api/get-gateway-status", &controllers.ApiController{}, "GET:GetGatewayStatus")
+	beego.Router("/api/update-system-settings", &controllers.ApiController{}, "POST:UpdateSystemSettings")
 
 	beego.Router("/api/get-global-nodes", &controllers.ApiController{}, "GET:GetGlobalNodes")
 	beego.Router("/api/get-nodes", &controllers.ApiController{}, "GET:GetNodes")
@@ -73,6 +74,10 @@ func initAPI() {
 	beego.Router("/api/get-agent-configs", &controllers.ApiController{}, "GET:GetAgentConfigs")
 	beego.Router("/api/get-agent-config-item", &controllers.ApiController{}, "GET:GetAgentConfigItem")
 	beego.Router("/api/delete-agent-config-item", &controllers.ApiController{}, "POST:DeleteAgentConfigItem")
+	beego.Router("/api/get-agent-config-trash", &controllers.ApiController{}, "GET:GetAgentConfigTrash")
+	beego.Router("/api/restore-agent-config-item", &controllers.ApiController{}, "POST:RestoreAgentConfigItem")
+	beego.Router("/api/purge-agent-config-trash", &controllers.ApiController{}, "POST:PurgeAgentConfigTrash")
+	beego.Router("/api/update-agent-config-skill", &controllers.ApiController{}, "POST:UpdateAgentConfigSkill")
 	beego.Router("/api/add-agent-config-mcp", &controllers.ApiController{}, "POST:AddAgentConfigMcp")
 	beego.Router("/api/plan-agent-config-copy", &controllers.ApiController{}, "POST:PlanAgentConfigCopy")
 	beego.Router("/api/plan-agent-provider", &controllers.ApiController{}, "POST:PlanAgentProvider")

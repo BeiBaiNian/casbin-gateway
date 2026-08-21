@@ -59,9 +59,29 @@ type Item struct {
 	Files int   `json:"files,omitempty"`
 	Bytes int64 `json:"bytes,omitempty"`
 
+	// Scope tells a skill the operator wrote from one a plugin ships or one a
+	// project checkout carries, and Origin names that plugin or project.
+	Scope  string `json:"scope,omitempty"`
+	Origin string `json:"origin,omitempty"`
+	// Project is the checkout a project-scope skill belongs to.
+	Project string `json:"project,omitempty"`
+
+	// Digest identifies the content, and Modified is the newest file behind it.
+	// Two agents holding the same name with different digests hold different
+	// versions of it, and the newer Modified is the newer one.
+	Digest   string `json:"digest,omitempty"`
+	Modified int64  `json:"modified,omitempty"`
+
+	// Update is where a skill came from and whether that source still holds the
+	// same content, which is what tells an out-of-date copy from a current one.
+	Update *SkillUpdate `json:"update,omitempty"`
+
 	// Managed marks an entry Gateway wrote itself, which is not the operator's
 	// to migrate and is removed by turning monitoring off instead.
 	Managed bool `json:"managed,omitempty"`
+	// ReadOnly explains why Gateway will not delete this item. Empty for the
+	// items it may.
+	ReadOnly string `json:"readOnly,omitempty"`
 }
 
 // Inventory is everything Gateway can read for one installation. A location it
@@ -74,8 +94,11 @@ type Inventory struct {
 	// Two agents can be compared and copied between exactly when they share it.
 	Home string `json:"home,omitempty"`
 
-	SkillsDir string `json:"skillsDir,omitempty"`
-	McpFile   string `json:"mcpFile,omitempty"`
+	// SkillsDir is where Gateway writes a skill copied into this agent, and
+	// SkillsDirs every directory the listing was read from, plugins included.
+	SkillsDir  string   `json:"skillsDir,omitempty"`
+	SkillsDirs []string `json:"skillsDirs,omitempty"`
+	McpFile    string   `json:"mcpFile,omitempty"`
 
 	SkillsSupported bool `json:"skillsSupported"`
 	McpSupported    bool `json:"mcpSupported"`
@@ -136,11 +159,11 @@ func Read(agentId string, owner string) *Inventory {
 
 	if found.skills != nil {
 		inventory.SkillsDir = found.skills.dir(home)
-		skills, err := readSkills(agentId, owner, inventory.SkillsDir)
-		if err != nil {
-			inventory.Errors = append(inventory.Errors, err.Error())
-		}
-		inventory.Skills = skills
+		scan := readSkills(agentId, owner, found.skills, home)
+		attachSkillUpdates(scan.items, home)
+		inventory.Skills = scan.items
+		inventory.SkillsDirs = scan.dirs
+		inventory.Errors = append(inventory.Errors, scan.problems...)
 	}
 
 	if found.mcp != nil {
@@ -161,7 +184,11 @@ func ReadDetail(agentId string, owner string, kind string, name string) (*Detail
 		return nil, err
 	}
 	if kind == KindSkill {
-		return skillDetail(agentId, owner, found.skills.dir(home), name)
+		item, err := findItem(agentId, owner, kind, name)
+		if err != nil {
+			return nil, err
+		}
+		return skillDetail(item)
 	}
 
 	file := found.mcp.path(home)
@@ -176,19 +203,54 @@ func ReadDetail(agentId string, owner string, kind string, name string) (*Detail
 	return mcpDetail(agentId, owner, file, name, entry)
 }
 
-// Delete removes one item from the agent's own configuration.
+// Delete takes one item out of the agent's own configuration. Nothing is erased
+// here: the item is moved into Gateway's trash first, so a delete made by
+// mistake can be restored.
 func Delete(agentId string, owner string, kind string, name string) error {
 	found, home, err := resolve(agentId, owner, kind)
 	if err != nil {
 		return err
 	}
+	item, err := findItem(agentId, owner, kind, name)
+	if err != nil {
+		return err
+	}
+	if item.ReadOnly != "" {
+		return fmt.Errorf("%s: %s", name, item.ReadOnly)
+	}
+
 	if kind == KindSkill {
-		return deleteSkill(found.skills.dir(home), name)
+		return trashSkill(home, item)
 	}
 	if found.mcp.readOnly != "" {
 		return fmt.Errorf("%s: %s", agentId, found.mcp.readOnly)
 	}
-	return found.mcp.store.remove(found.mcp.path(home), name)
+
+	file := found.mcp.path(home)
+	entries, err := found.mcp.store.read(file)
+	if err != nil {
+		return err
+	}
+	if err := trashMcp(home, item, entries[name]); err != nil {
+		return err
+	}
+	return found.mcp.store.remove(file, name)
+}
+
+// findItem locates one item in what the agent actually has. Skills are found by
+// scanning rather than by joining the name onto a directory: a skill can come
+// from a plugin or from a group inside the skills directory, and the path it
+// was found at is the only one an edit may touch.
+func findItem(agentId string, owner string, kind string, name string) (*Item, error) {
+	if name == "" {
+		return nil, errors.New("the name is empty")
+	}
+	for _, item := range itemsOf(Read(agentId, owner), kind) {
+		if item.Name == name {
+			return item, nil
+		}
+	}
+	return nil, fmt.Errorf("%s: no %s named %q", agentId, kind, name)
 }
 
 // CopyRequest is one migration: some of a source agent's items, into one or
@@ -232,27 +294,63 @@ func Plan(request CopyRequest) ([]*PlanItem, error) {
 func plan(request CopyRequest, sources map[string]*source) []*PlanItem {
 	planned := []*PlanItem{}
 	for _, agentId := range request.To {
-		existing, err := targetNames(agentId, request.Owner, request.Kind)
+		existing, err := targetItems(agentId, request.Owner, request.Kind)
 		for _, name := range request.Names {
 			item := &PlanItem{AgentId: agentId, Name: name}
+			from := sources[name]
+			target := existing[targetName(request.Kind, name)]
 			switch {
 			case err != nil:
 				item.Action, item.Reason = ActionSkip, err.Error()
-			case sources[name] == nil:
+			case from == nil:
 				item.Action, item.Reason = ActionSkip, "not found in the source agent"
-			case sources[name].item.Managed:
+			case from.item.Managed:
 				item.Action, item.Reason = ActionSkip, "written by Gateway, not migrated"
-			case !existing[name]:
+			case target == nil:
 				item.Action = ActionCreate
+			case sameContent(from.item, target):
+				item.Action, item.Reason = ActionSkip, "already up to date"
 			case request.Overwrite:
-				item.Action = ActionOverwrite
+				item.Action, item.Reason = ActionOverwrite, replaces(from.item, target)
 			default:
-				item.Action, item.Reason = ActionSkip, "already exists"
+				item.Action, item.Reason = ActionSkip, "a different version is already there"
 			}
 			planned = append(planned, item)
 		}
 	}
 	return planned
+}
+
+// sameContent reports two copies of one item as the same version. A digest is
+// computed from the content, so equal digests mean the target already has what
+// the copy would write.
+func sameContent(from *Item, target *Item) bool {
+	return from.Digest != "" && from.Digest == target.Digest
+}
+
+// replaces says which way round the two versions are, so an overwrite that
+// would move an agent backwards is visible before it is applied.
+func replaces(from *Item, target *Item) string {
+	if from.Modified == 0 || target.Modified == 0 {
+		return "replaces a different version"
+	}
+	if target.Modified > from.Modified {
+		return "replaces a newer version"
+	}
+	return "replaces an older version"
+}
+
+// targetName is the name an item takes at the target. A skill from a plugin or
+// from a group inside the skills directory is qualified, and it lands in the
+// target's skills directory under the last part of that name.
+func targetName(kind string, name string) string {
+	if kind != KindSkill {
+		return name
+	}
+	if index := strings.LastIndexAny(name, ":/"); index >= 0 {
+		return name[index+1:]
+	}
+	return name
 }
 
 // Copy writes the selected items into every target agent. One item's failure is
@@ -287,7 +385,12 @@ func writeItem(request CopyRequest, from *source, agentId string) (string, error
 	}
 
 	if request.Kind == KindSkill {
-		return copySkill(from.item.Path, found.skills.dir(home), from.item.Name)
+		path, err := copySkill(from.item.Path, found.skills.dir(home), targetName(request.Kind, from.item.Name))
+		if err != nil {
+			return "", err
+		}
+		recordSkillOrigin(home, path, request.From, from.item.Name, from.item.Path)
+		return path, nil
 	}
 	if found.mcp.readOnly != "" {
 		return "", errors.New(found.mcp.readOnly)
@@ -339,9 +442,9 @@ func readSources(request CopyRequest) (map[string]*source, error) {
 	return sources, nil
 }
 
-// targetNames is what the target already has, so planning can tell a new name
-// from one that would be replaced.
-func targetNames(agentId string, owner string, kind string) (map[string]bool, error) {
+// targetItems is what the target already has, so planning can tell a new item
+// from one that would be replaced, and an identical copy from an older one.
+func targetItems(agentId string, owner string, kind string) (map[string]*Item, error) {
 	if _, _, err := resolve(agentId, owner, kind); err != nil {
 		return nil, err
 	}
@@ -351,11 +454,11 @@ func targetNames(agentId string, owner string, kind string) (map[string]bool, er
 		return nil, errors.New(strings.Join(inventory.Errors, "; "))
 	}
 
-	names := map[string]bool{}
+	items := map[string]*Item{}
 	for _, item := range itemsOf(inventory, kind) {
-		names[item.Name] = true
+		items[targetName(kind, item.Name)] = item
 	}
-	return names, nil
+	return items, nil
 }
 
 func itemsOf(inventory *Inventory, kind string) []*Item {

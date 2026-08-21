@@ -27,7 +27,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {endpointOf} from "@/lib/agent-configs";
+import {SimpleTooltip} from "@/components/ui/tooltip";
+import {endpointOf, formatModified, updateBadge} from "@/lib/agent-configs";
 import type {AgentConfigDetail, AgentConfigItem} from "@/types";
 
 /** The item whose definition is on screen, and the agent it was read from. */
@@ -52,6 +53,7 @@ export function DetailDialog({
   const [loading, setLoading] = React.useState(false);
 
   const item = target?.item;
+  const version = item ? updateBadge(item) : null;
 
   React.useEffect(() => {
     if (!item) {
@@ -99,6 +101,35 @@ export function DetailDialog({
             <span className="text-muted-foreground">{i18next.t("general:Path")}</span>
             <CodeText copyable>{item?.path}</CodeText>
           </div>
+
+          {item?.digest ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted-foreground">{i18next.t("agentConfig:Version")}</span>
+              <SimpleTooltip title={i18next.t("agentConfig:Version detail")}>
+                <Badge variant="outline" className="font-mono font-normal">
+                  {item.digest}
+                </Badge>
+              </SimpleTooltip>
+              {item.modified ? (
+                <span className="text-muted-foreground">
+                  {`${i18next.t("agentConfig:Changed")} ${formatModified(item.modified)}`}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {version ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted-foreground">{i18next.t("agentConfig:Source")}</span>
+              <Badge variant={version.variant}>{version.label}</Badge>
+              <CodeText copyable>{item?.update?.source}</CodeText>
+              {item?.update?.copiedAt ? (
+                <span className="text-muted-foreground">
+                  {`${i18next.t("agentConfig:Copied")} ${formatModified(item.update.copiedAt)}`}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
 
           {detail?.files?.length ? (
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
