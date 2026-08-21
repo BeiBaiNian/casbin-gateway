@@ -18,6 +18,7 @@ import type {
   AgentConfigInventory,
   AgentConfigKind,
   AgentConfigPlanItem,
+  McpTransport,
 } from "@/types";
 
 export interface CopyRequest {
@@ -27,6 +28,24 @@ export interface CopyRequest {
   kind: AgentConfigKind;
   names: string[];
   overwrite: boolean;
+}
+
+/** One new MCP server, for every agent in `to`. */
+export interface McpRequest {
+  owner: string;
+  to: string[];
+  name: string;
+  transport: McpTransport;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  overwrite: boolean;
+}
+
+export function addAgentConfigMcp(body: McpRequest) {
+  return request<AgentConfigPlanItem[]>("/api/add-agent-config-mcp", "POST", body);
 }
 
 export function getAgentConfigs(forceRefresh = false) {

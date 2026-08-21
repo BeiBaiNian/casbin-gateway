@@ -64,7 +64,7 @@ That is the whole installation. Gateway keeps its data in a SQLite file inside i
 | Page | What you get | What it needs |
 | --- | --- | --- |
 | **Agents** | Every AI coding agent installed on this machine — Claude Code, Codex CLI, Cursor and more. Click **Patch** on one and its activity streams into the page live. | Nothing |
-| **Skills & MCP** | Every skill and MCP server of every agent in one table. Open one, delete it, or copy it into another agent. | Nothing |
+| **Skills & MCP** | Every skill and MCP server of every agent in one table. Add an MCP server to one agent or to several at once, open one, delete it, or copy it into another agent. | Nothing |
 | **Channels** | One endpoint in front of your model vendors. Gateway holds the API key, so the agents never have it. | A vendor API key |
 | **LLM Records** | Every request an agent relayed: the full system prompt, every message and tool call, the schema of every tool the model was offered, plus tokens and cost. | A channel, and `llmRecordMode` — see [Recording prompts](#recording-prompts) |
 | **Advanced → Sites** | The reverse-proxy WAF: per-site routing, rules, certificates and analytics. | Turning the proxy on — see [Turning the WAF proxy on](#turning-the-waf-proxy-on) |

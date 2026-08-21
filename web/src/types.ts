@@ -397,6 +397,9 @@ export interface AgentConfigDetail {
   files?: string[];
 }
 
+/** How an MCP server is reached: a spawned command, or an HTTP endpoint. */
+export type McpTransport = "stdio" | "http";
+
 export type AgentConfigAction = "create" | "overwrite" | "skip" | "failed";
 
 /** What a copy would do, or did, to one item at one target agent. */

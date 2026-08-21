@@ -64,7 +64,7 @@ irm https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/insta
 | 页面 | 你能得到什么 | 需要什么 |
 | --- | --- | --- |
 | **Agents** | 本机安装的每一个 AI 编程 Agent —— Claude Code、Codex CLI、Cursor 等等。点其中一个的 **Patch**，它的活动就会实时流进页面。 | 无 |
-| **Skills & MCP** | 所有 Agent 的所有技能和 MCP 服务器汇总在一张表里。可以打开、删除，或复制到另一个 Agent。 | 无 |
+| **Skills & MCP** | 所有 Agent 的所有技能和 MCP 服务器汇总在一张表里。可以给一个或多个 Agent 添加 MCP 服务器，也可以打开、删除，或复制到另一个 Agent。 | 无 |
 | **Channels** | 挡在模型厂商前面的统一入口。API Key 由 Gateway 持有，Agent 拿不到。 | 一个厂商的 API Key |
 | **LLM Records** | Agent 转发的每一次请求：完整的 system prompt、每一条消息和工具调用、模型可用的每个工具的 schema，以及 token 数和费用。 | 一个 Channel，以及 `llmRecordMode` —— 见[记录提示词](#记录提示词) |
 | **Advanced → Sites** | 反向代理 WAF：按站点的路由、规则、证书和统计。 | 打开代理 —— 见[开启 WAF 反向代理](#开启-waf-反向代理) |

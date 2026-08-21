@@ -13,12 +13,13 @@
 // limitations under the License.
 
 import * as React from "react";
-import {Check, Eye, Minus, Package, RefreshCw, Send, Trash2} from "lucide-react";
+import {Check, Eye, Minus, Package, Plus, RefreshCw, Send, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import * as AgentConfigBackend from "@/backend/AgentConfigBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
+import {AddMcpDialog} from "@/components/agent-config/add-mcp-dialog";
 import {CopyDialog} from "@/components/agent-config/copy-dialog";
 import {DetailDialog, type DetailTarget} from "@/components/agent-config/detail-dialog";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
@@ -102,6 +103,7 @@ export default function AgentConfigsPage({account}: {account: Account}) {
   const [selected, setSelected] = React.useState<string[]>([]);
   const [detail, setDetail] = React.useState<DetailTarget | null>(null);
   const [copyOpen, setCopyOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState("");
 
   // The scan replaces every inventory, so the chosen source is re-resolved by
@@ -298,10 +300,18 @@ export default function AgentConfigsPage({account}: {account: Account}) {
         title={i18next.t("agentConfig:Skills & MCP")}
         description={i18next.t("agentConfig:Page description")}
         actions={
-          <Button variant="outline" onClick={() => refresh(true)} disabled={loading}>
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-            {i18next.t("general:Refresh")}
-          </Button>
+          <>
+            {kind === "mcp" && inventories.length > 0 ? (
+              <Button onClick={() => setAddOpen(true)}>
+                <Plus className="size-4" />
+                {i18next.t("agentConfig:Add MCP server")}
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => refresh(true)} disabled={loading}>
+              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+              {i18next.t("general:Refresh")}
+            </Button>
+          </>
         }
       />
 
@@ -391,6 +401,16 @@ export default function AgentConfigsPage({account}: {account: Account}) {
             onDone={refresh}
           />
         </>
+      ) : null}
+
+      {source ? (
+        <AddMcpDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          inventories={inventories}
+          source={source}
+          onDone={refresh}
+        />
       ) : null}
 
       <DetailDialog target={detail} onOpenChange={open => !open && setDetail(null)} />

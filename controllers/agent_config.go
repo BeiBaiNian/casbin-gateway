@@ -157,6 +157,27 @@ func (c *ApiController) DeleteAgentConfigItem() {
 	c.ResponseOk(form.Name)
 }
 
+// AddAgentConfigMcp writes one new MCP server into the agents it names, so a
+// server can be set up from Gateway instead of by hand in each agent's file.
+func (c *ApiController) AddAgentConfigMcp() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	var request agentconfig.McpRequest
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &request); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	result, err := agentconfig.AddMcp(request)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(result)
+}
+
 // PlanAgentConfigCopy reports what CopyAgentConfig would do, so the operator
 // sees which targets already have an item before anything is written.
 func (c *ApiController) PlanAgentConfigCopy() {

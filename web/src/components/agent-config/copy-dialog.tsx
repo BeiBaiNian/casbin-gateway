@@ -18,10 +18,11 @@ import i18next from "i18next";
 
 import * as AgentConfigBackend from "@/backend/AgentConfigBackend";
 import * as Setting from "@/Setting";
-import {AgentIcon} from "@/components/AgentIcon";
+import {ActionBadge} from "@/components/agent-config/action-badge";
+import {TargetPicker} from "@/components/agent-config/target-picker";
 import {Loading} from "@/components/shared/loading";
 import {MessageAlert} from "@/components/ui/alert";
-import {Badge, type BadgeVariant} from "@/components/ui/badge";
+import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {
   Dialog,
@@ -32,27 +33,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {Switch} from "@/components/ui/switch";
-import {SimpleTooltip} from "@/components/ui/tooltip";
-import {cn} from "@/lib/utils";
-import {blockedReason, counted, inventoryKey} from "@/lib/agent-configs";
-import type {
-  AgentConfigAction,
-  AgentConfigInventory,
-  AgentConfigKind,
-  AgentConfigPlanItem,
-} from "@/types";
-
-const actionStyles: Record<AgentConfigAction, {variant: BadgeVariant; label: string}> = {
-  create: {variant: "success", label: "agentConfig:New"},
-  overwrite: {variant: "warning", label: "agentConfig:Replaced"},
-  skip: {variant: "muted", label: "agentConfig:Skipped"},
-  failed: {variant: "danger", label: "agentConfig:Failed"},
-};
-
-function ActionBadge({action}: {action: AgentConfigAction}) {
-  const style = actionStyles[action] ?? actionStyles.skip;
-  return <Badge variant={style.variant}>{i18next.t(style.label)}</Badge>;
-}
+import {counted, inventoryKey} from "@/lib/agent-configs";
+import type {AgentConfigInventory, AgentConfigKind, AgentConfigPlanItem} from "@/types";
 
 /**
  * The migration step: pick the agents to copy into, see what would change at
@@ -212,35 +194,13 @@ export function CopyDialog({
             />
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            {candidates.map(inventory => {
-              const blocked = blockedReason(inventory, kind);
-              const active = selected.includes(inventory.agentId);
-              const button = (
-                <button
-                  key={inventoryKey(inventory)}
-                  type="button"
-                  disabled={Boolean(blocked) || applied}
-                  onClick={() => toggleTarget(inventory.agentId)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
-                    active ? "border-primary bg-primary/10" : "hover:bg-accent",
-                    (blocked || applied) && "cursor-not-allowed opacity-50",
-                  )}
-                >
-                  <AgentIcon agent={inventory.name} size={16} />
-                  <span>{inventory.name}</span>
-                </button>
-              );
-              return blocked ? (
-                <SimpleTooltip key={inventoryKey(inventory)} title={blocked}>
-                  <span className="inline-flex">{button}</span>
-                </SimpleTooltip>
-              ) : (
-                button
-              );
-            })}
-          </div>
+          <TargetPicker
+            candidates={candidates}
+            kind={kind}
+            selected={selected}
+            onToggle={toggleTarget}
+            disabled={applied}
+          />
 
           {!applied && candidates.length > 0 ? (
             <label className="flex items-center gap-2 text-sm">
