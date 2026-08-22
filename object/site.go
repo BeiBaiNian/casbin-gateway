@@ -292,12 +292,12 @@ func (site *Site) checkNodes() error {
 					msg = addErrorToMsg(msg, "IsProcessActive", err)
 				}
 			}
-			// Also check if the window title exists (process may be starting/compiling)
+			// Also check if the process exists (it may be starting/compiling)
 			if !ok {
 				var err error
-				ok, err = run.IsWindowTitleActive(site.Name)
+				ok, err = run.IsSiteProcessActive(site.Name)
 				if err != nil {
-					msg = addErrorToMsg(msg, "IsWindowTitleActive", err)
+					msg = addErrorToMsg(msg, "IsSiteProcessActive", err)
 				}
 			}
 		}

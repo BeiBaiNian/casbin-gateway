@@ -58,7 +58,6 @@ func main() {
 	object.InitRuleMap()
 	run.InitAppMap()
 	run.InitRdsClient()
-	run.InitSelfStart()
 	object.StartMonitorSitesLoop()
 
 	agentmonitor.Configure(

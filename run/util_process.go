@@ -17,25 +17,23 @@ package run
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/apache/casbin-gateway/util"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 )
 
-var reBatNames *regexp.Regexp
+// A site runs in its own console window started from its repo folder. The
+// "title" sets the window title so the user can tell the windows apart, and it
+// is also what identifies the process in the command line listing below.
+var reSiteNames = regexp.MustCompile(`title (\S+) & go run main\.go`)
 
-func init() {
-	reBatNames = regexp.MustCompile(`\\Desktop\\run\\(.*?)\.bat`)
+func getRunCommand(name string) string {
+	return fmt.Sprintf("title %s & go run main.go", name)
 }
 
-func parseBatName(s string) string {
-	res := reBatNames.FindStringSubmatch(s)
+func parseSiteName(s string) string {
+	res := reSiteNames.FindStringSubmatch(s)
 	if res == nil {
 		return ""
 	}
@@ -43,31 +41,27 @@ func parseBatName(s string) string {
 	return res[1]
 }
 
-func getBatNamesFromOutput(output string) map[string]int {
-	batNameMap := map[string]int{}
+func getSiteNamesFromOutput(output string) map[string]int {
+	siteNameMap := map[string]int{}
 
 	output = strings.ReplaceAll(output, "\r", "")
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
-		tokens := strings.Split(line, " ")
-		tokens2 := []string{}
-		for _, token := range tokens {
-			if token != "" {
-				tokens2 = append(tokens2, token)
-			}
-		}
-
-		if len(tokens2) < 5 || strings.ToLower(tokens2[0]) != `c:\windows\system32\cmd.exe` || tokens2[1] != "/c" {
+		name := parseSiteName(line)
+		if name == "" {
 			continue
 		}
 
-		batName := parseBatName(tokens2[2])
-		processId := util.ParseInt(tokens2[len(tokens2)-1])
-		batNameMap[batName] = processId
-		//fmt.Printf("%s, %d\n", batName, processId)
+		tokens := strings.Fields(line)
+		processId, err := strconv.Atoi(tokens[len(tokens)-1])
+		if err != nil {
+			continue
+		}
+
+		siteNameMap[name] = processId
 	}
 
-	return batNameMap
+	return siteNameMap
 }
 
 func getPid(name string) (int, error) {
@@ -85,30 +79,33 @@ func getPid(name string) (int, error) {
 		return 0, fmt.Errorf("powershell command failed: %v, stderr: %s", err, stderr.String())
 	}
 
-	batNameMap := getBatNamesFromOutput(out.String())
-	pid, ok := batNameMap[name]
+	siteNameMap := getSiteNamesFromOutput(out.String())
+	pid, ok := siteNameMap[name]
 	if ok {
 		return pid, nil
 	} else {
-		return 0, fmt.Errorf("getBatNamesFromOutput() error, name = %s, batNameMap = %v", name, batNameMap)
+		return 0, fmt.Errorf("getSiteNamesFromOutput() error, name = %s, siteNameMap = %v", name, siteNameMap)
 	}
 }
 
 func startProcess(name string) error {
 	fmt.Printf("startProcess(): [%s]\n", name)
 
-	cmd := exec.Command("cmd", "/C", "start", "", getShortcutPath(name))
+	cmd := exec.Command("cmd", "/C", "start", "", "cmd", "/C", getRunCommand(getMappedName(name)))
+	cmd.Dir = GetRepoPath(name)
 	return cmd.Run()
 }
 
 func stopProcess(name string) error {
 	fmt.Printf("stopProcess(): [%s]\n", name)
 
-	name = getMappedName(name)
-	windowName := fmt.Sprintf("%s.bat - %s", name, getShortcut())
-	// taskkill /IM "casdoor.bat - Shortcut" /F
-	// taskkill /F /FI "WINDOWTITLE eq casdoor.bat - Shortcut" /T
-	cmd := exec.Command("taskkill", "/F", "/FI", fmt.Sprintf("WINDOWTITLE eq %s", windowName), "/T")
+	pid, err := getPid(name)
+	if err != nil {
+		// Not running is not an error to report here.
+		return nil
+	}
+
+	cmd := exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(pid))
 	return cmd.Run()
 }
 
@@ -126,31 +123,13 @@ func IsProcessActive(pid int) (bool, error) {
 	return res, nil
 }
 
-func IsWindowTitleActive(name string) (bool, error) {
-	name = getMappedName(name)
-	windowName := fmt.Sprintf("%s.bat - %s", name, getShortcut())
-
-	// Use tasklist to check if a window with the specific title exists
-	cmd := exec.Command("tasklist", "/V", "/FI", fmt.Sprintf("WINDOWTITLE eq %s", windowName))
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	err := cmd.Run()
+// IsSiteProcessActive covers the window between "started" and "serving", while
+// go run is still compiling and the port is not up yet.
+func IsSiteProcessActive(name string) (bool, error) {
+	_, err := getPid(name)
 	if err != nil {
-		return false, err
+		return false, nil
 	}
 
-	// Decode output from GBK (Windows default codepage) to UTF-8
-	decoder := simplifiedchinese.GBK.NewDecoder()
-	reader := transform.NewReader(&out, decoder)
-	decoded, err := io.ReadAll(reader)
-	if err != nil {
-		// If decoding fails, fall back to original output
-		decoded = out.Bytes()
-	}
-	output := string(decoded)
-
-	// Check if cmd.exe process with the window title exists
-	// If window title is found, output will contain "cmd.exe" and the window title
-	res := strings.Contains(output, "cmd.exe") && strings.Contains(output, windowName)
-	return res, nil
+	return true, nil
 }

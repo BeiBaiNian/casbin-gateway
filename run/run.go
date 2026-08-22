@@ -94,19 +94,6 @@ func CreateRepo(siteName string, needStart bool, diff string, providerName strin
 				return wrapRepoError("gitUploadCdn", path, err)
 			}
 		}
-
-		_, err = updateBatFile(siteName)
-		if err != nil {
-			return wrapRepoError("updateBatFile", path, err)
-		}
-
-		shortcutPath := getShortcutPath(siteName)
-		if !util.FileExist(shortcutPath) {
-			err = updateShortcutFile(siteName)
-			if err != nil {
-				return wrapRepoError("updateShortcutFile", path, err)
-			}
-		}
 	} else {
 		// For existing repositories, check if upgrade is allowed
 		affected := false
@@ -151,19 +138,6 @@ func CreateRepo(siteName string, needStart bool, diff string, providerName strin
 			err = gitUploadCdn(providerName, siteName)
 			if err != nil {
 				return wrapRepoError("gitUploadCdn", path, err)
-			}
-		}
-
-		_, err = updateBatFile(siteName)
-		if err != nil {
-			return wrapRepoError("updateBatFile", path, err)
-		}
-
-		shortcutPath := getShortcutPath(siteName)
-		if !util.FileExist(shortcutPath) {
-			err = updateShortcutFile(siteName)
-			if err != nil {
-				return wrapRepoError("updateShortcutFile", path, err)
 			}
 		}
 

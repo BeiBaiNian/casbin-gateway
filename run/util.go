@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/apache/casbin-gateway/conf"
@@ -62,22 +61,6 @@ func getRepoUrl(name string) string {
 	} else {
 		return fmt.Sprintf("https://github.com/casbin/%s", name)
 	}
-}
-
-func getShortcut() string {
-	res := "Shortcut"
-	language := conf.GetConfigStringUnquoted("language")
-	if language != "en" {
-		res = "快捷方式"
-	}
-	return res
-}
-
-func ensureFileFolderExists(path string) error {
-	if !util.FileExist(path) {
-		return os.MkdirAll(path, os.ModePerm)
-	}
-	return nil
 }
 
 func updateAppConfFile(name string, i int, orgName string) {
@@ -131,29 +114,4 @@ func updateAppConfFile(name string, i int, orgName string) {
 	}
 
 	util.WriteStringToPath(content, confPath)
-}
-
-func updateBatFile(name string) (bool, error) {
-	batPath := getBatPath(name)
-	err := ensureFileFolderExists(filepath.Dir(batPath))
-	if err != nil {
-		return false, err
-	}
-
-	if util.FileExist(batPath) {
-		return true, nil
-	}
-
-	fmt.Printf("updateBatFile(): [%s]\n", name)
-
-	content := fmt.Sprintf("cd %s\ngo run main.go", GetRepoPath(name))
-	util.WriteStringToPath(content, batPath)
-	return false, nil
-}
-
-func updateShortcutFile(name string) error {
-	fmt.Printf("updateShortcutFile(): [%s]\n", name)
-
-	cmd := exec.Command("powershell", fmt.Sprintf("$s=(New-Object -COM WScript.Shell).CreateShortcut('%s');$s.TargetPath='%s';$s.Save()", getShortcutPath(name), getBatPath(name)))
-	return cmd.Run()
 }
