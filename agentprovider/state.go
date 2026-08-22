@@ -30,7 +30,7 @@ import (
 // missing from it was not set, and is deleted again on restore.
 type state struct {
 	AgentId  string            `json:"agentId"`
-	Channel  string            `json:"channel"`
+	Provider string            `json:"provider"`
 	Mode     string            `json:"mode"`
 	BaseUrl  string            `json:"baseUrl"`
 	Time     string            `json:"time"`

@@ -96,7 +96,7 @@ function RecordDetail({record, onDelete}: {record: LlmRecord; onDelete: () => vo
           {label: i18next.t("general:ID"), value: record.id},
           {label: i18next.t("general:Created time"), value: Setting.getFormattedDate(record.createdTime)},
           {label: i18next.t("llm:Endpoint"), value: <CodeText>{`${record.protocol} ${record.endpoint}`}</CodeText>},
-          record.channel && {label: i18next.t("llm:Channel"), value: <CodeText>{record.channel}</CodeText>},
+          record.provider && {label: i18next.t("llm:Provider"), value: <CodeText>{record.provider}</CodeText>},
           record.agent && {label: i18next.t("agent:Agent"), value: <CodeText>{record.agent}</CodeText>},
           {label: i18next.t("llm:Attempts"), value: record.attempts},
           {
@@ -377,7 +377,7 @@ export default function LlmRecordsPage({account}: {account: Account}) {
       render: (value: string, record) => (
         <div className="flex min-w-0 flex-col gap-0.5">
           <CodeText>{value}</CodeText>
-          <span className="text-muted-foreground truncate text-xs">{record.agent || record.channel}</span>
+          <span className="text-muted-foreground truncate text-xs">{record.agent || record.provider}</span>
         </div>
       ),
     },

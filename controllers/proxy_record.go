@@ -28,7 +28,7 @@ import (
 const usageTailBytes = 16 * 1024
 
 // finishLlmRecord queues the record of one relayed request. Every path out of
-// forwardToChannels ends the client request, so this is the only place it is
+// forwardToProviders ends the client request, so this is the only place it is
 // called from.
 func (c *ApiController) finishLlmRecord(route *proxyRoute) {
 	if route.record == nil {
@@ -41,12 +41,12 @@ func (c *ApiController) finishLlmRecord(route *proxyRoute) {
 	object.AddLlmRecord(record, route.body)
 }
 
-func (route *proxyRoute) recordAttempt(channelId string) {
+func (route *proxyRoute) recordAttempt(providerId string) {
 	if route.record == nil {
 		return
 	}
 	route.record.Attempts++
-	route.record.Channel = channelId
+	route.record.Provider = providerId
 }
 
 func (route *proxyRoute) recordOutcome(status int, message string) {

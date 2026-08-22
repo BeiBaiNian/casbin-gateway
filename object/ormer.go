@@ -283,8 +283,8 @@ func (a *Ormer) createTable() {
 		panic(err)
 	}
 
-	// Register Channel table for LLM gateway milestone 1.1.
-	err = a.Engine.Sync2(new(Channel))
+	// Register Provider table for LLM gateway milestone 1.1.
+	err = a.Engine.Sync2(new(Provider))
 	if err != nil {
 		panic(err)
 	}

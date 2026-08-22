@@ -41,15 +41,15 @@ import {
 } from "@/components/ui/select";
 import {Switch} from "@/components/ui/switch";
 import {agentProxyBaseUrl, agentSetupNoteKey, directMode, gatewayMode} from "@/lib/agents";
-import {channelProtocol, shellForPath, usesClientAuth} from "@/lib/channels";
+import {providerProtocol, shellForPath, usesClientAuth} from "@/lib/providers";
 import {cn} from "@/lib/utils";
-import type {Agent, AgentProviderFile, Channel, ChannelHealth} from "@/types";
+import type {Agent, AgentProviderFile, Provider, ProviderHealth} from "@/types";
 
 /** Radix rejects an empty item value, so "unbound" needs a stand-in. */
-const noChannel = "-";
+const noProvider = "-";
 
-function channelIdOf(channel: Channel) {
-  return `${channel.owner}/${channel.name}`;
+function providerIdOf(provider: Provider) {
+  return `${provider.owner}/${provider.name}`;
 }
 
 /** The file preview, loaded when the dialog opens rather than on every render. */
@@ -117,8 +117,8 @@ function PreviewDialog({
   );
 }
 
-/** One channel of the chain, with what the proxy last saw of it. */
-function ChannelChip({
+/** One provider of the chain, with what the proxy last saw of it. */
+function ProviderChip({
   label,
   active,
   disabled,
@@ -128,7 +128,7 @@ function ChannelChip({
   label: string;
   active: boolean;
   disabled?: boolean;
-  health?: ChannelHealth;
+  health?: ProviderHealth;
   onClick?: () => void;
 }) {
   return (
@@ -157,30 +157,30 @@ function ChannelChip({
  */
 export function ProviderCard({
   agent,
-  channels,
+  providers,
   health,
   busy,
   onRouting,
   onWrite,
 }: {
   agent: Agent;
-  channels: Channel[];
-  health: ChannelHealth[];
+  providers: Provider[];
+  health: ProviderHealth[];
   busy: boolean;
   onRouting: (routing: Partial<AgentBackend.AgentRouting>) => void;
   onWrite: (restore: boolean) => void;
 }) {
   const [preview, setPreview] = React.useState(false);
 
-  const bound = channels.find(channel => channelIdOf(channel) === agent.channel);
+  const bound = providers.find(provider => providerIdOf(provider) === agent.provider);
   const mode = agent.mode || gatewayMode;
   const fallbacks = agent.fallbacks ?? [];
   // An older backend does not report the provider state at all, and the card
   // still has to render for the parts that do not depend on it.
-  const provider = agent.provider ?? {
+  const providerConfig = agent.providerConfig ?? {
     supported: false,
     applied: false,
-    channel: "",
+    provider: "",
     mode: "",
     baseUrl: "",
     time: "",
@@ -188,15 +188,15 @@ export function ProviderCard({
     detail: "",
   };
   const noteKey = agentSetupNoteKey(agent.agentId);
-  const healthOf = (id: string) => health.find(item => item.channel === id);
-  const boundHealth = healthOf(agent.channel);
+  const healthOf = (id: string) => health.find(item => item.provider === id);
+  const boundHealth = healthOf(agent.provider);
 
-  // A channel can only take over for one that speaks the same wire format: the
+  // A provider can only take over for one that speaks the same wire format: the
   // proxy relays the request as it arrived.
-  const candidates = channels.filter(
-    channel =>
-      channelIdOf(channel) !== agent.channel &&
-      (bound === undefined || channelProtocol(channel.type) === channelProtocol(bound.type)),
+  const candidates = providers.filter(
+    provider =>
+      providerIdOf(provider) !== agent.provider &&
+      (bound === undefined || providerProtocol(provider.type) === providerProtocol(bound.type)),
   );
 
   const toggleFallback = (id: string) => {
@@ -210,26 +210,26 @@ export function ProviderCard({
   return (
     <Card>
       <CardHeader className="p-4 pb-2">
-        <CardTitle className="text-base">{i18next.t("agent:Channel")}</CardTitle>
+        <CardTitle className="text-base">{i18next.t("agent:Provider")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0">
         <Select
-          value={agent.channel === "" ? noChannel : agent.channel}
+          value={agent.provider === "" ? noProvider : agent.provider}
           disabled={busy}
-          onValueChange={value => onRouting({channel: value === noChannel ? "" : value, fallbacks: []})}
+          onValueChange={value => onRouting({provider: value === noProvider ? "" : value, fallbacks: []})}
         >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={noChannel}>
-              <span className="text-muted-foreground">{i18next.t("agent:No channel")}</span>
+            <SelectItem value={noProvider}>
+              <span className="text-muted-foreground">{i18next.t("agent:No provider")}</span>
             </SelectItem>
-            {channels.map(channel => (
-              <SelectItem key={channelIdOf(channel)} value={channelIdOf(channel)}>
-                {channel.displayName || channel.name}
+            {providers.map(provider => (
+              <SelectItem key={providerIdOf(provider)} value={providerIdOf(provider)}>
+                {provider.displayName || provider.name}
                 {/* The type is the wire format, which has to match the one the agent speaks. */}
-                <span className="ml-2 text-xs text-muted-foreground">{channel.type}</span>
+                <span className="ml-2 text-xs text-muted-foreground">{provider.type}</span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -237,30 +237,30 @@ export function ProviderCard({
 
         {boundHealth && !boundHealth.healthy ? (
           <p className="text-sm text-warning">
-            {`${i18next.t("agent:Bound channel cooling down")}: ${boundHealth.lastError}`}
+            {`${i18next.t("agent:Bound provider cooling down")}: ${boundHealth.lastError}`}
           </p>
         ) : null}
 
-        {agent.channel === "" ? (
-          <p className="text-sm text-muted-foreground">{i18next.t("agent:Channel hint")}</p>
+        {agent.provider === "" ? (
+          <p className="text-sm text-muted-foreground">{i18next.t("agent:Provider hint")}</p>
         ) : bound === undefined ? null : (
           <>
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">{i18next.t("agent:Fallback hint")}</p>
               {candidates.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {i18next.t("agent:No other channel speaks this API")}
+                  {i18next.t("agent:No other provider speaks this API")}
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {candidates.map(channel => (
-                    <ChannelChip
-                      key={channelIdOf(channel)}
-                      label={channel.displayName || channel.name}
-                      active={fallbacks.includes(channelIdOf(channel))}
+                  {candidates.map(provider => (
+                    <ProviderChip
+                      key={providerIdOf(provider)}
+                      label={provider.displayName || provider.name}
+                      active={fallbacks.includes(providerIdOf(provider))}
                       disabled={busy}
-                      health={healthOf(channelIdOf(channel))}
-                      onClick={() => toggleFallback(channelIdOf(channel))}
+                      health={healthOf(providerIdOf(provider))}
+                      onClick={() => toggleFallback(providerIdOf(provider))}
                     />
                   ))}
                 </div>
@@ -286,24 +286,24 @@ export function ProviderCard({
               </span>
             </label>
 
-            {provider.supported ? (
+            {providerConfig.supported ? (
               <div className="space-y-2 rounded-md border p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <FileCog className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">
                     {i18next.t("agent:Agent configuration")}
                   </span>
-                  {provider.applied ? (
+                  {providerConfig.applied ? (
                     <Badge variant="success">{i18next.t("agent:Written by Gateway")}</Badge>
                   ) : (
                     <Badge variant="secondary">{i18next.t("agent:Not written")}</Badge>
                   )}
                 </div>
 
-                {provider.detail ? (
-                  <p className="text-sm text-muted-foreground">{provider.detail}</p>
+                {providerConfig.detail ? (
+                  <p className="text-sm text-muted-foreground">{providerConfig.detail}</p>
                 ) : null}
-                {(provider.files ?? []).map(path => (
+                {(providerConfig.files ?? []).map(path => (
                   <code key={path} className="block truncate text-xs">
                     {path}
                   </code>
@@ -317,7 +317,7 @@ export function ProviderCard({
                     onConfirm={() => onWrite(false)}
                   >
                     <Button disabled={busy}>
-                      {provider.applied
+                      {providerConfig.applied
                         ? i18next.t("agent:Rewrite configuration")
                         : i18next.t("agent:Write configuration")}
                     </Button>
@@ -327,7 +327,7 @@ export function ProviderCard({
                     {i18next.t("agent:Preview")}
                   </Button>
 
-                  {provider.applied || provider.channel !== "" ? (
+                  {providerConfig.applied || providerConfig.provider !== "" ? (
                     <ConfirmDialog
                       title={i18next.t("agent:Restore the configuration of {agent}?").replace("{agent}", agent.name)}
                       description={i18next.t("agent:Restore confirm hint")}
@@ -347,7 +347,7 @@ export function ProviderCard({
               <>
                 <p className="text-sm text-muted-foreground">{i18next.t("agent:Base URL hint")}</p>
                 <EnvSnippet
-                  protocol={channelProtocol(bound.type)}
+                  protocol={providerProtocol(bound.type)}
                   baseUrl={agentProxyBaseUrl(agent.agentId)}
                   defaultShell={shellForPath(agent.path)}
                   includeToken={!usesClientAuth(bound)}

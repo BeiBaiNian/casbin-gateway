@@ -76,7 +76,7 @@ export const navGroups: NavGroup[] = [
     adminOnly: true,
   },
   {key: "/agent-records", label: "agent:Agent Records", icon: FileSearch, path: "/agent-records", adminOnly: true},
-  {key: "/channels", label: "channel:Channels", icon: Plug, path: "/channels"},
+  {key: "/providers", label: "provider:Providers", icon: Plug, path: "/providers"},
   {key: "/llm-records", label: "llm:LLM Records", icon: Logs, path: "/llm-records", adminOnly: true},
   {
     key: "/advanced",

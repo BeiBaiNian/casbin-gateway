@@ -151,7 +151,7 @@ func (w claudeCodeWriter) Current(target Target) (string, error) {
 }
 
 // env is the block written into settings.json. Claude Code authenticates with
-// ANTHROPIC_AUTH_TOKEN, so the channel key goes there and not into
+// ANTHROPIC_AUTH_TOKEN, so the provider key goes there and not into
 // ANTHROPIC_API_KEY, which stays cleared.
 func (claudeCodeWriter) env(endpoint Endpoint, masked bool) map[string]any {
 	token := endpoint.ApiKey
@@ -162,7 +162,7 @@ func (claudeCodeWriter) env(endpoint Endpoint, masked bool) map[string]any {
 	env := map[string]any{
 		"ANTHROPIC_BASE_URL": endpoint.BaseUrl,
 	}
-	// A channel that forwards the caller's own credentials has no token to
+	// A provider that forwards the caller's own credentials has no token to
 	// write, and writing one would override the sign-in Claude Code already
 	// has, which is the login the switch is meant to keep using.
 	if endpoint.ApiKey != "" {

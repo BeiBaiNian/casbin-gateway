@@ -65,8 +65,8 @@ That is the whole installation. Gateway keeps its data in a SQLite file inside i
 | --- | --- | --- |
 | **Agents** | Every AI coding agent installed on this machine — Claude Code, Codex CLI, Cursor and more. Click **Patch** on one and its activity streams into the page live. | Nothing |
 | **Skills & MCP** | Every skill and MCP server of every agent in one table. Add an MCP server to one agent or to several at once, open one, delete it, or copy it into another agent. | Nothing |
-| **Channels** | One endpoint in front of your model vendors. Gateway holds the API key, so the agents never have it — or forwards the agent's own sign-in and holds nothing. | A vendor API key, or nothing at all |
-| **LLM Records** | Every request an agent relayed: the full system prompt, every message and tool call, the schema of every tool the model was offered, plus tokens and cost. | A channel, and `llmRecordMode` — see [Recording prompts](#recording-prompts) |
+| **Providers** | One endpoint in front of your model vendors. Gateway holds the API key, so the agents never have it — or forwards the agent's own sign-in and holds nothing. | A vendor API key, or nothing at all |
+| **LLM Records** | Every request an agent relayed: the full system prompt, every message and tool call, the schema of every tool the model was offered, plus tokens and cost. | A provider, and `llmRecordMode` — see [Recording prompts](#recording-prompts) |
 | **Advanced → Sites** | The reverse-proxy WAF: per-site routing, rules, certificates and analytics. | Turning the proxy on — see [Turning the WAF proxy on](#turning-the-waf-proxy-on) |
 
 Agents are found by reading the user accounts, home directories and install paths of **the machine Gateway runs on**, so run it on the machine whose agents you want to watch.
@@ -75,8 +75,8 @@ Agents are found by reading the user accounts, home directories and install path
 
 This is what fills **LLM Records**, and what lets Gateway keep the vendor key instead of the agent.
 
-1. **Channels** → **Add**: pick the type (OpenAI- or Anthropic-compatible), paste the vendor base URL and API key, and list the models it serves.
-2. **Agents** → open an agent → pick that channel.
+1. **Providers** → **Add**: pick the type (OpenAI- or Anthropic-compatible), paste the vendor base URL and API key, and list the models it serves.
+2. **Agents** → open an agent → pick that provider.
 3. Copy the environment snippet the page shows, and start the agent from a shell that has it:
 
 ```bash
@@ -84,15 +84,15 @@ export ANTHROPIC_BASE_URL="http://localhost:17000/v1/agents/claude-code"
 export ANTHROPIC_AUTH_TOKEN="casbin-gateway"
 ```
 
-The token is a placeholder — the agent refuses to start without one, and Gateway authenticates upstream with the channel's own key.
+The token is a placeholder — the agent refuses to start without one, and Gateway authenticates upstream with the provider's own key.
 
 ### No API key: keep the sign-in the agent already has
 
-An agent signed in with a ChatGPT or Claude subscription has no API key to paste. Set the channel's **Authentication** to **the caller's own login** and it needs none: the base URL points at the vendor, and every request is forwarded with the credentials the agent itself sent, so it keeps its own sign-in. Leave **Models** empty and the channel accepts any model name.
+An agent signed in with a ChatGPT or Claude subscription has no API key to paste. Set the provider's **Authentication** to **the caller's own login** and it needs none: the base URL points at the vendor, and every request is forwarded with the credentials the agent itself sent, so it keeps its own sign-in. Leave **Models** empty and the provider accepts any model name.
 
-The environment snippet for such a channel sets the base URL and nothing else — a token there would replace the sign-in the agent already has. Gateway records and routes the traffic exactly as it does for a channel with a key; it just never sees one.
+The environment snippet for such a provider sets the base URL and nothing else — a token there would replace the sign-in the agent already has. Gateway records and routes the traffic exactly as it does for a provider with a key; it just never sees one.
 
-Codex is the exception: its ChatGPT sign-in talks to a different API than the chat completions Gateway relays, so a Codex CLI still needs a channel with an API key.
+Codex is the exception: its ChatGPT sign-in talks to a different API than the chat completions Gateway relays, so a Codex CLI still needs a provider with an API key.
 
 ### Stopping, upgrading, removing
 
@@ -106,7 +106,7 @@ Set `INSTALL_DIR` to install somewhere else, or `NO_START=1` to install without 
 
 ### Running in Docker or Podman
 
-**A container cannot see the agents on your machine.** Agents are discovered by reading the home directories and install paths of the machine Gateway runs on, and inside a container that is the container's own filesystem. **Agents**, **Skills & MCP** and agent monitoring therefore stay empty there, and the pages say so rather than pretending nothing is installed. Everything that does not depend on the host works normally: **Channels**, **LLM Records** and the reverse-proxy WAF.
+**A container cannot see the agents on your machine.** Agents are discovered by reading the home directories and install paths of the machine Gateway runs on, and inside a container that is the container's own filesystem. **Agents**, **Skills & MCP** and agent monitoring therefore stay empty there, and the pages say so rather than pretending nothing is installed. Everything that does not depend on the host works normally: **Providers**, **LLM Records** and the reverse-proxy WAF.
 
 So run the one-command install above on the machine whose agents you want to watch, and use a container when Gateway is only a model endpoint or a reverse proxy for other machines.
 
@@ -144,7 +144,7 @@ Everything is optional. Settings are changed on the **Settings** page of the web
 | `gatewayEnabled` | `false` | Turns the reverse-proxy WAF on |
 | `gatewayHttpPort` / `gatewayHttpsPort` | `80` / `443` | Ports the proxy listens on |
 | `llmRecordMode` | `off` | How much of each relayed LLM request is kept |
-| `apiKeyEncryptionKey` | empty | Encrypts channel API keys at rest (AES-256-GCM) |
+| `apiKeyEncryptionKey` | empty | Encrypts provider API keys at rest (AES-256-GCM) |
 | `casdoorEndpoint` | empty | Switches sign-in over to [Casdoor](https://casdoor.org) SSO |
 
 Gateway prints what it is actually doing when it starts, so the result can be checked instead of the file:

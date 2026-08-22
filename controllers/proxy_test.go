@@ -72,49 +72,49 @@ func TestIsRetryableStatus(t *testing.T) {
 	}
 }
 
-func TestChannelUnusableReason(t *testing.T) {
+func TestProviderUnusableReason(t *testing.T) {
 	openAi := object.ProtocolOpenAi
 	anthropic := object.ProtocolAnthropic
 
 	c, _ := newTestApiController()
-	channelUnusableReason := c.channelUnusableReason
+	providerUnusableReason := c.providerUnusableReason
 
-	if reason := channelUnusableReason(&object.Channel{Type: "claude", BaseUrl: "https://example.com"}, openAi); !strings.Contains(reason, "not supported") {
-		t.Errorf("the claude channel type should be rejected, got: %s", reason)
+	if reason := providerUnusableReason(&object.Provider{Type: "claude", BaseUrl: "https://example.com"}, openAi); !strings.Contains(reason, "not supported") {
+		t.Errorf("the claude provider type should be rejected, got: %s", reason)
 	}
-	if reason := channelUnusableReason(&object.Channel{Type: "openai", BaseUrl: ""}, openAi); !strings.Contains(reason, "base URL") {
+	if reason := providerUnusableReason(&object.Provider{Type: "openai", BaseUrl: ""}, openAi); !strings.Contains(reason, "base URL") {
 		t.Errorf("an empty base URL should be rejected, got: %s", reason)
 	}
-	if reason := channelUnusableReason(&object.Channel{Type: "custom", BaseUrl: "https://example.com"}, openAi); reason != "" {
-		t.Errorf("the custom channel type should be usable, got: %s", reason)
+	if reason := providerUnusableReason(&object.Provider{Type: "custom", BaseUrl: "https://example.com"}, openAi); reason != "" {
+		t.Errorf("the custom provider type should be usable, got: %s", reason)
 	}
 
 	// An OpenAI body cannot be forwarded to an Anthropic upstream, or the other
-	// way around, however healthy the channel is.
-	mismatched := &object.Channel{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: "https://api.anthropic.com"}
-	if reason := channelUnusableReason(mismatched, openAi); !strings.Contains(reason, "does not speak") {
-		t.Errorf("an anthropic channel should be rejected for an openai request, got: %s", reason)
+	// way around, however healthy the provider is.
+	mismatched := &object.Provider{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: "https://api.anthropic.com"}
+	if reason := providerUnusableReason(mismatched, openAi); !strings.Contains(reason, "does not speak") {
+		t.Errorf("an anthropic provider should be rejected for an openai request, got: %s", reason)
 	}
-	if reason := channelUnusableReason(mismatched, anthropic); reason != "" {
-		t.Errorf("an anthropic channel should be usable for an anthropic request, got: %s", reason)
+	if reason := providerUnusableReason(mismatched, anthropic); reason != "" {
+		t.Errorf("an anthropic provider should be usable for an anthropic request, got: %s", reason)
 	}
-	if reason := channelUnusableReason(&object.Channel{Owner: "admin", Name: "gpt", Type: "openai", BaseUrl: "https://api.openai.com/v1"}, anthropic); !strings.Contains(reason, "does not speak") {
-		t.Errorf("an openai channel should be rejected for an anthropic request, got: %s", reason)
+	if reason := providerUnusableReason(&object.Provider{Owner: "admin", Name: "gpt", Type: "openai", BaseUrl: "https://api.openai.com/v1"}, anthropic); !strings.Contains(reason, "does not speak") {
+		t.Errorf("an openai provider should be rejected for an anthropic request, got: %s", reason)
 	}
 
-	passthrough := &object.Channel{
+	passthrough := &object.Provider{
 		Owner:    "admin",
 		Name:     "passthrough",
 		Type:     "openai",
 		BaseUrl:  "https://api.openai.com/v1",
-		AuthMode: object.ChannelAuthClient,
+		AuthMode: object.ProviderAuthClient,
 	}
-	if reason := channelUnusableReason(passthrough, openAi); !strings.Contains(reason, "carries none") {
-		t.Errorf("a client-auth channel should be rejected without a credential, got: %s", reason)
+	if reason := providerUnusableReason(passthrough, openAi); !strings.Contains(reason, "carries none") {
+		t.Errorf("a client-auth provider should be rejected without a credential, got: %s", reason)
 	}
 	c.Ctx.Request.Header.Set("Authorization", "Bearer token")
-	if reason := channelUnusableReason(passthrough, openAi); reason != "" {
-		t.Errorf("a client-auth channel should be usable with a credential, got: %s", reason)
+	if reason := providerUnusableReason(passthrough, openAi); reason != "" {
+		t.Errorf("a client-auth provider should be usable with a credential, got: %s", reason)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestIdleTimeoutReader(t *testing.T) {
 	}
 }
 
-func TestForwardToChannel(t *testing.T) {
+func TestForwardToProvider(t *testing.T) {
 	overloadedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -252,15 +252,15 @@ func TestForwardToChannel(t *testing.T) {
 	}))
 	defer healthyServer.Close()
 
-	overloadedChannel := &object.Channel{Owner: "admin", Name: "overloaded", Type: "openai", BaseUrl: overloadedServer.URL, ApiKey: "sk-bad"}
-	healthyChannel := &object.Channel{Owner: "admin", Name: "healthy", Type: "openai", BaseUrl: healthyServer.URL + "/", ApiKey: "sk-good"}
+	overloadedProvider := &object.Provider{Owner: "admin", Name: "overloaded", Type: "openai", BaseUrl: overloadedServer.URL, ApiKey: "sk-bad"}
+	healthyProvider := &object.Provider{Owner: "admin", Name: "healthy", Type: "openai", BaseUrl: healthyServer.URL + "/", ApiKey: "sk-good"}
 	rawBody := []byte(`{"model":"gpt-4","messages":[]}`)
 
 	route := &proxyRoute{target: openAiChat, body: rawBody}
 
 	// A retryable status fails over instead of reaching the client.
 	c, recorder := newTestApiController()
-	statusCode, message, written := c.forwardToChannel(overloadedChannel, route, false)
+	statusCode, message, written := c.forwardToProvider(overloadedProvider, route, false)
 	if written {
 		t.Fatal("a retryable status was relayed instead of failing over")
 	}
@@ -271,31 +271,31 @@ func TestForwardToChannel(t *testing.T) {
 		t.Errorf("a body was written before failing over: %s", recorder.Body.String())
 	}
 
-	// The last channel is relayed as-is, even with a retryable status, so that
+	// The last provider is relayed as-is, even with a retryable status, so that
 	// the client sees the real upstream answer.
 	c, recorder = newTestApiController()
-	_, _, written = c.forwardToChannel(overloadedChannel, route, true)
+	_, _, written = c.forwardToProvider(overloadedProvider, route, true)
 	if !written || recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "overloaded") {
-		t.Errorf("the last channel was not relayed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
+		t.Errorf("the last provider was not relayed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
 	}
 
-	// A healthy channel, with a trailing slash in its base URL.
+	// A healthy provider, with a trailing slash in its base URL.
 	c, recorder = newTestApiController()
-	_, _, written = c.forwardToChannel(healthyChannel, route, true)
+	_, _, written = c.forwardToProvider(healthyProvider, route, true)
 	if !written || recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "choices") {
-		t.Errorf("the healthy channel failed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
+		t.Errorf("the healthy provider failed: written = %v, statusCode = %d, body = %s", written, recorder.Code, recorder.Body.String())
 	}
 
 	// stream=true, but the upstream rejected the request: the JSON error must
 	// not be dressed up as an SSE stream.
 	c, recorder = newTestApiController()
-	c.forwardToChannel(overloadedChannel, &proxyRoute{target: openAiChat, body: rawBody, stream: true}, true)
+	c.forwardToProvider(overloadedProvider, &proxyRoute{target: openAiChat, body: rawBody, stream: true}, true)
 	if header := recorder.Header().Get("Content-Type"); header != "application/json" {
 		t.Errorf("Content-Type = %s, expected application/json", header)
 	}
 }
 
-func TestForwardToChannelAnthropic(t *testing.T) {
+func TestForwardToProviderAnthropic(t *testing.T) {
 	var gotPath, gotKey, gotVersion, gotAuth string
 	var gotBeta []string
 
@@ -311,13 +311,13 @@ func TestForwardToChannelAnthropic(t *testing.T) {
 	}))
 	defer server.Close()
 
-	channel := &object.Channel{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: server.URL, ApiKey: "sk-ant-test"}
+	provider := &object.Provider{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: server.URL, ApiKey: "sk-ant-test"}
 	route := &proxyRoute{target: anthropicMessages, body: []byte(`{"model":"claude-opus-5","messages":[]}`)}
 
 	c, recorder := newTestApiController()
 	c.Ctx.Request.Header.Add("Anthropic-Beta", "fine-grained-tool-streaming-2025-05-14")
-	if _, _, written := c.forwardToChannel(channel, route, true); !written {
-		t.Fatal("the anthropic channel was not relayed")
+	if _, _, written := c.forwardToProvider(provider, route, true); !written {
+		t.Fatal("the anthropic provider was not relayed")
 	}
 
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "content") {

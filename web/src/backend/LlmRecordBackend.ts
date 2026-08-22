@@ -18,7 +18,7 @@ import type {LlmPrice, LlmRecord, LlmRecordStats, LlmRecordStatus} from "@/types
 
 export interface LlmRecordFilter {
   model?: string;
-  channel?: string;
+  provider?: string;
   agent?: string;
   clientIp?: string;
   outcome?: string;

@@ -21,7 +21,7 @@ import * as Setting from "@/Setting";
 import {Button} from "@/components/ui/button";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
-import {envSnippet, shells, type Shell} from "@/lib/channels";
+import {envSnippet, shells, type Shell} from "@/lib/providers";
 
 /**
  * The environment variables that point a client at one Gateway endpoint, ready

@@ -31,11 +31,11 @@ import (
 	"github.com/xorm-io/core"
 )
 
-// ErrNoChannelAvailable is returned by GetChannelsByModel when no enabled
-// channel matches the requested model name. It is a sentinel error so
+// ErrNoProviderAvailable is returned by GetProvidersByModel when no enabled
+// provider matches the requested model name. It is a sentinel error so
 // callers can distinguish "no match" (client error, HTTP 400) from
 // database failures (server error, HTTP 502).
-var ErrNoChannelAvailable = errors.New("no available channel")
+var ErrNoProviderAvailable = errors.New("no available provider")
 
 // ApiKeyMask is what the API returns in place of a stored API key. Sending it
 // back in an update means "keep the existing key"; sending anything else
@@ -53,121 +53,121 @@ func apiKeyEncryptionSecret() string {
 }
 
 // apiKeyAad binds the ciphertext to its own row, so a value copied into another
-// channel's api_key column no longer decrypts.
-func apiKeyAad(channel *Channel) string {
-	return channel.GetId()
+// provider's api_key column no longer decrypts.
+func apiKeyAad(provider *Provider) string {
+	return provider.GetId()
 }
 
-// encryptApiKey needs channel.Owner and channel.Name to be set already.
-func encryptApiKey(channel *Channel) error {
-	encrypted, err := util.EncryptWithKey(apiKeyEncryptionSecret(), channel.ApiKey, apiKeyAad(channel))
+// encryptApiKey needs provider.Owner and provider.Name to be set already.
+func encryptApiKey(provider *Provider) error {
+	encrypted, err := util.EncryptWithKey(apiKeyEncryptionSecret(), provider.ApiKey, apiKeyAad(provider))
 	if err != nil {
 		return err
 	}
-	channel.ApiKey = encrypted
+	provider.ApiKey = encrypted
 	return nil
 }
 
-// decryptChannel restores the plaintext ApiKey on a channel just read from the
+// decryptProvider restores the plaintext ApiKey on a provider just read from the
 // database. A failure leaves the stored value in place rather than dropping the
-// channel, but is logged: otherwise a changed key looks exactly like a healthy
-// channel whose upstream answers 401.
-func decryptChannel(channel *Channel) {
-	if channel == nil {
+// provider, but is logged: otherwise a changed key looks exactly like a healthy
+// provider whose upstream answers 401.
+func decryptProvider(provider *Provider) {
+	if provider == nil {
 		return
 	}
 
 	secret := apiKeyEncryptionSecret()
-	stored := channel.ApiKey
+	stored := provider.ApiKey
 
-	plain, err := util.DecryptWithKey(secret, stored, apiKeyAad(channel))
+	plain, err := util.DecryptWithKey(secret, stored, apiKeyAad(provider))
 	if err != nil {
-		fmt.Printf("decryptChannel(): channel [%s]: %v\n", channel.GetId(), err)
+		fmt.Printf("decryptProvider(): provider [%s]: %v\n", provider.GetId(), err)
 		return
 	}
-	channel.ApiKey = plain
+	provider.ApiKey = plain
 
 	if util.NeedsReEncryption(secret, stored) {
-		upgradeStoredApiKey(channel)
+		upgradeStoredApiKey(provider)
 	}
 }
 
-// apiKeyUpgrades collapses concurrent upgrades of the same row: GetChannelsByModel()
+// apiKeyUpgrades collapses concurrent upgrades of the same row: GetProvidersByModel()
 // runs on every proxied request.
 var apiKeyUpgrades sync.Map
 
 // upgradeStoredApiKey rewrites a plaintext or older-format key in the current
 // format. Only api_key is touched, so UpdatedTime keeps reflecting the last real
 // edit. A failure is logged and ignored, and retried on the next read.
-func upgradeStoredApiKey(channel *Channel) {
-	id := channel.GetId()
+func upgradeStoredApiKey(provider *Provider) {
+	id := provider.GetId()
 	if _, busy := apiKeyUpgrades.LoadOrStore(id, struct{}{}); busy {
 		return
 	}
 	defer apiKeyUpgrades.Delete(id)
 
-	encrypted, err := util.EncryptWithKey(apiKeyEncryptionSecret(), channel.ApiKey, apiKeyAad(channel))
+	encrypted, err := util.EncryptWithKey(apiKeyEncryptionSecret(), provider.ApiKey, apiKeyAad(provider))
 	if err != nil {
-		fmt.Printf("upgradeStoredApiKey(): channel [%s]: %v\n", id, err)
+		fmt.Printf("upgradeStoredApiKey(): provider [%s]: %v\n", id, err)
 		return
 	}
 
-	_, err = ormer.Engine.ID(core.PK{channel.Owner, channel.Name}).
-		Cols("api_key").Update(&Channel{ApiKey: encrypted})
+	_, err = ormer.Engine.ID(core.PK{provider.Owner, provider.Name}).
+		Cols("api_key").Update(&Provider{ApiKey: encrypted})
 	if err != nil {
-		fmt.Printf("upgradeStoredApiKey(): channel [%s]: %v\n", id, err)
+		fmt.Printf("upgradeStoredApiKey(): provider [%s]: %v\n", id, err)
 	}
 }
 
-func decryptChannels(channels []*Channel) {
-	for _, channel := range channels {
-		decryptChannel(channel)
+func decryptProviders(providers []*Provider) {
+	for _, provider := range providers {
+		decryptProvider(provider)
 	}
 }
 
 const (
-	maxChannelModels     = 200
-	maxChannelModelChars = 100
+	maxProviderModels     = 200
+	maxProviderModelChars = 100
 )
 
 var (
-	channelTypes    = []string{"openai", "custom", "anthropic"}
-	channelStatuses = []string{"enabled", "disabled"}
+	providerTypes    = []string{"openai", "custom", "anthropic"}
+	providerStatuses = []string{"enabled", "disabled"}
 )
 
-// The two ways a channel authenticates upstream. In ChannelAuthClient mode the
+// The two ways a provider authenticates upstream. In ProviderAuthClient mode the
 // gateway forwards the credentials the caller sent instead of a stored key, so
 // an agent already signed in with a subscription keeps its own login.
 const (
-	ChannelAuthChannel = "channel"
-	ChannelAuthClient  = "client"
+	ProviderAuthProvider = "provider"
+	ProviderAuthClient   = "client"
 )
 
-var channelAuthModes = []string{ChannelAuthChannel, ChannelAuthClient}
+var providerAuthModes = []string{ProviderAuthProvider, ProviderAuthClient}
 
-// UsesClientAuth reports whether the channel authenticates with the caller's
+// UsesClientAuth reports whether the provider authenticates with the caller's
 // own credentials. An empty AuthMode is a row written before the field existed.
-func UsesClientAuth(channel *Channel) bool {
-	return channel.AuthMode == ChannelAuthClient
+func UsesClientAuth(provider *Provider) bool {
+	return provider.AuthMode == ProviderAuthClient
 }
 
 // The wire formats the gateway can speak. A request in one of them can only be
-// forwarded to a channel whose upstream speaks the same one.
+// forwarded to a provider whose upstream speaks the same one.
 const (
 	ProtocolOpenAi    = "openai"
 	ProtocolAnthropic = "anthropic"
 )
 
-// IsChannelTypeSupported reports whether the gateway can talk to the channel's
+// IsProviderTypeSupported reports whether the gateway can talk to the provider's
 // upstream.
-func IsChannelTypeSupported(channel *Channel) bool {
-	return containsString(channelTypes, channel.Type)
+func IsProviderTypeSupported(provider *Provider) bool {
+	return containsString(providerTypes, provider.Type)
 }
 
-// ChannelProtocol is the wire format a channel's upstream speaks. Everything
+// ProviderProtocol is the wire format a provider's upstream speaks. Everything
 // that is not Anthropic is reached with an OpenAI-formatted request.
-func ChannelProtocol(channel *Channel) string {
-	if channel.Type == "anthropic" {
+func ProviderProtocol(provider *Provider) string {
+	if provider.Type == "anthropic" {
 		return ProtocolAnthropic
 	}
 	return ProtocolOpenAi
@@ -182,8 +182,8 @@ func containsString(values []string, value string) bool {
 	return false
 }
 
-// Channel is an upstream AI provider channel. (Milestone 1.1)
-type Channel struct {
+// Provider is an upstream AI provider provider. (Milestone 1.1)
+type Provider struct {
 	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
 	Name        string `xorm:"varchar(100) notnull pk" json:"name"`
 	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
@@ -205,115 +205,115 @@ type Channel struct {
 	Status   string `xorm:"varchar(100)" json:"status"`
 }
 
-func (channel *Channel) GetId() string {
-	return fmt.Sprintf("%s/%s", channel.Owner, channel.Name)
+func (provider *Provider) GetId() string {
+	return fmt.Sprintf("%s/%s", provider.Owner, provider.Name)
 }
 
-func GetChannels(owner string) ([]*Channel, error) {
-	channels := []*Channel{}
+func GetProviders(owner string) ([]*Provider, error) {
+	providers := []*Provider{}
 	session := GetSession(owner, -1, -1, "", "", "", "")
-	err := session.Find(&channels)
-	decryptChannels(channels)
-	return channels, err
+	err := session.Find(&providers)
+	decryptProviders(providers)
+	return providers, err
 }
 
-func GetChannelCount(owner, field, value string) (int64, error) {
+func GetProviderCount(owner, field, value string) (int64, error) {
 	session := GetSession(owner, -1, -1, field, value, "", "")
-	return session.Count(&Channel{})
+	return session.Count(&Provider{})
 }
 
-func GetPaginationChannels(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Channel, error) {
-	channels := []*Channel{}
+func GetPaginationProviders(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Provider, error) {
+	providers := []*Provider{}
 	session := GetSession(owner, offset, limit, field, value, sortField, sortOrder)
-	err := session.Find(&channels)
-	decryptChannels(channels)
-	return channels, err
+	err := session.Find(&providers)
+	decryptProviders(providers)
+	return providers, err
 }
 
-func getChannel(owner, name string) (*Channel, error) {
-	channel := &Channel{Owner: owner, Name: name}
-	existed, err := ormer.Engine.Get(channel)
+func getProvider(owner, name string) (*Provider, error) {
+	provider := &Provider{Owner: owner, Name: name}
+	existed, err := ormer.Engine.Get(provider)
 	if err != nil {
 		return nil, err
 	}
 	if !existed {
 		return nil, nil
 	}
-	decryptChannel(channel)
-	return channel, nil
+	decryptProvider(provider)
+	return provider, nil
 }
 
-func GetChannel(id string) (*Channel, error) {
+func GetProvider(id string) (*Provider, error) {
 	owner, name := util.GetOwnerAndNameFromId(id)
-	return getChannel(owner, name)
+	return getProvider(owner, name)
 }
 
-// GetMaskedChannel returns a copy of the channel with the API key replaced by
+// GetMaskedProvider returns a copy of the provider with the API key replaced by
 // ApiKeyMask, so the stored key never reaches the browser.
-func GetMaskedChannel(channel *Channel) *Channel {
-	if channel == nil {
+func GetMaskedProvider(provider *Provider) *Provider {
+	if provider == nil {
 		return nil
 	}
 
-	masked := *channel
+	masked := *provider
 	if masked.ApiKey != "" {
 		masked.ApiKey = ApiKeyMask
 	}
 	return &masked
 }
 
-func GetMaskedChannels(channels []*Channel) []*Channel {
-	maskedChannels := make([]*Channel, 0, len(channels))
-	for _, channel := range channels {
-		maskedChannels = append(maskedChannels, GetMaskedChannel(channel))
+func GetMaskedProviders(providers []*Provider) []*Provider {
+	maskedProviders := make([]*Provider, 0, len(providers))
+	for _, provider := range providers {
+		maskedProviders = append(maskedProviders, GetMaskedProvider(provider))
 	}
-	return maskedChannels
+	return maskedProviders
 }
 
-func validateChannel(channel *Channel) error {
-	if channel.Type == "" {
-		channel.Type = "openai"
+func validateProvider(provider *Provider) error {
+	if provider.Type == "" {
+		provider.Type = "openai"
 	}
-	if channel.Status == "" {
-		channel.Status = "enabled"
+	if provider.Status == "" {
+		provider.Status = "enabled"
 	}
-	if channel.Models == nil {
-		channel.Models = []string{}
+	if provider.Models == nil {
+		provider.Models = []string{}
 	}
-	if channel.AuthMode == "" {
-		channel.AuthMode = ChannelAuthChannel
-	}
-
-	if !containsString(channelTypes, channel.Type) {
-		return fmt.Errorf("invalid channel type: %s", channel.Type)
-	}
-	if !containsString(channelStatuses, channel.Status) {
-		return fmt.Errorf("invalid channel status: %s", channel.Status)
-	}
-	if !containsString(channelAuthModes, channel.AuthMode) {
-		return fmt.Errorf("invalid channel auth mode: %s", channel.AuthMode)
+	if provider.AuthMode == "" {
+		provider.AuthMode = ProviderAuthProvider
 	}
 
-	// A channel that forwards the caller's credentials has no use for a stored
+	if !containsString(providerTypes, provider.Type) {
+		return fmt.Errorf("invalid provider type: %s", provider.Type)
+	}
+	if !containsString(providerStatuses, provider.Status) {
+		return fmt.Errorf("invalid provider status: %s", provider.Status)
+	}
+	if !containsString(providerAuthModes, provider.AuthMode) {
+		return fmt.Errorf("invalid provider auth mode: %s", provider.AuthMode)
+	}
+
+	// A provider that forwards the caller's credentials has no use for a stored
 	// key, and one left behind would be sent upstream again after a switch back.
-	if channel.AuthMode == ChannelAuthClient {
-		channel.ApiKey = ""
+	if provider.AuthMode == ProviderAuthClient {
+		provider.ApiKey = ""
 	}
 
-	if channel.BaseUrl != "" {
-		if err := validateBaseUrl(channel.BaseUrl); err != nil {
+	if provider.BaseUrl != "" {
+		if err := validateBaseUrl(provider.BaseUrl); err != nil {
 			return err
 		}
 	}
 
-	if len(channel.Models) > maxChannelModels {
-		return fmt.Errorf("too many models: %d, at most %d are allowed", len(channel.Models), maxChannelModels)
+	if len(provider.Models) > maxProviderModels {
+		return fmt.Errorf("too many models: %d, at most %d are allowed", len(provider.Models), maxProviderModels)
 	}
-	for _, model := range channel.Models {
+	for _, model := range provider.Models {
 		if strings.TrimSpace(model) == "" {
 			return fmt.Errorf("model name cannot be empty")
 		}
-		if len(model) > maxChannelModelChars {
+		if len(model) > maxProviderModelChars {
 			return fmt.Errorf("model name is too long: %s", model)
 		}
 	}
@@ -335,7 +335,7 @@ func validateBaseUrl(baseUrl string) error {
 	return nil
 }
 
-// BuildOpenAiUrl joins an OpenAI-compatible endpoint onto a channel base URL.
+// BuildOpenAiUrl joins an OpenAI-compatible endpoint onto a provider base URL.
 // The base URL may be bare, already carry the /v1 prefix or already end with
 // the endpoint itself; none of those forms are doubled.
 func BuildOpenAiUrl(baseUrl string, endpoint string) (string, error) {
@@ -354,7 +354,7 @@ func BuildOpenAiUrl(baseUrl string, endpoint string) (string, error) {
 	return u.String(), nil
 }
 
-// BuildAnthropicUrl joins an Anthropic endpoint onto a channel base URL. Unlike
+// BuildAnthropicUrl joins an Anthropic endpoint onto a provider base URL. Unlike
 // an OpenAI base URL, an Anthropic one is bare and the endpoint carries the /v1
 // prefix; a base URL that already has one is not doubled.
 func BuildAnthropicUrl(baseUrl string, endpoint string) (string, error) {
@@ -371,9 +371,9 @@ func BuildAnthropicUrl(baseUrl string, endpoint string) (string, error) {
 	return u.String(), nil
 }
 
-// BuildChannelUrl is the upstream URL a request in the given protocol is sent
+// BuildProviderUrl is the upstream URL a request in the given protocol is sent
 // to. The endpoint is the protocol's own, not a shared one.
-func BuildChannelUrl(baseUrl string, protocol string, endpoint string) (string, error) {
+func BuildProviderUrl(baseUrl string, protocol string, endpoint string) (string, error) {
 	if protocol == ProtocolAnthropic {
 		return BuildAnthropicUrl(baseUrl, endpoint)
 	}
@@ -401,80 +401,80 @@ func AppendQuery(rawUrl string, rawQuery string) string {
 	return u.String()
 }
 
-// SetChannelAuth puts the channel's credentials on an upstream request, in the
-// header the channel's protocol authenticates with.
-func SetChannelAuth(header http.Header, channel *Channel) {
+// SetProviderAuth puts the provider's credentials on an upstream request, in the
+// header the provider's protocol authenticates with.
+func SetProviderAuth(header http.Header, provider *Provider) {
 	// The caller's own credentials are already on the request, and the proxy
 	// copies them across itself.
-	if UsesClientAuth(channel) {
+	if UsesClientAuth(provider) {
 		return
 	}
 
-	if ChannelProtocol(channel) == ProtocolAnthropic {
-		header.Set("X-Api-Key", channel.ApiKey)
+	if ProviderProtocol(provider) == ProtocolAnthropic {
+		header.Set("X-Api-Key", provider.ApiKey)
 		return
 	}
-	header.Set("Authorization", "Bearer "+channel.ApiKey)
+	header.Set("Authorization", "Bearer "+provider.ApiKey)
 }
 
-func AddChannel(channel *Channel) (bool, error) {
-	if err := validateChannel(channel); err != nil {
+func AddProvider(provider *Provider) (bool, error) {
+	if err := validateProvider(provider); err != nil {
 		return false, err
 	}
 
 	now := util.GetCurrentTime()
-	if channel.CreatedTime == "" {
-		channel.CreatedTime = now
+	if provider.CreatedTime == "" {
+		provider.CreatedTime = now
 	}
-	channel.UpdatedTime = now
+	provider.UpdatedTime = now
 
-	if err := encryptApiKey(channel); err != nil {
+	if err := encryptApiKey(provider); err != nil {
 		return false, err
 	}
 
-	affected, err := ormer.Engine.Insert(channel)
+	affected, err := ormer.Engine.Insert(provider)
 	return affected != 0, err
 }
 
-func UpdateChannel(id string, channel *Channel) (bool, error) {
+func UpdateProvider(id string, provider *Provider) (bool, error) {
 	owner, name := util.GetOwnerAndNameFromId(id)
-	if stored, err := getChannel(owner, name); err != nil {
+	if stored, err := getProvider(owner, name); err != nil {
 		return false, err
 	} else if stored == nil {
 		return false, nil
 	}
 
-	if err := validateChannel(channel); err != nil {
+	if err := validateProvider(provider); err != nil {
 		return false, err
 	}
 
-	channel.Owner = owner
-	channel.Name = name
-	channel.UpdatedTime = util.GetCurrentTime()
+	provider.Owner = owner
+	provider.Name = name
+	provider.UpdatedTime = util.GetCurrentTime()
 
 	session := ormer.Engine.ID(core.PK{owner, name})
 	// The browser only ever sees the mask, so getting it back means the user
 	// did not touch the field. Any other value (including "") is written, which
 	// is what makes clearing a key possible.
-	if channel.ApiKey == ApiKeyMask {
+	if provider.ApiKey == ApiKeyMask {
 		session = session.Omit("api_key")
-	} else if err := encryptApiKey(channel); err != nil {
+	} else if err := encryptApiKey(provider); err != nil {
 		return false, err
 	}
 
-	affected, err := session.AllCols().Update(channel)
+	affected, err := session.AllCols().Update(provider)
 	if err == nil {
 		// The edit may be the fix for whatever the proxy last saw, so the
-		// channel starts from a clean slate.
-		ClearChannelHealth(channel.GetId())
+		// provider starts from a clean slate.
+		ClearProviderHealth(provider.GetId())
 	}
 	return affected != 0, err
 }
 
-func DeleteChannel(channel *Channel) (bool, error) {
-	affected, err := ormer.Engine.ID(core.PK{channel.Owner, channel.Name}).Delete(&Channel{})
+func DeleteProvider(provider *Provider) (bool, error) {
+	affected, err := ormer.Engine.ID(core.PK{provider.Owner, provider.Name}).Delete(&Provider{})
 	if err == nil {
-		ClearChannelHealth(channel.GetId())
+		ClearProviderHealth(provider.GetId())
 	}
 	return affected != 0, err
 }
@@ -483,41 +483,41 @@ func DeleteChannel(channel *Channel) (bool, error) {
 // aggregator is long, and an error page can be arbitrarily long.
 const maxProbeBody = 1 << 20
 
-// channelProbe is what a read-only GET against a channel's models endpoint
+// providerProbe is what a read-only GET against a provider's models endpoint
 // returned. The same probe answers both "is this upstream reachable" and
 // "which models does it serve".
-type channelProbe struct {
+type providerProbe struct {
 	statusCode int
 	status     string
 	body       []byte
 }
 
-func (probe *channelProbe) ok() bool {
+func (probe *providerProbe) ok() bool {
 	return probe.statusCode >= 200 && probe.statusCode < 300
 }
 
-// probeChannel performs the read-only GET against the channel's models
-// endpoint. The channel is used as given rather than read back from the
-// database, so a channel that is not saved yet can be probed too.
-func probeChannel(channel *Channel) (*channelProbe, error) {
-	if !IsChannelTypeSupported(channel) {
-		return nil, fmt.Errorf("the %s channel type is not supported", channel.Type)
+// probeProvider performs the read-only GET against the provider's models
+// endpoint. The provider is used as given rather than read back from the
+// database, so a provider that is not saved yet can be probed too.
+func probeProvider(provider *Provider) (*providerProbe, error) {
+	if !IsProviderTypeSupported(provider) {
+		return nil, fmt.Errorf("the %s provider type is not supported", provider.Type)
 	}
 
-	if channel.BaseUrl == "" {
+	if provider.BaseUrl == "" {
 		return nil, errors.New("the base URL is empty")
 	}
-	if err := validateBaseUrl(channel.BaseUrl); err != nil {
+	if err := validateBaseUrl(provider.BaseUrl); err != nil {
 		return nil, err
 	}
 
-	protocol := ChannelProtocol(channel)
+	protocol := ProviderProtocol(provider)
 	probeEndpoint := "/models"
 	if protocol == ProtocolAnthropic {
 		probeEndpoint = "/v1/models"
 	}
 
-	probeUrl, err := BuildChannelUrl(channel.BaseUrl, protocol, probeEndpoint)
+	probeUrl, err := BuildProviderUrl(provider.BaseUrl, protocol, probeEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -529,8 +529,8 @@ func probeChannel(channel *Channel) (*channelProbe, error) {
 	if protocol == ProtocolAnthropic {
 		req.Header.Set("Anthropic-Version", AnthropicVersion)
 	}
-	if channel.ApiKey != "" {
-		SetChannelAuth(req.Header, channel)
+	if provider.ApiKey != "" {
+		SetProviderAuth(req.Header, provider)
 	}
 
 	client := &http.Client{
@@ -557,27 +557,27 @@ func probeChannel(channel *Channel) (*channelProbe, error) {
 		return nil, err
 	}
 
-	return &channelProbe{statusCode: resp.StatusCode, status: resp.Status, body: body}, nil
+	return &providerProbe{statusCode: resp.StatusCode, status: resp.Status, body: body}, nil
 }
 
-// TestChannelConnectivity performs a read-only probe against the channel's
+// TestProviderConnectivity performs a read-only probe against the provider's
 // upstream. It returns whether the probe succeeded, the upstream HTTP status
 // code (0 when no response was received) and a human-readable message.
-func TestChannelConnectivity(channel *Channel) (bool, int, string) {
-	stored, err := getChannel(channel.Owner, channel.Name)
+func TestProviderConnectivity(provider *Provider) (bool, int, string) {
+	stored, err := getProvider(provider.Owner, provider.Name)
 	if err != nil {
 		return false, 0, err.Error()
 	}
 	if stored == nil {
-		return false, 0, "the channel does not exist"
+		return false, 0, "the provider does not exist"
 	}
 
-	probe, err := probeChannel(stored)
+	probe, err := probeProvider(stored)
 	if err != nil {
 		return false, 0, err.Error()
 	}
 
-	// A client-auth channel has no key to probe with, so an upstream that
+	// A client-auth provider has no key to probe with, so an upstream that
 	// rejects the unauthenticated probe has still proven it is reachable.
 	if UsesClientAuth(stored) && (probe.statusCode == http.StatusUnauthorized || probe.statusCode == http.StatusForbidden) {
 		return true, probe.statusCode, "reachable, and authenticated with the caller's own credentials"
@@ -586,10 +586,10 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 	return probe.ok(), probe.statusCode, probe.status
 }
 
-// FetchChannelModels lists what the channel's upstream reports at its models
+// FetchProviderModels lists what the provider's upstream reports at its models
 // endpoint, so the model names do not have to be typed by hand.
-func FetchChannelModels(channel *Channel) ([]string, error) {
-	probe, err := probeChannel(channel)
+func FetchProviderModels(provider *Provider) ([]string, error) {
+	probe, err := probeProvider(provider)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +624,7 @@ func parseModelList(body []byte) ([]string, error) {
 	seen := map[string]bool{}
 	for _, item := range payload.Data {
 		id := strings.TrimSpace(item.Id)
-		if id == "" || len(id) > maxChannelModelChars || seen[id] {
+		if id == "" || len(id) > maxProviderModelChars || seen[id] {
 			continue
 		}
 		seen[id] = true
@@ -647,46 +647,46 @@ func probeDetail(body []byte) string {
 	return ": " + text
 }
 
-// GetChannelsByModel returns every enabled channel that supports the given
+// GetProvidersByModel returns every enabled provider that supports the given
 // model name, ordered by priority (ascending, so the lowest value comes first)
-// so that the caller can fail over from one channel to the next. It queries all
-// channels globally (no owner filter) because /v1/chat/completions is an
+// so that the caller can fail over from one provider to the next. It queries all
+// providers globally (no owner filter) because /v1/chat/completions is an
 // unauthenticated public endpoint.
-func GetChannelsByModel(model string) ([]*Channel, error) {
-	channels := []*Channel{}
-	err := ormer.Engine.Where("status = ?", "enabled").Asc("priority").Find(&channels)
+func GetProvidersByModel(model string) ([]*Provider, error) {
+	providers := []*Provider{}
+	err := ormer.Engine.Where("status = ?", "enabled").Asc("priority").Find(&providers)
 	if err != nil {
-		return nil, fmt.Errorf("channel query failed: %w", err)
+		return nil, fmt.Errorf("provider query failed: %w", err)
 	}
 
 	// The models are JSON-serialized into a single column, so the match cannot
 	// be pushed down into the query.
-	matchedChannels := []*Channel{}
-	// A channel authenticated with the caller's own credentials cannot know
+	matchedProviders := []*Provider{}
+	// A provider authenticated with the caller's own credentials cannot know
 	// which models the account behind them may use, so an empty model list
-	// there means "any model". Those channels are tried after the ones that
+	// there means "any model". Those providers are tried after the ones that
 	// name the model, so a wildcard never takes traffic from an exact match.
-	wildcardChannels := []*Channel{}
-	for _, channel := range channels {
-		if len(channel.Models) == 0 {
-			if UsesClientAuth(channel) {
-				wildcardChannels = append(wildcardChannels, channel)
+	wildcardProviders := []*Provider{}
+	for _, provider := range providers {
+		if len(provider.Models) == 0 {
+			if UsesClientAuth(provider) {
+				wildcardProviders = append(wildcardProviders, provider)
 			}
 			continue
 		}
-		for _, channelModel := range channel.Models {
-			if channelModel == model {
-				matchedChannels = append(matchedChannels, channel)
+		for _, providerModel := range provider.Models {
+			if providerModel == model {
+				matchedProviders = append(matchedProviders, provider)
 				break
 			}
 		}
 	}
-	matchedChannels = append(matchedChannels, wildcardChannels...)
+	matchedProviders = append(matchedProviders, wildcardProviders...)
 
-	decryptChannels(matchedChannels)
+	decryptProviders(matchedProviders)
 
-	if len(matchedChannels) == 0 {
-		return nil, fmt.Errorf("%w: %s", ErrNoChannelAvailable, model)
+	if len(matchedProviders) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrNoProviderAvailable, model)
 	}
-	return matchedChannels, nil
+	return matchedProviders, nil
 }

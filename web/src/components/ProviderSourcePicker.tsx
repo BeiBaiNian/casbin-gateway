@@ -15,34 +15,34 @@
 import {KeyRound, LogIn, Settings2} from "lucide-react";
 import i18next from "i18next";
 
-import {channelSources, customSource, subscriptionSource, type ChannelSource} from "@/lib/channels";
+import {providerSources, customSource, subscriptionSource, type ProviderSource} from "@/lib/providers";
 
 /**
  * The title and the line under it. A vendor card is named after the vendor and
  * says where its requests go; the two cards that are not a vendor say what they
  * are instead, because their base URL would not.
  */
-export function sourceTitle(source: ChannelSource) {
+export function sourceTitle(source: ProviderSource) {
   if (source.key === subscriptionSource) {
-    return i18next.t("channel:Claude subscription");
+    return i18next.t("provider:Claude subscription");
   }
   if (source.key === customSource) {
-    return i18next.t("channel:Custom vendor");
+    return i18next.t("provider:Custom vendor");
   }
   return source.label;
 }
 
-function sourceDetail(source: ChannelSource) {
+function sourceDetail(source: ProviderSource) {
   if (source.key === subscriptionSource) {
-    return i18next.t("channel:Claude subscription detail");
+    return i18next.t("provider:Claude subscription detail");
   }
   if (source.key === customSource) {
-    return i18next.t("channel:Custom vendor detail");
+    return i18next.t("provider:Custom vendor detail");
   }
-  return source.channel.baseUrl ?? "";
+  return source.provider.baseUrl ?? "";
 }
 
-function sourceIcon(source: ChannelSource) {
+function sourceIcon(source: ProviderSource) {
   if (source.key === subscriptionSource) {
     return LogIn;
   }
@@ -53,14 +53,14 @@ function sourceIcon(source: ChannelSource) {
 }
 
 /**
- * The first step of creating a channel: where its credentials come from. Picking
+ * The first step of creating a provider: where its credentials come from. Picking
  * a card fills in the type, base URL, models and authentication mode, so a
  * subscription needs nothing typed and a vendor needs only its key.
  */
-export function ChannelSourcePicker({onPick}: {onPick: (source: ChannelSource) => void}) {
+export function ProviderSourcePicker({onPick}: {onPick: (source: ProviderSource) => void}) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {channelSources.map(source => {
+      {providerSources.map(source => {
         const Icon = sourceIcon(source);
         return (
           <button

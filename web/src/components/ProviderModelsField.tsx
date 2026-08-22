@@ -16,28 +16,28 @@ import * as React from "react";
 import {Check, RefreshCw, X} from "lucide-react";
 import i18next from "i18next";
 
-import * as ChannelBackend from "@/backend/ChannelBackend";
+import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
 import {Field} from "@/components/shared/form-dialog";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {TagsInput} from "@/components/ui/tags-input";
-import {modelPresets, modelsPlaceholder, usesClientAuth} from "@/lib/channels";
-import type {Channel} from "@/types";
+import {modelPresets, modelsPlaceholder, usesClientAuth} from "@/lib/providers";
+import type {Provider} from "@/types";
 
 /**
- * The Models field of both channel forms: the names can be typed, or asked of
+ * The Models field of both provider forms: the names can be typed, or asked of
  * the upstream itself, which every OpenAI- and Anthropic-compatible API answers
  * at its models endpoint. What comes back is offered as chips to pick from
  * rather than written straight into the field: an aggregator lists hundreds of
- * models, most of which this channel is not meant to serve.
+ * models, most of which this provider is not meant to serve.
  */
-export function ChannelModelsField({
-  channel,
+export function ProviderModelsField({
+  provider,
   hint,
   onChange,
 }: {
-  channel: Channel;
+  provider: Provider;
   hint?: React.ReactNode;
   onChange: (models: string[]) => void;
 }) {
@@ -48,32 +48,32 @@ export function ChannelModelsField({
   // the form points somewhere else.
   React.useEffect(() => {
     setFetched(null);
-  }, [channel.baseUrl, channel.type]);
+  }, [provider.baseUrl, provider.type]);
 
-  const models = channel.models ?? [];
-  // A channel that forwards the caller's login sends no key upstream, so there
+  const models = provider.models ?? [];
+  // A provider that forwards the caller's login sends no key upstream, so there
   // is nothing to list models with, and an empty list already means "any model".
-  const canFetch = !usesClientAuth(channel) && channel.baseUrl !== "";
+  const canFetch = !usesClientAuth(provider) && provider.baseUrl !== "";
 
   const fetchModels = () => {
     setFetching(true);
-    ChannelBackend.getChannelModels(channel)
+    ProviderBackend.getProviderModels(provider)
       .then(res => {
         setFetching(false);
         if (res.status === "error") {
-          Setting.showMessage("error", `${i18next.t("channel:Failed to fetch models")}: ${res.msg}`);
+          Setting.showMessage("error", `${i18next.t("provider:Failed to fetch models")}: ${res.msg}`);
           return;
         }
         const list = res.data ?? [];
         setFetched(list);
         Setting.showMessage(
           "success",
-          i18next.t("channel:Fetched {count} models").replace("{count}", `${list.length}`),
+          i18next.t("provider:Fetched {count} models").replace("{count}", `${list.length}`),
         );
       })
       .catch(error => {
         setFetching(false);
-        Setting.showMessage("error", `${i18next.t("channel:Failed to fetch models")}: ${error}`);
+        Setting.showMessage("error", `${i18next.t("provider:Failed to fetch models")}: ${error}`);
       });
   };
 
@@ -94,11 +94,11 @@ export function ChannelModelsField({
     <Field
       label={
         <span className="flex items-center gap-2">
-          {i18next.t("channel:Models")}
+          {i18next.t("provider:Models")}
           {canFetch ? (
             <Button type="button" size="xs" variant="outline" loading={fetching} onClick={fetchModels}>
               <RefreshCw />
-              {i18next.t("channel:Fetch models")}
+              {i18next.t("provider:Fetch models")}
             </Button>
           ) : null}
         </span>
@@ -107,22 +107,22 @@ export function ChannelModelsField({
     >
       <TagsInput
         value={models}
-        placeholder={modelsPlaceholder(channel.type)}
-        suggestions={fetched ?? modelPresets(channel.type)}
+        placeholder={modelsPlaceholder(provider.type)}
+        suggestions={fetched ?? modelPresets(provider.type)}
         onChange={onChange}
       />
       {fetched === null ? null : (
         <div className="grid gap-2 rounded-md border p-2">
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground text-xs">
-              {i18next.t("channel:Models from upstream")} ({fetched.length})
+              {i18next.t("provider:Models from upstream")} ({fetched.length})
             </span>
             <div className="flex items-center gap-1">
               <Button type="button" size="xs" variant="ghost" onClick={selectAll}>
-                {i18next.t("channel:Select all")}
+                {i18next.t("provider:Select all")}
               </Button>
               <Button type="button" size="xs" variant="ghost" onClick={clearFetched}>
-                {i18next.t("channel:Clear")}
+                {i18next.t("provider:Clear")}
               </Button>
               <Button
                 type="button"

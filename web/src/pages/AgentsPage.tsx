@@ -74,13 +74,13 @@ export default function AgentsPage({account}: {account: Account}) {
       render: (value: string) => <CodeText copyable>{value}</CodeText>,
     },
     {
-      title: i18next.t("agent:Channel"),
-      key: "channel",
-      dataIndex: "channel",
+      title: i18next.t("agent:Provider"),
+      key: "provider",
+      dataIndex: "provider",
       render: (value: string, record) =>
         value ? (
           <div className="flex flex-col items-start gap-1">
-            <Link to={`/channels/${value}`} className="text-primary hover:underline">
+            <Link to={`/providers/${value}`} className="text-primary hover:underline">
               {value}
             </Link>
             <span className="flex flex-wrap items-center gap-1">
@@ -89,8 +89,8 @@ export default function AgentsPage({account}: {account: Account}) {
                   <Badge variant="muted">{`+${record.fallbacks.length}`}</Badge>
                 </SimpleTooltip>
               ) : null}
-              {record.provider?.applied ? (
-                <SimpleTooltip title={record.provider.detail}>
+              {record.providerConfig?.applied ? (
+                <SimpleTooltip title={record.providerConfig.detail}>
                   <Badge variant="success">
                     {i18next.t(record.mode === directMode ? "agent:Direct" : "agent:Gateway")}
                   </Badge>
@@ -99,7 +99,7 @@ export default function AgentsPage({account}: {account: Account}) {
             </span>
           </div>
         ) : (
-          <span className="text-muted-foreground">{i18next.t("agent:No channel")}</span>
+          <span className="text-muted-foreground">{i18next.t("agent:No provider")}</span>
         ),
     },
     {

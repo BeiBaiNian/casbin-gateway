@@ -22,7 +22,7 @@ import (
 	"testing"
 )
 
-const testAad = "admin/channel1"
+const testAad = "admin/provider1"
 
 func TestEncryptDecryptRoundTrip(t *testing.T) {
 	secret := "test-secret"
@@ -102,11 +102,11 @@ func TestDecryptEncryptedWithoutKeyFails(t *testing.T) {
 }
 
 func TestDecryptWrongAadFails(t *testing.T) {
-	ciphertext, _ := EncryptWithKey("key", "secret-value", "admin/channel1")
-	if _, err := DecryptWithKey("key", ciphertext, "admin/channel2"); err == nil {
+	ciphertext, _ := EncryptWithKey("key", "secret-value", "admin/provider1")
+	if _, err := DecryptWithKey("key", ciphertext, "admin/provider2"); err == nil {
 		t.Fatal("decrypting with a different aad should fail")
 	}
-	if got, err := DecryptWithKey("key", ciphertext, "admin/channel1"); err != nil || got != "secret-value" {
+	if got, err := DecryptWithKey("key", ciphertext, "admin/provider1"); err != nil || got != "secret-value" {
 		t.Fatalf("decrypting with the original aad failed: got %q, err %v", got, err)
 	}
 }
@@ -159,7 +159,7 @@ func TestNeedsReEncryption(t *testing.T) {
 	}
 }
 
-// The api_key column in object.Channel is sized against this growth.
+// The api_key column in object.Provider is sized against this growth.
 func TestCiphertextFitsColumn(t *testing.T) {
 	const maxKeyChars, columnWidth = 500, 1000
 

@@ -13,20 +13,20 @@
 // limitations under the License.
 
 import * as Setting from "@/Setting";
-import type {Channel} from "@/types";
+import type {Provider} from "@/types";
 
-/** Mirrors object.ChannelProtocol on the server. */
-export function channelProtocol(type: string) {
+/** Mirrors object.ProviderProtocol on the server. */
+export function providerProtocol(type: string) {
   return type === "anthropic" ? "anthropic" : "openai";
 }
 
-/** Mirrors object.ChannelAuthChannel and object.ChannelAuthClient on the server. */
-export const authChannel = "channel";
+/** Mirrors object.ProviderAuthProvider and object.ProviderAuthClient on the server. */
+export const authProvider = "provider";
 export const authClient = "client";
 
 /** Mirrors object.UsesClientAuth: whose credentials reach the upstream. */
-export function usesClientAuth(channel: {authMode?: string} | undefined) {
-  return channel?.authMode === authClient;
+export function usesClientAuth(provider: {authMode?: string} | undefined) {
+  return provider?.authMode === authClient;
 }
 
 /** The env vars a client of one wire format reads its endpoint and key from. */
@@ -37,7 +37,7 @@ const protocolEnv: Record<string, {baseUrl: string; token: string}> = {
 
 /**
  * A stand-in for the key a client refuses to start without. Gateway authenticates
- * upstream with the channel's own key, so this value is never used for anything.
+ * upstream with the provider's own key, so this value is never used for anything.
  */
 const placeholderToken = "casbin-gateway";
 
@@ -46,7 +46,7 @@ export type Shell = (typeof shells)[number];
 
 /**
  * The lines that point a client of one wire format at a base URL. A client-auth
- * channel forwards the client's own credentials, so the token is left out
+ * provider forwards the client's own credentials, so the token is left out
  * there: setting it would replace the sign-in the client already has.
  */
 export function envSnippet(protocol: string, baseUrl: string, shell: Shell, includeToken = true) {
@@ -83,15 +83,15 @@ export function localShell(): Shell {
   return navigator.userAgent.includes("Windows") ? "PowerShell" : "bash";
 }
 
-/** A vendor the channel forms can fill themselves in from. */
-export interface ChannelPreset {
+/** A vendor the provider forms can fill themselves in from. */
+export interface ProviderPreset {
   label: string;
   type: string;
   baseUrl: string;
   models: string[];
 }
 
-export const channelPresets: ChannelPreset[] = [
+export const providerPresets: ProviderPreset[] = [
   {
     label: "OpenAI",
     type: "openai",
@@ -124,14 +124,14 @@ export const channelPresets: ChannelPreset[] = [
   },
 ];
 
-/** Where a new channel gets its credentials: one card of the picker. */
-export interface ChannelSource {
+/** Where a new provider gets its credentials: one card of the picker. */
+export interface ProviderSource {
   /** Stable id. The two cards that are not a vendor are titled by the picker. */
   key: string;
   /** The vendor's own name, empty when the picker titles the card itself. */
   label: string;
   /** What the form starts from once the card is picked. */
-  channel: Partial<Channel>;
+  provider: Partial<Provider>;
 }
 
 export const subscriptionSource = "subscription";
@@ -143,48 +143,48 @@ export const customSource = "custom";
  * is the vendor of the clients that mode works with; Codex signs in against an
  * API Gateway does not relay.
  */
-export const channelSources: ChannelSource[] = [
+export const providerSources: ProviderSource[] = [
   {
     key: subscriptionSource,
     label: "",
-    channel: {
+    provider: {
       type: "anthropic",
-      baseUrl: channelPresets.find(preset => preset.type === "anthropic")?.baseUrl ?? "",
+      baseUrl: providerPresets.find(preset => preset.type === "anthropic")?.baseUrl ?? "",
       models: [],
       apiKey: "",
       authMode: authClient,
     },
   },
-  ...channelPresets.map(preset => ({
+  ...providerPresets.map(preset => ({
     key: preset.label.toLowerCase(),
     label: preset.label,
-    channel: {
+    provider: {
       type: preset.type,
       baseUrl: preset.baseUrl,
       models: preset.models,
-      authMode: authChannel,
+      authMode: authProvider,
     },
   })),
   {
     key: customSource,
     label: "",
-    channel: {type: "custom", baseUrl: "", models: [], authMode: authChannel},
+    provider: {type: "custom", baseUrl: "", models: [], authMode: authProvider},
   },
 ];
 
-/** The base URLs and models offered for a channel type, from the vendors of it. */
+/** The base URLs and models offered for a provider type, from the vendors of it. */
 export function baseUrlPresets(type: string) {
-  return channelPresets.filter(preset => preset.type === type).map(preset => preset.baseUrl);
+  return providerPresets.filter(preset => preset.type === type).map(preset => preset.baseUrl);
 }
 
 export function modelPresets(type: string) {
-  return channelPresets.filter(preset => preset.type === type).flatMap(preset => preset.models);
+  return providerPresets.filter(preset => preset.type === type).flatMap(preset => preset.models);
 }
 
 export function baseUrlPlaceholder(type: string) {
-  return channelProtocol(type) === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1";
+  return providerProtocol(type) === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1";
 }
 
 export function modelsPlaceholder(type: string) {
-  return channelProtocol(type) === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini";
+  return providerProtocol(type) === "anthropic" ? "claude-opus-5, claude-sonnet-5" : "gpt-5, gpt-5-mini";
 }

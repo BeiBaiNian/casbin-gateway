@@ -19,7 +19,7 @@ import copy from "copy-to-clipboard";
 import i18next from "i18next";
 
 import * as AgentBackend from "@/backend/AgentBackend";
-import * as ChannelBackend from "@/backend/ChannelBackend";
+import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as LlmRecordBackend from "@/backend/LlmRecordBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
@@ -47,8 +47,8 @@ import type {
   Agent,
   AgentRecord,
   AgentSession,
-  Channel,
-  ChannelHealth,
+  Provider,
+  ProviderHealth,
   LlmRecordStats,
 } from "@/types";
 
@@ -121,7 +121,7 @@ function MonitoringCard({
   );
 }
 
-/** What this agent has spent through the proxy, and on which channel. */
+/** What this agent has spent through the proxy, and on which provider. */
 function UsageCard({stats}: {stats: LlmRecordStats | null}) {
   return (
     <Card>
@@ -150,16 +150,16 @@ function UsageCard({stats}: {stats: LlmRecordStats | null}) {
           </p>
         ) : null}
 
-        {/* The per-channel split is what says whether the fallbacks are carrying
-            traffic the bound channel could not. */}
-        {stats && stats.channels.length > 0 ? (
+        {/* The per-provider split is what says whether the fallbacks are carrying
+            traffic the bound provider could not. */}
+        {stats && stats.providers.length > 0 ? (
           <div className="flex flex-wrap gap-2">
-            {stats.channels.map(channel => (
-              <Badge key={channel.channel} variant="muted" className="gap-2">
-                <span className="font-mono">{channel.channel}</span>
-                <span>{channel.requests.toLocaleString()}</span>
+            {stats.providers.map(provider => (
+              <Badge key={provider.provider} variant="muted" className="gap-2">
+                <span className="font-mono">{provider.provider}</span>
+                <span>{provider.requests.toLocaleString()}</span>
                 <span className="text-muted-foreground">
-                  {formatTokens(channel.tokens)} · {formatCost(channel.cost)}
+                  {formatTokens(provider.tokens)} · {formatCost(provider.cost)}
                 </span>
               </Badge>
             ))}
@@ -181,8 +181,8 @@ export default function AgentDetailPage({account}: {account: Account}) {
   const [tab, setTab] = React.useState<Tab>("Agent Sessions");
   const [records, setRecords] = React.useState<AgentRecord[]>([]);
   const [recordError, setRecordError] = React.useState("");
-  const [channels, setChannels] = React.useState<Channel[]>([]);
-  const [health, setHealth] = React.useState<ChannelHealth[]>([]);
+  const [providers, setProviders] = React.useState<Provider[]>([]);
+  const [health, setHealth] = React.useState<ProviderHealth[]>([]);
   const [stats, setStats] = React.useState<LlmRecordStats | null>(null);
 
   const agentId = params.agentId ?? "";
@@ -199,15 +199,15 @@ export default function AgentDetailPage({account}: {account: Account}) {
     if (!isAdmin) {
       return;
     }
-    ChannelBackend.getChannels(account.name)
+    ProviderBackend.getProviders(account.name)
       .then(res => {
         if (res.status === "ok") {
-          setChannels(res.data ?? []);
+          setProviders(res.data ?? []);
         }
       })
-      .catch(() => setChannels([]));
+      .catch(() => setProviders([]));
 
-    ChannelBackend.getChannelHealth()
+    ProviderBackend.getProviderHealth()
       .then(res => {
         if (res.status === "ok") {
           setHealth(res.data ?? []);
@@ -392,7 +392,7 @@ export default function AgentDetailPage({account}: {account: Account}) {
 
         <ProviderCard
           agent={agent}
-          channels={channels}
+          providers={providers}
           health={health}
           busy={busyKey === agentKey(agent)}
           onRouting={routing => setRouting(agent, routing)}

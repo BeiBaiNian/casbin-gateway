@@ -48,7 +48,7 @@ type LlmRecord struct {
 	Protocol string `xorm:"varchar(20)" json:"protocol"`
 	Endpoint string `xorm:"varchar(100)" json:"endpoint"`
 	Model    string `xorm:"varchar(255) index" json:"model"`
-	Channel  string `xorm:"varchar(201) index" json:"channel"`
+	Provider string `xorm:"varchar(201) index" json:"provider"`
 	Agent    string `xorm:"varchar(201) index" json:"agent"`
 	ClientIp string `xorm:"varchar(100) index" json:"clientIp"`
 	Stream   bool   `xorm:"bool" json:"stream"`
@@ -88,7 +88,7 @@ type LlmRecord struct {
 // LlmRecordFilter narrows the record list. Empty fields match everything.
 type LlmRecordFilter struct {
 	Model    string
-	Channel  string
+	Provider string
 	Agent    string
 	ClientIp string
 	Outcome  string
@@ -105,10 +105,10 @@ type LlmModelStat struct {
 	Cost     float64 `json:"cost"`
 }
 
-// LlmChannelStat is one channel's share of the window the stats cover, which is
+// LlmProviderStat is one provider's share of the window the stats cover, which is
 // what tells two providers serving the same models apart.
-type LlmChannelStat struct {
-	Channel  string  `json:"channel"`
+type LlmProviderStat struct {
+	Provider string  `json:"provider"`
 	Requests int64   `json:"requests"`
 	Failed   int64   `json:"failed"`
 	Tokens   int64   `json:"tokens"`
@@ -117,17 +117,17 @@ type LlmChannelStat struct {
 
 // LlmRecordStats totals the records a filter matches.
 type LlmRecordStats struct {
-	Requests         int64            `json:"requests"`
-	Failed           int64            `json:"failed"`
-	PromptTokens     int64            `json:"promptTokens"`
-	CompletionTokens int64            `json:"completionTokens"`
-	CacheReadTokens  int64            `json:"cacheReadTokens"`
-	CacheWriteTokens int64            `json:"cacheWriteTokens"`
-	TotalTokens      int64            `json:"totalTokens"`
-	Cost             float64          `json:"cost"`
-	Unpriced         int64            `json:"unpriced"`
-	Models           []LlmModelStat   `json:"models"`
-	Channels         []LlmChannelStat `json:"channels"`
+	Requests         int64             `json:"requests"`
+	Failed           int64             `json:"failed"`
+	PromptTokens     int64             `json:"promptTokens"`
+	CompletionTokens int64             `json:"completionTokens"`
+	CacheReadTokens  int64             `json:"cacheReadTokens"`
+	CacheWriteTokens int64             `json:"cacheWriteTokens"`
+	TotalTokens      int64             `json:"totalTokens"`
+	Cost             float64           `json:"cost"`
+	Unpriced         int64             `json:"unpriced"`
+	Models           []LlmModelStat    `json:"models"`
+	Providers        []LlmProviderStat `json:"providers"`
 }
 
 // LlmRecordStatus is what the management page shows about the recorder itself,
@@ -468,8 +468,8 @@ func llmRecordSession(filter LlmRecordFilter) *xorm.Session {
 	if filter.Model != "" {
 		session = session.And("model like ?", "%"+filter.Model+"%")
 	}
-	if filter.Channel != "" {
-		session = session.And("channel like ?", "%"+filter.Channel+"%")
+	if filter.Provider != "" {
+		session = session.And("provider like ?", "%"+filter.Provider+"%")
 	}
 	if filter.Agent != "" {
 		session = session.And("agent = ?", filter.Agent)
@@ -590,7 +590,7 @@ func GetLlmRecordStats(filter LlmRecordFilter, topModels int) (*LlmRecordStats, 
 		Cost:             cost,
 		Unpriced:         unpriced,
 		Models:           []LlmModelStat{},
-		Channels:         []LlmChannelStat{},
+		Providers:        []LlmProviderStat{},
 	}
 
 	modelSession := llmRecordSession(filter)
@@ -605,17 +605,17 @@ func GetLlmRecordStats(filter LlmRecordFilter, topModels int) (*LlmRecordStats, 
 		return nil, err
 	}
 
-	channelSession := llmRecordSession(filter)
-	defer channelSession.Close()
-	err = channelSession.Table("llm_record").
-		Select("channel as channel, COUNT(*) as requests, " +
+	providerSession := llmRecordSession(filter)
+	defer providerSession.Close()
+	err = providerSession.Table("llm_record").
+		Select("provider as provider, COUNT(*) as requests, " +
 			"SUM(CASE WHEN status >= 200 AND status < 300 THEN 0 ELSE 1 END) as failed, " +
 			"SUM(total_tokens) as tokens, SUM(cost) as cost").
-		Where("channel <> ''").
-		GroupBy("channel").
+		Where("provider <> ''").
+		GroupBy("provider").
 		Desc("requests").
 		Limit(topModels).
-		Find(&stats.Channels)
+		Find(&stats.Providers)
 	if err != nil {
 		return nil, err
 	}

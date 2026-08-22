@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import i18next from "i18next";
 
-import * as ChannelBackend from "@/backend/ChannelBackend";
+import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
@@ -164,18 +164,18 @@ function AgentCard({
 }
 
 /** The two steps between a fresh install and an agent running on your own key. */
-function SetupGuide({hasChannel, agents}: {hasChannel: boolean; agents: Agent[]}) {
+function SetupGuide({hasProvider, agents}: {hasProvider: boolean; agents: Agent[]}) {
   const steps = [
     {
-      done: hasChannel,
-      title: i18next.t("agent:Add a channel"),
-      hint: i18next.t("agent:Add a channel hint"),
-      to: "/channels",
+      done: hasProvider,
+      title: i18next.t("agent:Add a provider"),
+      hint: i18next.t("agent:Add a provider hint"),
+      to: "/providers",
     },
     {
-      done: agents.some(agent => agent.channel !== ""),
-      title: i18next.t("agent:Bind the channel"),
-      hint: i18next.t("agent:Bind the channel hint"),
+      done: agents.some(agent => agent.provider !== ""),
+      title: i18next.t("agent:Bind the provider"),
+      hint: i18next.t("agent:Bind the provider hint"),
       // With nothing scanned there is no agent to open, only the list saying so.
       to: agents.length > 0 ? agentDetailPath(agents[0]) : "/agents",
     },
@@ -216,16 +216,16 @@ export default function AgentDashboardPage({account}: {account: Account}) {
   const isAdmin = Setting.isAdminUser(account);
   const {agents, loading, error, busyKey, scanned, inContainer, scan, togglePatch} = useAgents(isAdmin);
   const {activity, recordCount} = useAgentSessions(isAdmin, "", 5000);
-  // null until the channel count is known, so the guide never flashes.
-  const [hasChannel, setHasChannel] = React.useState<boolean | null>(null);
+  // null until the provider count is known, so the guide never flashes.
+  const [hasProvider, setHasProvider] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
     if (!isAdmin) {
       return;
     }
-    ChannelBackend.getChannels(account.name, 1, 1)
-      .then(res => setHasChannel(res.status === "ok" && (res.data2 ?? 0) > 0))
-      .catch(() => setHasChannel(false));
+    ProviderBackend.getProviders(account.name, 1, 1)
+      .then(res => setHasProvider(res.status === "ok" && (res.data2 ?? 0) > 0))
+      .catch(() => setHasProvider(false));
   }, [isAdmin, account.name]);
 
   if (!isAdmin) {
@@ -234,7 +234,7 @@ export default function AgentDashboardPage({account}: {account: Account}) {
 
   const patchedCount = agents.filter(agent => agent.patched).length;
   const sessionCount = Object.values(activity).reduce((total, entry) => total + entry.sessionCount, 0);
-  const setupDone = hasChannel === true && agents.some(agent => agent.channel !== "");
+  const setupDone = hasProvider === true && agents.some(agent => agent.provider !== "");
 
   return (
     <PageContainer>
@@ -258,8 +258,8 @@ export default function AgentDashboardPage({account}: {account: Account}) {
         <StatCard label={i18next.t("agent:Records")} value={recordCount} icon={FileSearch} />
       </div>
 
-      {scanned && hasChannel !== null && !setupDone ? (
-        <SetupGuide hasChannel={hasChannel} agents={agents} />
+      {scanned && hasProvider !== null && !setupDone ? (
+        <SetupGuide hasProvider={hasProvider} agents={agents} />
       ) : null}
 
       {!scanned ? (

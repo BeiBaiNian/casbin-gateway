@@ -146,7 +146,7 @@ export interface Record {
   userAgent: string;
 }
 
-export interface Channel {
+export interface Provider {
   owner: string;
   name: string;
   displayName: string;
@@ -159,7 +159,7 @@ export interface Channel {
   authMode: string;
 }
 
-export interface ChannelTestResult {
+export interface ProviderTestResult {
   success: boolean;
   statusCode?: number;
   message: string;
@@ -173,10 +173,10 @@ export interface AgentProviderFile {
 }
 
 /** The state of the agent's own configuration file, written by the orchestrator. */
-export interface AgentProvider {
+export interface AgentProviderConfig {
   supported: boolean;
   applied: boolean;
-  channel: string;
+  provider: string;
   mode: string;
   baseUrl: string;
   time: string;
@@ -196,25 +196,25 @@ export interface Agent {
   detail?: string;
   notice?: string;
   followup?: string;
-  /** The "owner/name" id of the channel this agent's requests are sent to. */
-  channel: string;
-  /** The channels tried, in order, when the bound one cannot answer. */
+  /** The "owner/name" id of the provider this agent's requests are sent to. */
+  provider: string;
+  /** The providers tried, in order, when the bound one cannot answer. */
   fallbacks: string[];
   /** "gateway" routes through the local proxy, "direct" writes the upstream. */
   mode: string;
-  provider: AgentProvider;
+  providerConfig: AgentProviderConfig;
 }
 
-/** What the proxy has seen of one channel since Gateway started. */
-export interface ChannelHealth {
-  channel: string;
+/** What the proxy has seen of one provider since Gateway started. */
+export interface ProviderHealth {
+  provider: string;
   healthy: boolean;
   successes: number;
   failures: number;
   consecutive: number;
   lastError: string;
   lastFailure: string;
-  /** When a suspended channel is tried again, empty while it is healthy. */
+  /** When a suspended provider is tried again, empty while it is healthy. */
   retryTime: string;
 }
 
@@ -256,7 +256,7 @@ export interface LlmRecord {
   protocol: string;
   endpoint: string;
   model: string;
-  channel: string;
+  provider: string;
   agent: string;
   clientIp: string;
   stream: boolean;
@@ -308,8 +308,8 @@ export interface LlmModelStat {
   cost: number;
 }
 
-export interface LlmChannelStat {
-  channel: string;
+export interface LlmProviderStat {
+  provider: string;
   requests: number;
   failed: number;
   tokens: number;
@@ -328,7 +328,7 @@ export interface LlmRecordStats {
   /** Records whose model has no price entry. */
   unpriced: number;
   models: LlmModelStat[];
-  channels: LlmChannelStat[];
+  providers: LlmProviderStat[];
 }
 
 export interface MetricPoint {
@@ -336,7 +336,7 @@ export interface MetricPoint {
   count: number;
 }
 
-export interface Provider {
+export interface CasdoorProvider {
   name: string;
   category: string;
 }

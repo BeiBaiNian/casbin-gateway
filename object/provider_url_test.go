@@ -19,7 +19,7 @@ import (
 	"testing"
 )
 
-func TestBuildChannelUrl(t *testing.T) {
+func TestBuildProviderUrl(t *testing.T) {
 	cases := []struct {
 		baseUrl  string
 		protocol string
@@ -40,37 +40,37 @@ func TestBuildChannelUrl(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got, err := BuildChannelUrl(tc.baseUrl, tc.protocol, tc.endpoint)
+		got, err := BuildProviderUrl(tc.baseUrl, tc.protocol, tc.endpoint)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got != tc.expected {
-			t.Errorf("BuildChannelUrl(%s, %s, %s) = %s, expected %s", tc.baseUrl, tc.protocol, tc.endpoint, got, tc.expected)
+			t.Errorf("BuildProviderUrl(%s, %s, %s) = %s, expected %s", tc.baseUrl, tc.protocol, tc.endpoint, got, tc.expected)
 		}
 	}
 }
 
-func TestChannelProtocolAndAuth(t *testing.T) {
-	for _, channelType := range []string{"openai", "custom", ""} {
-		channel := &Channel{Type: channelType, ApiKey: "sk-test"}
-		if got := ChannelProtocol(channel); got != ProtocolOpenAi {
-			t.Errorf("ChannelProtocol(%q) = %s, expected %s", channelType, got, ProtocolOpenAi)
+func TestProviderProtocolAndAuth(t *testing.T) {
+	for _, providerType := range []string{"openai", "custom", ""} {
+		provider := &Provider{Type: providerType, ApiKey: "sk-test"}
+		if got := ProviderProtocol(provider); got != ProtocolOpenAi {
+			t.Errorf("ProviderProtocol(%q) = %s, expected %s", providerType, got, ProtocolOpenAi)
 		}
 
 		header := http.Header{}
-		SetChannelAuth(header, channel)
+		SetProviderAuth(header, provider)
 		if header.Get("Authorization") != "Bearer sk-test" || header.Get("X-Api-Key") != "" {
 			t.Errorf("openai auth header = %v", header)
 		}
 	}
 
-	channel := &Channel{Type: "anthropic", ApiKey: "sk-ant-test"}
-	if got := ChannelProtocol(channel); got != ProtocolAnthropic {
-		t.Errorf("ChannelProtocol(anthropic) = %s", got)
+	provider := &Provider{Type: "anthropic", ApiKey: "sk-ant-test"}
+	if got := ProviderProtocol(provider); got != ProtocolAnthropic {
+		t.Errorf("ProviderProtocol(anthropic) = %s", got)
 	}
 
 	header := http.Header{}
-	SetChannelAuth(header, channel)
+	SetProviderAuth(header, provider)
 	if header.Get("X-Api-Key") != "sk-ant-test" || header.Get("Authorization") != "" {
 		t.Errorf("anthropic auth header = %v", header)
 	}

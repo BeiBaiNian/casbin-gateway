@@ -39,7 +39,7 @@ export function agentKey(agent: Pick<Agent, "owner" | "path">) {
 }
 
 /**
- * The base URL an agent is pointed at to reach its own channel. One URL serves
+ * The base URL an agent is pointed at to reach its own provider. One URL serves
  * both wire formats: an OpenAI client appends /chat/completions to it, an
  * Anthropic one appends /v1/messages.
  */
@@ -144,31 +144,31 @@ export function useAgents(enabled = true) {
   /**
    * setRouting saves where an agent's requests go. Only the changed part is
    * passed in; the rest of the routing is carried over from the agent so a
-   * fallback list is not dropped by a channel change.
+   * fallback list is not dropped by a provider change.
    */
   const setRouting = React.useCallback(
     (agent: Agent, routing: Partial<AgentBackend.AgentRouting>) => {
       const next: AgentBackend.AgentRouting = {
-        channel: routing.channel ?? agent.channel,
+        provider: routing.provider ?? agent.provider,
         fallbacks: routing.fallbacks ?? agent.fallbacks ?? [],
         mode: routing.mode ?? agent.mode ?? gatewayMode,
       };
 
       setBusyKey(agentKey(agent));
-      AgentBackend.updateAgentChannel(agent.agentId, next)
+      AgentBackend.updateAgentRouting(agent.agentId, next)
         .then(res => {
           if (res.status === "ok") {
             Setting.showMessage(
               "success",
-              next.channel === ""
-                ? i18next.t("agent:Channel cleared")
-                : `${i18next.t("agent:Channel saved")}: ${next.channel}`,
+              next.provider === ""
+                ? i18next.t("agent:Provider cleared")
+                : `${i18next.t("agent:Provider saved")}: ${next.provider}`,
             );
             scan();
           } else {
             Setting.showMessage(
               "error",
-              res.msg || i18next.t("agent:Failed to update agent channel"),
+              res.msg || i18next.t("agent:Failed to update agent provider"),
             );
             // The routing itself may already be stored: only writing the agent's
             // own configuration file failed, and the page has to show that.
@@ -182,7 +182,7 @@ export function useAgents(enabled = true) {
   );
 
   /**
-   * writeProvider writes the bound channel into the agent's own config file, or
+   * writeProvider writes the bound provider into the agent's own config file, or
    * puts back what the file held before Gateway first wrote it.
    */
   const writeProvider = React.useCallback(

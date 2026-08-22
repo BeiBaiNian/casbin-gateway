@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import {query, request} from "@/backend/request";
-import type {Agent, AgentProvider, AgentProviderFile, AgentRecord, AgentSession} from "@/types";
+import type {Agent, AgentProviderConfig, AgentProviderFile, AgentRecord, AgentSession} from "@/types";
 
 export interface PatchTarget {
   agentId: string;
@@ -35,13 +35,13 @@ export function unpatchAgent(target: PatchTarget) {
 }
 
 export interface AgentRouting {
-  channel: string;
+  provider: string;
   fallbacks: string[];
   mode: string;
 }
 
-export function updateAgentChannel(agentId: string, routing: AgentRouting) {
-  return request("/api/update-agent-channel", "POST", {agentId: agentId, ...routing});
+export function updateAgentRouting(agentId: string, routing: AgentRouting) {
+  return request("/api/update-agent-routing", "POST", {agentId: agentId, ...routing});
 }
 
 /** What a switch would write, rendered without touching a file. */
@@ -50,11 +50,11 @@ export function planAgentProvider(target: PatchTarget) {
 }
 
 export function applyAgentProvider(target: PatchTarget) {
-  return request<AgentProvider>("/api/apply-agent-provider", "POST", target);
+  return request<AgentProviderConfig>("/api/apply-agent-provider", "POST", target);
 }
 
 export function restoreAgentProvider(target: PatchTarget) {
-  return request<AgentProvider>("/api/restore-agent-provider", "POST", target);
+  return request<AgentProviderConfig>("/api/restore-agent-provider", "POST", target);
 }
 
 export function getAgentRecords(agent = "", eventType = "", outcome = "", session = "", limit = 200) {

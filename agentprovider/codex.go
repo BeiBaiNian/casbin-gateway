@@ -42,10 +42,10 @@ const (
 
 var codexProviderPath = []string{"model_providers", codexProviderName}
 
-// errCodexNoKey rejects a channel that forwards the caller's own credentials:
+// errCodexNoKey rejects a provider that forwards the caller's own credentials:
 // Codex reads its key from auth.json, and its own ChatGPT sign-in speaks a
 // different API than the chat completions this provider entry points at.
-var errCodexNoKey = errors.New("Codex needs an API key, so it cannot use a channel that forwards the credentials of the caller")
+var errCodexNoKey = errors.New("Codex needs an API key, so it cannot use a provider that forwards the credentials of the caller")
 
 type codexWriter struct {
 	id string

@@ -97,7 +97,7 @@ export default function SiteEditPage({account}: {account: Account}) {
         setApplications(res.data ?? []);
       }
     });
-    MiscBackend.getProviders().then(res => {
+    MiscBackend.getCasdoorProviders().then(res => {
       if (res.status === "ok") {
         // Only the notification providers can be alert targets.
         setProviders(

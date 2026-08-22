@@ -17,9 +17,9 @@ import {useNavigate, useParams} from "react-router-dom";
 import {CircleCheck, CircleX, Save, Zap} from "lucide-react";
 import i18next from "i18next";
 
-import * as ChannelBackend from "@/backend/ChannelBackend";
+import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
-import {ChannelModelsField} from "@/components/ChannelModelsField";
+import {ProviderModelsField} from "@/components/ProviderModelsField";
 import {EnvSnippet} from "@/components/EnvSnippet";
 import {Field} from "@/components/shared/form-dialog";
 import {Loading} from "@/components/shared/loading";
@@ -35,12 +35,12 @@ import {
   authClient,
   baseUrlPlaceholder,
   baseUrlPresets,
-  channelProtocol,
+  providerProtocol,
   gatewayBaseUrl,
   localShell,
   usesClientAuth,
-} from "@/lib/channels";
-import type {Channel, ChannelTestResult} from "@/types";
+} from "@/lib/providers";
+import type {Provider, ProviderTestResult} from "@/types";
 
 // Mirrors object.BuildOpenAiUrl on the server.
 function buildOpenAiUrl(baseUrl: string, endpoint: string) {
@@ -89,110 +89,110 @@ function buildAnthropicUrl(baseUrl: string, endpoint: string) {
   return url.toString();
 }
 
-/** The upstream URL requests to a channel of this type end up at. */
+/** The upstream URL requests to a provider of this type end up at. */
 function buildUpstreamUrl(baseUrl: string, type: string) {
-  return channelProtocol(type) === "anthropic"
+  return providerProtocol(type) === "anthropic"
     ? buildAnthropicUrl(baseUrl, "/v1/messages")
     : buildOpenAiUrl(baseUrl, "/chat/completions");
 }
 
-export default function ChannelEditPage() {
-  const {owner = "", channelName = ""} = useParams();
+export default function ProviderEditPage() {
+  const {owner = "", providerName = ""} = useParams();
   const navigate = useNavigate();
-  // undefined while loading, null when the channel could not be loaded.
-  const [channel, setChannel] = React.useState<Channel | null | undefined>(undefined);
+  // undefined while loading, null when the provider could not be loaded.
+  const [provider, setProvider] = React.useState<Provider | null | undefined>(undefined);
   const [testing, setTesting] = React.useState(false);
-  const [result, setResult] = React.useState<ChannelTestResult | null>(null);
+  const [result, setResult] = React.useState<ProviderTestResult | null>(null);
 
   React.useEffect(() => {
-    ChannelBackend.getChannel(owner, channelName)
+    ProviderBackend.getProvider(owner, providerName)
       .then(res => {
         if (res.status === "ok") {
-          setChannel(res.data);
+          setProvider(res.data);
         } else {
-          setChannel(null);
-          Setting.showMessage("error", `${i18next.t("channel:Failed to get channel")}: ${res.msg}`);
+          setProvider(null);
+          Setting.showMessage("error", `${i18next.t("provider:Failed to get provider")}: ${res.msg}`);
         }
       })
       .catch(error => {
-        setChannel(null);
-        Setting.showMessage("error", `${i18next.t("channel:Failed to get channel")}: ${error}`);
+        setProvider(null);
+        Setting.showMessage("error", `${i18next.t("provider:Failed to get provider")}: ${error}`);
       });
-  }, [channelName, owner]);
+  }, [providerName, owner]);
 
-  const setField = <K extends keyof Channel>(key: K, value: Channel[K]) => {
-    setChannel(current => (current ? {...current, [key]: value} : current));
+  const setField = <K extends keyof Provider>(key: K, value: Provider[K]) => {
+    setProvider(current => (current ? {...current, [key]: value} : current));
   };
 
   const save = () => {
-    if (!channel) {
+    if (!provider) {
       return Promise.resolve(false);
     }
 
-    return ChannelBackend.updateChannel(owner, channelName, channel)
+    return ProviderBackend.updateProvider(owner, providerName, provider)
       .then(res => {
         if (res.status === "error") {
-          Setting.showMessage("error", `${i18next.t("channel:Failed to save")}: ${res.msg}`);
+          Setting.showMessage("error", `${i18next.t("provider:Failed to save")}: ${res.msg}`);
           return false;
         }
-        Setting.showMessage("success", i18next.t("channel:Channel saved"));
+        Setting.showMessage("success", i18next.t("provider:Provider saved"));
         return true;
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("channel:Failed to save")}: ${error}`);
+        Setting.showMessage("error", `${i18next.t("provider:Failed to save")}: ${error}`);
         return false;
       });
   };
 
-  // The test probes the stored channel, so the edits have to be saved first.
+  // The test probes the stored provider, so the edits have to be saved first.
   const test = () => {
     setTesting(true);
     setResult(null);
     save()
-      .then(saved => (saved ? ChannelBackend.testChannel(owner, channelName) : null))
+      .then(saved => (saved ? ProviderBackend.testProvider(owner, providerName) : null))
       .then(res => {
         setTesting(false);
         if (res === null) {
           return;
         }
         if (res.status === "error") {
-          Setting.showMessage("error", `${i18next.t("channel:Failed to test")}: ${res.msg}`);
+          Setting.showMessage("error", `${i18next.t("provider:Failed to test")}: ${res.msg}`);
           return;
         }
         setResult(res.data);
       })
       .catch(error => {
         setTesting(false);
-        Setting.showMessage("error", `${i18next.t("channel:Failed to test")}: ${error}`);
+        Setting.showMessage("error", `${i18next.t("provider:Failed to test")}: ${error}`);
       });
   };
 
-  if (channel === undefined) {
+  if (provider === undefined) {
     return <Loading type="page" />;
   }
 
-  if (channel === null) {
+  if (provider === null) {
     return (
       <ResultScreen
         status="404"
-        title={i18next.t("channel:Channel not found")}
-        extra={<Button onClick={() => navigate("/channels")}>{i18next.t("channel:Channels")}</Button>}
+        title={i18next.t("provider:Provider not found")}
+        extra={<Button onClick={() => navigate("/providers")}>{i18next.t("provider:Providers")}</Button>}
       />
     );
   }
 
-  const upstreamUrl = buildUpstreamUrl(channel.baseUrl, channel.type);
+  const upstreamUrl = buildUpstreamUrl(provider.baseUrl, provider.type);
 
   return (
     <PageContainer>
       <PageHeader
-        title={i18next.t("channel:Edit Channel")}
-        description={`${channel.owner} / ${channel.name}`}
+        title={i18next.t("provider:Edit Provider")}
+        description={`${provider.owner} / ${provider.name}`}
         actions={
           <>
             <Button variant="outline" onClick={test} loading={testing}>
               <Zap />
-              {i18next.t("channel:Test Connectivity")}
+              {i18next.t("provider:Test Connectivity")}
             </Button>
             <Button onClick={save}>
               <Save />
@@ -206,23 +206,23 @@ export default function ChannelEditPage() {
         <MessageAlert
           variant={result.success ? "success" : "destructive"}
           title={
-            result.success ? i18next.t("channel:Connection Successful") : i18next.t("channel:Connection Failed")
+            result.success ? i18next.t("provider:Connection Successful") : i18next.t("provider:Connection Failed")
           }
           description={result.statusCode ? `HTTP ${result.statusCode} - ${result.message}` : result.message}
         />
       ) : null}
 
-      <Section title={i18next.t("channel:Channel")}>
-        <Field label={i18next.t("general:Display name")} htmlFor="channel-display-name">
+      <Section title={i18next.t("provider:Provider")}>
+        <Field label={i18next.t("general:Display name")} htmlFor="provider-display-name">
           <Input
-            id="channel-display-name"
-            value={channel.displayName}
+            id="provider-display-name"
+            value={provider.displayName}
             onChange={event => setField("displayName", event.target.value)}
           />
         </Field>
-        <Field label={i18next.t("channel:Type")}>
+        <Field label={i18next.t("provider:Type")}>
           <SimpleSelect
-            value={channel.type}
+            value={provider.type}
             onChange={value => setField("type", value)}
             options={[
               {label: "OpenAI", value: "openai"},
@@ -232,72 +232,72 @@ export default function ChannelEditPage() {
           />
         </Field>
         <Field
-          label={i18next.t("channel:Base URL")}
+          label={i18next.t("provider:Base URL")}
           hint={
             upstreamUrl === "" ? undefined : (
               <>
-                {i18next.t("channel:Base URL hint")}: <CodeText>{upstreamUrl}</CodeText>
+                {i18next.t("provider:Base URL hint")}: <CodeText>{upstreamUrl}</CodeText>
               </>
             )
           }
         >
           <SearchSelect
             allowCustomValue
-            value={channel.baseUrl}
-            placeholder={baseUrlPlaceholder(channel.type)}
-            options={baseUrlPresets(channel.type)}
+            value={provider.baseUrl}
+            placeholder={baseUrlPlaceholder(provider.type)}
+            options={baseUrlPresets(provider.type)}
             onChange={value => setField("baseUrl", value)}
           />
         </Field>
         <Field
-          label={i18next.t("channel:Authentication")}
-          hint={usesClientAuth(channel) ? i18next.t("channel:Client auth hint") : undefined}
+          label={i18next.t("provider:Authentication")}
+          hint={usesClientAuth(provider) ? i18next.t("provider:Client auth hint") : undefined}
         >
           <SimpleSelect
-            value={channel.authMode}
+            value={provider.authMode}
             // The stored key is meaningless once the caller's own is forwarded,
             // and the server drops it on save anyway.
             onChange={value =>
-              setChannel(current => (current ? {...current, authMode: value, apiKey: ""} : current))
+              setProvider(current => (current ? {...current, authMode: value, apiKey: ""} : current))
             }
             options={[
-              {label: i18next.t("channel:Stored API key"), value: "channel"},
-              {label: i18next.t("channel:Caller's own login"), value: authClient},
+              {label: i18next.t("provider:Stored API key"), value: "provider"},
+              {label: i18next.t("provider:Caller's own login"), value: authClient},
             ]}
           />
         </Field>
-        {usesClientAuth(channel) ? null : (
+        {usesClientAuth(provider) ? null : (
           <Field
-            label={i18next.t("channel:API Key")}
-            htmlFor="channel-api-key"
-            hint={i18next.t("channel:API Key hint")}
+            label={i18next.t("provider:API Key")}
+            htmlFor="provider-api-key"
+            hint={i18next.t("provider:API Key hint")}
           >
             <PasswordInput
-              id="channel-api-key"
+              id="provider-api-key"
               placeholder="sk-..."
-              value={channel.apiKey}
+              value={provider.apiKey}
               onChange={event => setField("apiKey", event.target.value)}
             />
           </Field>
         )}
-        <ChannelModelsField
-          channel={channel}
-          hint={usesClientAuth(channel) ? i18next.t("channel:Any model hint") : undefined}
+        <ProviderModelsField
+          provider={provider}
+          hint={usesClientAuth(provider) ? i18next.t("provider:Any model hint") : undefined}
           onChange={value => setField("models", value)}
         />
-        <Field label={i18next.t("channel:Priority")} hint={i18next.t("channel:Priority hint")}>
-          <NumberInput min={0} value={channel.priority} onChange={value => setField("priority", value)} />
+        <Field label={i18next.t("provider:Priority")} hint={i18next.t("provider:Priority hint")}>
+          <NumberInput min={0} value={provider.priority} onChange={value => setField("priority", value)} />
         </Field>
-        <Field label={i18next.t("channel:Status")}>
+        <Field label={i18next.t("provider:Status")}>
           <SimpleSelect
-            value={channel.status}
+            value={provider.status}
             onChange={value => setField("status", value)}
             options={[
               {
                 label: (
                   <span className="flex items-center gap-2">
                     <CircleCheck className="text-success size-4" />
-                    {i18next.t("channel:Enabled")}
+                    {i18next.t("provider:Enabled")}
                   </span>
                 ),
                 value: "enabled",
@@ -306,7 +306,7 @@ export default function ChannelEditPage() {
                 label: (
                   <span className="flex items-center gap-2">
                     <CircleX className="text-destructive size-4" />
-                    {i18next.t("channel:Disabled")}
+                    {i18next.t("provider:Disabled")}
                   </span>
                 ),
                 value: "disabled",
@@ -316,17 +316,17 @@ export default function ChannelEditPage() {
         </Field>
       </Section>
 
-      <Section title={i18next.t("channel:Usage")} description={i18next.t("channel:Usage hint")} columns={1}>
+      <Section title={i18next.t("provider:Usage")} description={i18next.t("provider:Usage hint")} columns={1}>
         <EnvSnippet
-          protocol={channelProtocol(channel.type)}
-          baseUrl={gatewayBaseUrl(channelProtocol(channel.type))}
+          protocol={providerProtocol(provider.type)}
+          baseUrl={gatewayBaseUrl(providerProtocol(provider.type))}
           defaultShell={localShell()}
-          includeToken={!usesClientAuth(channel)}
+          includeToken={!usesClientAuth(provider)}
         />
-        {usesClientAuth(channel) ? (
-          <p className="text-muted-foreground text-sm">{i18next.t("channel:Client auth usage hint")}</p>
+        {usesClientAuth(provider) ? (
+          <p className="text-muted-foreground text-sm">{i18next.t("provider:Client auth usage hint")}</p>
         ) : null}
-        <p className="text-muted-foreground text-sm">{i18next.t("channel:Model routing hint")}</p>
+        <p className="text-muted-foreground text-sm">{i18next.t("provider:Model routing hint")}</p>
       </Section>
     </PageContainer>
   );

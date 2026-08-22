@@ -30,7 +30,7 @@ var ErrNotSupported = errors.New("switching the provider of this agent is not su
 // The two ways an agent reaches its provider.
 const (
 	// ModeGateway points the agent at the local proxy, so changing the bound
-	// channel afterwards takes effect without touching a file again.
+	// provider afterwards takes effect without touching a file again.
 	ModeGateway = "gateway"
 	// ModeDirect writes the provider's own base URL and key into the config,
 	// which is what a switcher without a proxy does.
@@ -45,9 +45,9 @@ type Target struct {
 }
 
 // Endpoint is the upstream one agent is switched to, already resolved: in
-// gateway mode BaseUrl is the local proxy, in direct mode the channel's own.
+// gateway mode BaseUrl is the local proxy, in direct mode the provider's own.
 type Endpoint struct {
-	Channel  string `json:"channel"`
+	Provider string `json:"provider"`
 	Protocol string `json:"protocol"`
 	BaseUrl  string `json:"baseUrl"`
 	ApiKey   string `json:"apiKey"`
@@ -68,7 +68,7 @@ type File struct {
 type Status struct {
 	Supported bool     `json:"supported"`
 	Applied   bool     `json:"applied"`
-	Channel   string   `json:"channel"`
+	Provider  string   `json:"provider"`
 	Mode      string   `json:"mode"`
 	BaseUrl   string   `json:"baseUrl"`
 	Time      string   `json:"time"`
@@ -147,7 +147,7 @@ func Apply(target Target, endpoint Endpoint) error {
 	}
 	return saveState(target, &state{
 		AgentId:  target.AgentId,
-		Channel:  endpoint.Channel,
+		Provider: endpoint.Provider,
 		Mode:     endpoint.Mode,
 		BaseUrl:  endpoint.BaseUrl,
 		Time:     nowString(),
@@ -212,7 +212,7 @@ func StatusOf(target Target) Status {
 	}
 
 	status.Applied = true
-	status.Channel = saved.Channel
+	status.Provider = saved.Provider
 	status.Mode = saved.Mode
 	status.BaseUrl = saved.BaseUrl
 	status.Time = saved.Time
@@ -221,7 +221,7 @@ func StatusOf(target Target) Status {
 		status.Applied = false
 		status.Detail = "Changed outside Gateway, the agent now points at " + emptyAs(current, "no provider")
 	} else if saved.Mode == ModeGateway {
-		status.Detail = "Routed through the local proxy, switching the channel needs no restart"
+		status.Detail = "Routed through the local proxy, switching the provider needs no restart"
 	} else {
 		status.Detail = "Written directly into the agent configuration"
 	}
@@ -232,11 +232,11 @@ func writerFor(target Target, endpoint Endpoint) (writer, error) {
 	if target.AgentId == "" {
 		return nil, errors.New("agentId is required")
 	}
-	if endpoint.Channel == "" {
-		return nil, errors.New("no channel is bound to this agent")
+	if endpoint.Provider == "" {
+		return nil, errors.New("no provider is bound to this agent")
 	}
 	if endpoint.BaseUrl == "" {
-		return nil, errors.New("the base URL of the bound channel is empty")
+		return nil, errors.New("the base URL of the bound provider is empty")
 	}
 
 	value, ok := writers[target.AgentId]
@@ -244,8 +244,8 @@ func writerFor(target Target, endpoint Endpoint) (writer, error) {
 		return nil, fmt.Errorf("%s: %w", target.AgentId, ErrNotSupported)
 	}
 	if value.Protocol() != endpoint.Protocol {
-		return nil, fmt.Errorf("%s speaks the %s API, but channel %s speaks %s",
-			target.AgentId, value.Protocol(), endpoint.Channel, endpoint.Protocol)
+		return nil, fmt.Errorf("%s speaks the %s API, but provider %s speaks %s",
+			target.AgentId, value.Protocol(), endpoint.Provider, endpoint.Protocol)
 	}
 	return value, nil
 }

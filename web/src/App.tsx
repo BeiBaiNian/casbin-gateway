@@ -36,8 +36,8 @@ import AgentsPage from "@/pages/AgentsPage";
 import AuthCallback from "@/pages/AuthCallback";
 import CertEditPage from "@/pages/CertEditPage";
 import CertListPage from "@/pages/CertListPage";
-import ChannelEditPage from "@/pages/ChannelEditPage";
-import ChannelListPage from "@/pages/ChannelListPage";
+import ProviderEditPage from "@/pages/ProviderEditPage";
+import ProviderListPage from "@/pages/ProviderListPage";
 import LlmRecordsPage from "@/pages/LlmRecordsPage";
 import NodeEditPage from "@/pages/NodeEditPage";
 import NodeListPage from "@/pages/NodeListPage";
@@ -287,10 +287,10 @@ export default function App() {
                 <Route path="/records/:owner/:id" element={requireSignin(() => <RecordEditPage />)} />
                 <Route path="/rules" element={requireSignin(user => <RuleListPage account={user} />)} />
                 <Route path="/rules/:owner/:ruleName" element={requireSignin(() => <RuleEditPage />)} />
-                <Route path="/channels" element={requireSignin(user => <ChannelListPage account={user} />)} />
+                <Route path="/providers" element={requireSignin(user => <ProviderListPage account={user} />)} />
                 <Route
-                  path="/channels/:owner/:channelName"
-                  element={requireSignin(() => <ChannelEditPage />)}
+                  path="/providers/:owner/:providerName"
+                  element={requireSignin(() => <ProviderEditPage />)}
                 />
                 <Route
                   path="/llm-records"

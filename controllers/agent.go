@@ -32,15 +32,15 @@ type discoveredAgent struct {
 	agent.Installation
 	agentpatch.Status
 
-	// Channel is the "owner/name" id of the bound channel, and Fallbacks are the
-	// channels tried after it. Installations are discovered per host while the
+	// Provider is the "owner/name" id of the bound provider, and Fallbacks are the
+	// providers tried after it. Installations are discovered per host while the
 	// routing is stored per agent id, so they merge here.
-	Channel   string   `json:"channel"`
+	Provider  string   `json:"provider"`
 	Fallbacks []string `json:"fallbacks"`
 	Mode      string   `json:"mode"`
-	// Provider is the state of the agent's own configuration file, which is
-	// what the config orchestrator writes.
-	Provider agentprovider.Status `json:"provider"`
+	// ProviderConfig is the state of the agent's own configuration file, which
+	// is what the config orchestrator writes.
+	ProviderConfig agentprovider.Status `json:"providerConfig"`
 }
 
 // GetAgents scans known installation locations and returns the AI agents
@@ -66,14 +66,14 @@ func (c *ApiController) GetAgents() {
 	for _, installation := range installations {
 		target := targetOf(installation)
 		item := &discoveredAgent{
-			Installation: installation,
-			Status:       agentpatch.StatusOf(target),
-			Fallbacks:    []string{},
-			Mode:         object.ModeGateway,
-			Provider:     agentprovider.StatusOf(providerTarget(target)),
+			Installation:   installation,
+			Status:         agentpatch.StatusOf(target),
+			Fallbacks:      []string{},
+			Mode:           object.ModeGateway,
+			ProviderConfig: agentprovider.StatusOf(providerTarget(target)),
 		}
 		if stored, ok := agents[installation.AgentId]; ok {
-			item.Channel = stored.Channel
+			item.Provider = stored.Provider
 			item.Mode = stored.Mode
 			if stored.Fallbacks != nil {
 				item.Fallbacks = stored.Fallbacks
@@ -84,22 +84,22 @@ func (c *ApiController) GetAgents() {
 	c.ResponseOk(result, agent.InContainer())
 }
 
-// UpdateAgentChannel binds one agent to the channel its requests are forwarded
-// to, to the channels tried when that one cannot answer, and to the way it
+// UpdateAgentRouting binds one agent to the provider its requests are forwarded
+// to, to the providers tried when that one cannot answer, and to the way it
 // reaches them. The binding is per agent id.
 //
 // An installation whose configuration file Gateway already wrote is rewritten
 // here: in gateway mode the file does not change, which is what makes a switch
-// take effect without restarting the agent, but in direct mode the new channel
+// take effect without restarting the agent, but in direct mode the new provider
 // only reaches the agent through its own configuration.
-func (c *ApiController) UpdateAgentChannel() {
+func (c *ApiController) UpdateAgentRouting() {
 	if c.RequireAdmin() {
 		return
 	}
 
 	var form struct {
 		AgentId   string   `json:"agentId"`
-		Channel   string   `json:"channel"`
+		Provider  string   `json:"provider"`
 		Fallbacks []string `json:"fallbacks"`
 		Mode      string   `json:"mode"`
 	}
@@ -112,18 +112,18 @@ func (c *ApiController) UpdateAgentChannel() {
 		return
 	}
 
-	if err := object.SetAgentRouting(form.AgentId, form.Channel, form.Fallbacks, form.Mode); err != nil {
+	if err := object.SetAgentRouting(form.AgentId, form.Provider, form.Fallbacks, form.Mode); err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	if form.Channel != "" {
+	if form.Provider != "" {
 		if failure := reapplyAgentProvider(form.AgentId); failure != "" {
 			c.ResponseError("the routing was saved, but the agent configuration was not rewritten: " + failure)
 			return
 		}
 	}
-	c.ResponseOk(form.Channel)
+	c.ResponseOk(form.Provider)
 }
 
 // PatchAgent enables monitoring for one discovered installation.

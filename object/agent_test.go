@@ -19,66 +19,66 @@ import (
 	"testing"
 )
 
-func TestSetAgentChannelBindsAndUnbinds(t *testing.T) {
+func TestSetAgentProviderBindsAndUnbinds(t *testing.T) {
 	initSqliteOrmer(t)
 
-	channel := newTestChannel("codex-upstream", "sk-test")
-	channel.BaseUrl = "https://api.openai.com/v1"
-	if _, err := AddChannel(channel); err != nil {
+	provider := newTestProvider("codex-upstream", "sk-test")
+	provider.BaseUrl = "https://api.openai.com/v1"
+	if _, err := AddProvider(provider); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := SetAgentChannel("codex", "admin/codex-upstream"); err != nil {
+	if err := SetAgentProvider("codex", "admin/codex-upstream"); err != nil {
 		t.Fatal(err)
 	}
 	agents, err := GetAgents()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if agents["codex"].Channel != "admin/codex-upstream" {
-		t.Fatalf("expected the binding to be stored, got %q", agents["codex"].Channel)
+	if agents["codex"].Provider != "admin/codex-upstream" {
+		t.Fatalf("expected the binding to be stored, got %q", agents["codex"].Provider)
 	}
 
-	if err := SetAgentChannel("codex", ""); err != nil {
+	if err := SetAgentProvider("codex", ""); err != nil {
 		t.Fatal(err)
 	}
 	agents, err = GetAgents()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if agents["codex"].Channel != "" {
-		t.Fatal("expected an empty channel to unbind the agent")
+	if agents["codex"].Provider != "" {
+		t.Fatal("expected an empty provider to unbind the agent")
 	}
 }
 
-func TestSetAgentChannelRejectsAMissingChannel(t *testing.T) {
+func TestSetAgentProviderRejectsAMissingProvider(t *testing.T) {
 	initSqliteOrmer(t)
 
-	if err := SetAgentChannel("codex", "admin/nope"); err == nil {
-		t.Fatal("expected binding to a channel that does not exist to fail")
+	if err := SetAgentProvider("codex", "admin/nope"); err == nil {
+		t.Fatal("expected binding to a provider that does not exist to fail")
 	}
-	if err := SetAgentChannel("codex", "nope"); err == nil {
-		t.Fatal("expected a malformed channel id to fail")
+	if err := SetAgentProvider("codex", "nope"); err == nil {
+		t.Fatal("expected a malformed provider id to fail")
 	}
 }
 
-func TestGetChannelByAgent(t *testing.T) {
+func TestGetProviderByAgent(t *testing.T) {
 	initSqliteOrmer(t)
 
-	channel := newTestChannel("bound", "sk-test")
-	channel.BaseUrl = "https://api.openai.com/v1"
-	if _, err := AddChannel(channel); err != nil {
+	provider := newTestProvider("bound", "sk-test")
+	provider.BaseUrl = "https://api.openai.com/v1"
+	if _, err := AddProvider(provider); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := GetChannelByAgent("codex"); !errors.Is(err, ErrAgentNoChannel) {
-		t.Fatalf("expected ErrAgentNoChannel for an unbound agent, got %v", err)
+	if _, err := GetProviderByAgent("codex"); !errors.Is(err, ErrAgentNoProvider) {
+		t.Fatalf("expected ErrAgentNoProvider for an unbound agent, got %v", err)
 	}
 
-	if err := SetAgentChannel("codex", "admin/bound"); err != nil {
+	if err := SetAgentProvider("codex", "admin/bound"); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := GetChannelByAgent("codex")
+	resolved, err := GetProviderByAgent("codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,28 +86,28 @@ func TestGetChannelByAgent(t *testing.T) {
 		t.Fatalf("expected the decrypted API key, got %q", resolved.ApiKey)
 	}
 
-	if _, err := DeleteChannel(channel); err != nil {
+	if _, err := DeleteProvider(provider); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := GetChannelByAgent("codex"); err == nil {
-		t.Fatal("expected a binding pointing at a deleted channel to fail")
+	if _, err := GetProviderByAgent("codex"); err == nil {
+		t.Fatal("expected a binding pointing at a deleted provider to fail")
 	}
 }
 
-func TestGetChannelByAgentRejectsADisabledChannel(t *testing.T) {
+func TestGetProviderByAgentRejectsADisabledProvider(t *testing.T) {
 	initSqliteOrmer(t)
 
-	channel := newTestChannel("off", "sk-test")
-	channel.BaseUrl = "https://api.openai.com/v1"
-	channel.Status = "disabled"
-	if _, err := AddChannel(channel); err != nil {
+	provider := newTestProvider("off", "sk-test")
+	provider.BaseUrl = "https://api.openai.com/v1"
+	provider.Status = "disabled"
+	if _, err := AddProvider(provider); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetAgentChannel("codex", "admin/off"); err != nil {
+	if err := SetAgentProvider("codex", "admin/off"); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := GetChannelByAgent("codex"); err == nil {
-		t.Fatal("expected a disabled channel to be rejected")
+	if _, err := GetProviderByAgent("codex"); err == nil {
+		t.Fatal("expected a disabled provider to be rejected")
 	}
 }

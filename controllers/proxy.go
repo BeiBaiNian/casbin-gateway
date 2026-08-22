@@ -76,7 +76,7 @@ type proxyRoute struct {
 	body   []byte
 	model  string
 	stream bool
-	// source describes how the channels were chosen, for the error a client
+	// source describes how the providers were chosen, for the error a client
 	// sees when none of them can be used.
 	source string
 	start  time.Time
@@ -131,8 +131,8 @@ var proxyClient = &http.Client{
 }
 
 // ChatCompletions is the OpenAI-compatible chat completions proxy endpoint.
-// It matches the upstream channels by model name and forwards the request and
-// response body as-is (pass-through), trying the channels in priority order
+// It matches the upstream providers by model name and forwards the request and
+// response body as-is (pass-through), trying the providers in priority order
 // until one of them answers. Supports SSE streaming when stream=true in the
 // request body.
 // This endpoint does NOT require Casdoor authentication (auth deferred to milestone 1.3).
@@ -153,7 +153,7 @@ func (c *ApiController) CountTokens() {
 }
 
 // AgentChatCompletions is the per-agent entry point of the same proxy: an agent
-// pointed at ".../v1/agents/<agentId>" reaches the channel bound to it rather
+// pointed at ".../v1/agents/<agentId>" reaches the provider bound to it rather
 // than one chosen by model name.
 func (c *ApiController) AgentChatCompletions() {
 	c.proxyByAgent(openAiChat)
@@ -171,7 +171,7 @@ func (c *ApiController) AgentCountTokens() {
 	c.proxyByAgent(anthropicCountTokens)
 }
 
-// proxyByModel forwards to the channels that serve the model the request names.
+// proxyByModel forwards to the providers that serve the model the request names.
 func (c *ApiController) proxyByModel(target proxyTarget) {
 	route, ok := c.readProxyRoute(target)
 	if !ok {
@@ -182,24 +182,24 @@ func (c *ApiController) proxyByModel(target proxyTarget) {
 	// what a record describes, so this is the only place one is written.
 	defer c.finishLlmRecord(route)
 
-	// Match the channels globally, without an owner filter.
-	channels, err := object.GetChannelsByModel(route.model)
+	// Match the providers globally, without an owner filter.
+	providers, err := object.GetProvidersByModel(route.model)
 	if err != nil {
-		if errors.Is(err, object.ErrNoChannelAvailable) {
+		if errors.Is(err, object.ErrNoProviderAvailable) {
 			route.recordOutcome(http.StatusBadRequest, err.Error())
 			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
 		} else {
-			beego.Error("channel lookup failed:", err)
-			route.recordOutcome(http.StatusBadGateway, "channel lookup failed")
-			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", "channel lookup failed")
+			beego.Error("provider lookup failed:", err)
+			route.recordOutcome(http.StatusBadGateway, "provider lookup failed")
+			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", "provider lookup failed")
 		}
 		return
 	}
 
-	c.forwardToChannels(channels, route)
+	c.forwardToProviders(providers, route)
 }
 
-// proxyByAgent forwards to the channel chain bound to the agent in the path.
+// proxyByAgent forwards to the provider chain bound to the agent in the path.
 func (c *ApiController) proxyByAgent(target proxyTarget) {
 	route, ok := c.readProxyRoute(target)
 	if !ok {
@@ -212,22 +212,22 @@ func (c *ApiController) proxyByAgent(target proxyTarget) {
 	}
 	defer c.finishLlmRecord(route)
 
-	// The whole chain is forwarded to, so a bound channel that is down fails
+	// The whole chain is forwarded to, so a bound provider that is down fails
 	// over to the agent's fallbacks instead of failing the request.
-	channels, err := object.GetChannelsByAgent(agentId)
+	providers, err := object.GetProvidersByAgent(agentId)
 	if err != nil {
-		if errors.Is(err, object.ErrAgentNoChannel) {
+		if errors.Is(err, object.ErrAgentNoProvider) {
 			route.recordOutcome(http.StatusBadRequest, err.Error())
 			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
 		} else {
-			beego.Error("agent channel lookup failed:", err)
+			beego.Error("agent provider lookup failed:", err)
 			route.recordOutcome(http.StatusBadGateway, err.Error())
 			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", err.Error())
 		}
 		return
 	}
 
-	c.forwardToChannels(channels, route)
+	c.forwardToProviders(providers, route)
 }
 
 func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
@@ -256,22 +256,22 @@ func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
 	return route, true
 }
 
-// forwardToChannels relays the request to the first channel that answers.
-func (c *ApiController) forwardToChannels(channels []*object.Channel, route *proxyRoute) {
-	// Drop the channels this proxy cannot talk to before forwarding, so that
-	// the last usable channel is known and its response can be relayed as-is.
-	usableChannels := []*object.Channel{}
+// forwardToProviders relays the request to the first provider that answers.
+func (c *ApiController) forwardToProviders(providers []*object.Provider, route *proxyRoute) {
+	// Drop the providers this proxy cannot talk to before forwarding, so that
+	// the last usable provider is known and its response can be relayed as-is.
+	usableProviders := []*object.Provider{}
 	skipReason := ""
-	for _, channel := range channels {
-		if reason := c.channelUnusableReason(channel, route.target.protocol); reason != "" {
-			beego.Error("skipped channel", channel.GetId()+":", reason)
+	for _, provider := range providers {
+		if reason := c.providerUnusableReason(provider, route.target.protocol); reason != "" {
+			beego.Error("skipped provider", provider.GetId()+":", reason)
 			skipReason = reason
 			continue
 		}
-		usableChannels = append(usableChannels, channel)
+		usableProviders = append(usableProviders, provider)
 	}
-	if len(usableChannels) == 0 {
-		message := fmt.Sprintf("no usable channel for %s", route.source)
+	if len(usableProviders) == 0 {
+		message := fmt.Sprintf("no usable provider for %s", route.source)
 		if skipReason != "" {
 			message = skipReason
 		}
@@ -280,22 +280,22 @@ func (c *ApiController) forwardToChannels(channels []*object.Channel, route *pro
 		return
 	}
 
-	// A channel inside its failure cooldown goes last, so a dead upstream stops
+	// A provider inside its failure cooldown goes last, so a dead upstream stops
 	// costing every request the time it takes to time out.
-	usableChannels = object.SortChannelsByHealth(usableChannels)
+	usableProviders = object.SortProvidersByHealth(usableProviders)
 
-	// Fail over to the next channel as long as nothing has been written to the
-	// client yet. The last channel is never retried, so the client gets the
+	// Fail over to the next provider as long as nothing has been written to the
+	// client yet. The last provider is never retried, so the client gets the
 	// real upstream answer instead of a synthesized error.
 	lastStatus, lastMessage := http.StatusBadGateway, "upstream connection failed"
-	for i, channel := range usableChannels {
+	for i, provider := range usableProviders {
 		if c.Ctx.Request.Context().Err() != nil {
 			// The client hung up, there is nobody left to fail over for.
 			route.recordOutcome(0, "client disconnected")
 			return
 		}
 
-		status, message, written := c.forwardToChannel(channel, route, i == len(usableChannels)-1)
+		status, message, written := c.forwardToProvider(provider, route, i == len(usableProviders)-1)
 		if written {
 			return
 		}
@@ -306,17 +306,17 @@ func (c *ApiController) forwardToChannels(channels []*object.Channel, route *pro
 	c.writeProxyError(route.target.protocol, lastStatus, "server_error", lastMessage)
 }
 
-// forwardToChannel sends the request to a single channel's upstream. It reports
+// forwardToProvider sends the request to a single provider's upstream. It reports
 // whether the client response was already written, and when it was not, the
 // status and message describing the failure so that the caller can fail over to
-// the next channel. The response of the last channel is always relayed, even
+// the next provider. The response of the last provider is always relayed, even
 // when its status would otherwise be retried.
-func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRoute, isLast bool) (int, string, bool) {
-	route.recordAttempt(channel.GetId())
+func (c *ApiController) forwardToProvider(provider *object.Provider, route *proxyRoute, isLast bool) (int, string, bool) {
+	route.recordAttempt(provider.GetId())
 
-	upstreamUrl, err := object.BuildChannelUrl(channel.BaseUrl, route.target.protocol, route.target.endpoint)
+	upstreamUrl, err := object.BuildProviderUrl(provider.BaseUrl, route.target.protocol, route.target.endpoint)
 	if err != nil {
-		object.ReportChannelFailure(channel.GetId(), err.Error())
+		object.ReportProviderFailure(provider.GetId(), err.Error())
 		return http.StatusBadGateway, err.Error(), false
 	}
 	upstreamUrl = object.AppendQuery(upstreamUrl, c.Ctx.Request.URL.RawQuery)
@@ -331,8 +331,8 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 		return http.StatusBadGateway, "upstream connection failed", false
 	}
 	upstreamReq.Header.Set("Content-Type", "application/json")
-	object.SetChannelAuth(upstreamReq.Header, channel)
-	if object.UsesClientAuth(channel) {
+	object.SetProviderAuth(upstreamReq.Header, provider)
+	if object.UsesClientAuth(provider) {
 		c.copyClientAuthHeaders(upstreamReq.Header)
 	}
 	if route.target.protocol == object.ProtocolAnthropic {
@@ -347,21 +347,21 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 			return 0, "", true
 		}
 
-		beego.Error("upstream request to channel", channel.GetId(), "failed:", err)
+		beego.Error("upstream request to provider", provider.GetId(), "failed:", err)
 		var netErr net.Error
 		if errors.As(err, &netErr) && netErr.Timeout() {
-			object.ReportChannelFailure(channel.GetId(), "upstream timeout")
+			object.ReportProviderFailure(provider.GetId(), "upstream timeout")
 			return http.StatusGatewayTimeout, "upstream timeout", false
 		}
-		object.ReportChannelFailure(channel.GetId(), "upstream connection failed")
+		object.ReportProviderFailure(provider.GetId(), "upstream connection failed")
 		return http.StatusBadGateway, "upstream connection failed", false
 	}
 	defer upstreamResp.Body.Close()
 
-	reportChannelStatus(channel, upstreamResp.StatusCode)
+	reportProviderStatus(provider, upstreamResp.StatusCode)
 
 	if !isLast && isRetryableStatus(upstreamResp.StatusCode) {
-		beego.Error("channel", channel.GetId(), "returned a retryable status:", upstreamResp.Status)
+		beego.Error("provider", provider.GetId(), "returned a retryable status:", upstreamResp.Status)
 		// Drain a bounded amount so the connection can be pooled and reused.
 		_, _ = io.Copy(io.Discard, io.LimitReader(upstreamResp.Body, 4096))
 		return http.StatusBadGateway, fmt.Sprintf("upstream returned %s", upstreamResp.Status), false
@@ -384,23 +384,23 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 	return 0, "", true
 }
 
-// reportChannelStatus feeds the breaker that decides in which order channels are
+// reportProviderStatus feeds the breaker that decides in which order providers are
 // tried. A status the upstream itself rejected the request with counts as a
-// channel failure: a wrong key or an exhausted quota is not something the next
+// provider failure: a wrong key or an exhausted quota is not something the next
 // request will do better.
-func reportChannelStatus(channel *object.Channel, statusCode int) {
+func reportProviderStatus(provider *object.Provider, statusCode int) {
 	switch {
 	case isRetryableStatus(statusCode):
-		object.ReportChannelFailure(channel.GetId(), fmt.Sprintf("upstream returned %d", statusCode))
+		object.ReportProviderFailure(provider.GetId(), fmt.Sprintf("upstream returned %d", statusCode))
 	case statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden ||
 		statusCode == http.StatusPaymentRequired:
-		object.ReportChannelFailure(channel.GetId(), fmt.Sprintf("upstream rejected the credentials with %d", statusCode))
+		object.ReportProviderFailure(provider.GetId(), fmt.Sprintf("upstream rejected the credentials with %d", statusCode))
 	default:
-		object.ReportChannelSuccess(channel.GetId())
+		object.ReportProviderSuccess(provider.GetId())
 	}
 }
 
-// clientAuthHeaders are forwarded verbatim by a channel that authenticates with
+// clientAuthHeaders are forwarded verbatim by a provider that authenticates with
 // the caller's own credentials: the credential itself, plus what the vendors
 // expect beside a token issued to a CLI rather than to an API account. It is an
 // allowlist, so nothing else the client sent (a browser cookie, say) leaks
@@ -417,7 +417,7 @@ var clientAuthHeaders = []string{
 }
 
 // hasClientCredentials reports whether the client request carries a credential
-// a client-auth channel could forward.
+// a client-auth provider could forward.
 func (c *ApiController) hasClientCredentials() bool {
 	header := c.Ctx.Request.Header
 	return header.Get("Authorization") != "" || header.Get("X-Api-Key") != ""
@@ -518,29 +518,29 @@ func isEventStream(upstreamResp *http.Response) bool {
 	return strings.Contains(strings.ToLower(upstreamResp.Header.Get("Content-Type")), "text/event-stream")
 }
 
-// isRetryableStatus reports whether another channel is worth trying. A rate
-// limit or an upstream-side error is transient or specific to that channel,
+// isRetryableStatus reports whether another provider is worth trying. A rate
+// limit or an upstream-side error is transient or specific to that provider,
 // while a 4xx caused by the request itself would fail the same way everywhere.
 func isRetryableStatus(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests || statusCode >= 500
 }
 
-// channelUnusableReason reports why the proxy cannot forward to a channel, or
+// providerUnusableReason reports why the proxy cannot forward to a provider, or
 // an empty string when it can.
-func (c *ApiController) channelUnusableReason(channel *object.Channel, protocol string) string {
-	if !object.IsChannelTypeSupported(channel) {
-		return fmt.Sprintf("the %s channel type is not supported", channel.Type)
+func (c *ApiController) providerUnusableReason(provider *object.Provider, protocol string) string {
+	if !object.IsProviderTypeSupported(provider) {
+		return fmt.Sprintf("the %s provider type is not supported", provider.Type)
 	}
-	if object.ChannelProtocol(channel) != protocol {
-		return fmt.Sprintf("channel %s does not speak the %s API", channel.GetId(), protocol)
+	if object.ProviderProtocol(provider) != protocol {
+		return fmt.Sprintf("provider %s does not speak the %s API", provider.GetId(), protocol)
 	}
-	if channel.BaseUrl == "" {
-		return "channel base URL is not configured"
+	if provider.BaseUrl == "" {
+		return "provider base URL is not configured"
 	}
 	// Without a credential to forward the upstream would answer 401, which
-	// reads as a broken channel rather than a client that sent no key.
-	if object.UsesClientAuth(channel) && !c.hasClientCredentials() {
-		return fmt.Sprintf("channel %s forwards the credentials of the caller, but the request carries none", channel.GetId())
+	// reads as a broken provider rather than a client that sent no key.
+	if object.UsesClientAuth(provider) && !c.hasClientCredentials() {
+		return fmt.Sprintf("provider %s forwards the credentials of the caller, but the request carries none", provider.GetId())
 	}
 	return ""
 }

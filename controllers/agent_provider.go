@@ -26,7 +26,7 @@ import (
 )
 
 // gatewayToken is what an agent sends to the local proxy. The proxy authenticates
-// upstream with the channel's own key, so this value is never used for anything.
+// upstream with the provider's own key, so this value is never used for anything.
 const gatewayToken = "casbin-gateway"
 
 // PlanAgentProvider renders what a switch would write, without touching a file.
@@ -53,7 +53,7 @@ func (c *ApiController) PlanAgentProvider() {
 	c.ResponseOk(files)
 }
 
-// ApplyAgentProvider writes the bound channel into the agent's own configuration
+// ApplyAgentProvider writes the bound provider into the agent's own configuration
 // file, in that agent's format.
 func (c *ApiController) ApplyAgentProvider() {
 	if c.RequireAdmin() {
@@ -95,18 +95,18 @@ func (c *ApiController) RestoreAgentProvider() {
 	c.ResponseOk(agentprovider.StatusOf(providerTarget(target)))
 }
 
-// GetChannelHealth reports what the proxy has seen of each channel, which is
-// what says why a request went to a fallback rather than to the bound channel.
-func (c *ApiController) GetChannelHealth() {
+// GetProviderHealth reports what the proxy has seen of each provider, which is
+// what says why a request went to a fallback rather than to the bound provider.
+func (c *ApiController) GetProviderHealth() {
 	if c.RequireAdmin() {
 		return
 	}
-	c.ResponseOk(object.GetChannelHealth())
+	c.ResponseOk(object.GetProviderHealth())
 }
 
 // agentEndpoint resolves where one agent should be pointed. In gateway mode
 // that is the local proxy, which is what makes a later switch take effect
-// without rewriting a file; in direct mode it is the channel's own upstream.
+// without rewriting a file; in direct mode it is the provider's own upstream.
 func agentEndpoint(agentId string) (agentprovider.Endpoint, error) {
 	endpoint := agentprovider.Endpoint{Mode: object.ModeGateway}
 
@@ -118,34 +118,34 @@ func agentEndpoint(agentId string) (agentprovider.Endpoint, error) {
 		endpoint.Mode = stored.Mode
 	}
 
-	channel, err := object.GetChannelByAgent(agentId)
+	provider, err := object.GetProviderByAgent(agentId)
 	if err != nil {
 		return endpoint, err
 	}
 
-	endpoint.Channel = channel.GetId()
-	endpoint.Protocol = object.ChannelProtocol(channel)
-	if len(channel.Models) > 0 {
-		endpoint.Model = channel.Models[0]
+	endpoint.Provider = provider.GetId()
+	endpoint.Protocol = object.ProviderProtocol(provider)
+	if len(provider.Models) > 0 {
+		endpoint.Model = provider.Models[0]
 	}
 
 	if endpoint.Mode == object.ModeDirect {
-		endpoint.BaseUrl = channel.BaseUrl
-		endpoint.ApiKey = channel.ApiKey
+		endpoint.BaseUrl = provider.BaseUrl
+		endpoint.ApiKey = provider.ApiKey
 		return endpoint, nil
 	}
 
 	endpoint.BaseUrl = gatewayAgentUrl(agentId)
-	// A client-auth channel forwards whatever the agent sends, so it must keep
+	// A client-auth provider forwards whatever the agent sends, so it must keep
 	// sending its own credentials: a placeholder token written into the agent's
 	// configuration would replace the sign-in it already has.
-	if !object.UsesClientAuth(channel) {
+	if !object.UsesClientAuth(provider) {
 		endpoint.ApiKey = gatewayToken
 	}
 	return endpoint, nil
 }
 
-// gatewayAgentUrl is the loopback base URL an agent reaches its own channel at.
+// gatewayAgentUrl is the loopback base URL an agent reaches its own provider at.
 // One URL serves both wire formats: an OpenAI client appends /chat/completions
 // to it, an Anthropic one appends /v1/messages.
 func gatewayAgentUrl(agentId string) string {

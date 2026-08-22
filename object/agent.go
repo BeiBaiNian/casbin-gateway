@@ -23,14 +23,14 @@ import (
 	"github.com/xorm-io/core"
 )
 
-// ErrAgentNoChannel lets the proxy answer with a client error, not a gateway one.
-var ErrAgentNoChannel = errors.New("no channel is bound to this agent")
+// ErrAgentNoProvider lets the proxy answer with a client error, not a gateway one.
+var ErrAgentNoProvider = errors.New("no provider is bound to this agent")
 
 // AgentOwner is the owner every agent row is stored under: an agent belongs to
 // the host, and its proxy endpoint is reached without a session.
 const AgentOwner = "admin"
 
-// How an agent reaches its channel. The values are the ones agentprovider
+// How an agent reaches its provider. The values are the ones agentprovider
 // writes into the agent's own configuration file.
 const (
 	ModeGateway = "gateway"
@@ -45,13 +45,13 @@ type Agent struct {
 	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
 	UpdatedTime string `xorm:"varchar(100)" json:"updatedTime"`
 
-	// Channel is the "owner/name" id of the bound channel, empty when unbound.
-	Channel string `xorm:"varchar(200)" json:"channel"`
-	// Fallbacks are the channel ids tried, in order, when Channel cannot answer.
+	// Provider is the "owner/name" id of the bound provider, empty when unbound.
+	Provider string `xorm:"varchar(200)" json:"provider"`
+	// Fallbacks are the provider ids tried, in order, when Provider cannot answer.
 	// They are JSON-serialized by xorm, hence the text column.
 	Fallbacks []string `xorm:"mediumtext" json:"fallbacks"`
-	// Mode is how the agent reaches its channel: ModeGateway routes it through
-	// the local proxy, ModeDirect writes the channel's own endpoint into the
+	// Mode is how the agent reaches its provider: ModeGateway routes it through
+	// the local proxy, ModeDirect writes the provider's own endpoint into the
 	// agent's configuration file.
 	Mode string `xorm:"varchar(20)" json:"mode"`
 }
@@ -91,11 +91,11 @@ func GetAgents() (map[string]*Agent, error) {
 	return result, nil
 }
 
-// SetAgentRouting stores where one agent's requests go: the bound channel, the
-// channels to fall over to when it cannot answer, and how the agent reaches
-// them. Every channel is resolved here so a typo fails at the form rather than
+// SetAgentRouting stores where one agent's requests go: the bound provider, the
+// providers to fall over to when it cannot answer, and how the agent reaches
+// them. Every provider is resolved here so a typo fails at the form rather than
 // on the next relayed request.
-func SetAgentRouting(agentId string, channelId string, fallbacks []string, mode string) error {
+func SetAgentRouting(agentId string, providerId string, fallbacks []string, mode string) error {
 	if agentId == "" {
 		return errors.New("the agent id is empty")
 	}
@@ -106,17 +106,17 @@ func SetAgentRouting(agentId string, channelId string, fallbacks []string, mode 
 		return fmt.Errorf("invalid agent mode: %s", mode)
 	}
 
-	fallbacks = normalizeFallbacks(channelId, fallbacks)
-	for _, id := range append([]string{channelId}, fallbacks...) {
+	fallbacks = normalizeFallbacks(providerId, fallbacks)
+	for _, id := range append([]string{providerId}, fallbacks...) {
 		if id == "" {
 			continue
 		}
-		channel, err := getChannelById(id)
+		provider, err := getProviderById(id)
 		if err != nil {
 			return err
 		}
-		if channel == nil {
-			return fmt.Errorf("the channel does not exist: %s", id)
+		if provider == nil {
+			return fmt.Errorf("the provider does not exist: %s", id)
 		}
 	}
 
@@ -132,38 +132,38 @@ func SetAgentRouting(agentId string, channelId string, fallbacks []string, mode 
 			Name:        agentId,
 			CreatedTime: now,
 			UpdatedTime: now,
-			Channel:     channelId,
+			Provider:    providerId,
 			Fallbacks:   fallbacks,
 			Mode:        mode,
 		})
 		return err
 	}
 
-	// Cols() is what writes an empty channel: xorm skips zero values otherwise.
+	// Cols() is what writes an empty provider: xorm skips zero values otherwise.
 	_, err = ormer.Engine.ID(core.PK{AgentOwner, agentId}).
-		Cols("channel", "fallbacks", "mode", "updated_time").
-		Update(&Agent{Channel: channelId, Fallbacks: fallbacks, Mode: mode, UpdatedTime: now})
+		Cols("provider", "fallbacks", "mode", "updated_time").
+		Update(&Agent{Provider: providerId, Fallbacks: fallbacks, Mode: mode, UpdatedTime: now})
 	return err
 }
 
-// SetAgentChannel binds an agent to a channel, or unbinds it when channelId is
+// SetAgentProvider binds an agent to a provider, or unbinds it when providerId is
 // empty, leaving its fallbacks and mode as they are.
-func SetAgentChannel(agentId string, channelId string) error {
+func SetAgentProvider(agentId string, providerId string) error {
 	stored, err := GetAgent(agentId)
 	if err != nil {
 		return err
 	}
 	if stored == nil {
-		return SetAgentRouting(agentId, channelId, nil, "")
+		return SetAgentRouting(agentId, providerId, nil, "")
 	}
-	return SetAgentRouting(agentId, channelId, stored.Fallbacks, stored.Mode)
+	return SetAgentRouting(agentId, providerId, stored.Fallbacks, stored.Mode)
 }
 
-// normalizeFallbacks drops empty entries, duplicates and the primary channel,
+// normalizeFallbacks drops empty entries, duplicates and the primary provider,
 // so the chain never tries the same upstream twice.
-func normalizeFallbacks(channelId string, fallbacks []string) []string {
+func normalizeFallbacks(providerId string, fallbacks []string) []string {
 	result := []string{}
-	seen := map[string]bool{channelId: true, "": true}
+	seen := map[string]bool{providerId: true, "": true}
 	for _, id := range fallbacks {
 		if seen[id] {
 			continue
@@ -174,61 +174,61 @@ func normalizeFallbacks(channelId string, fallbacks []string) []string {
 	return result
 }
 
-// GetChannelsByAgent is the chain one agent's requests are tried against: the
-// bound channel first, then its fallbacks. A missing or disabled entry is
+// GetProvidersByAgent is the chain one agent's requests are tried against: the
+// bound provider first, then its fallbacks. A missing or disabled entry is
 // skipped rather than failing the request, which is what makes the fallbacks
 // worth configuring; a chain with nothing left in it reports why.
-func GetChannelsByAgent(agentId string) ([]*Channel, error) {
+func GetProvidersByAgent(agentId string) ([]*Provider, error) {
 	agent, err := GetAgent(agentId)
 	if err != nil {
 		return nil, err
 	}
-	if agent == nil || agent.Channel == "" {
-		return nil, fmt.Errorf("%w: %s", ErrAgentNoChannel, agentId)
+	if agent == nil || agent.Provider == "" {
+		return nil, fmt.Errorf("%w: %s", ErrAgentNoProvider, agentId)
 	}
 
-	channels := []*Channel{}
+	providers := []*Provider{}
 	skipped := ""
-	for _, id := range append([]string{agent.Channel}, agent.Fallbacks...) {
-		channel, err := getChannelById(id)
+	for _, id := range append([]string{agent.Provider}, agent.Fallbacks...) {
+		provider, err := getProviderById(id)
 		if err != nil {
 			skipped = err.Error()
 			continue
 		}
-		if channel == nil {
-			skipped = fmt.Sprintf("the channel bound to agent %s no longer exists: %s", agentId, id)
+		if provider == nil {
+			skipped = fmt.Sprintf("the provider bound to agent %s no longer exists: %s", agentId, id)
 			continue
 		}
-		if channel.Status != "enabled" {
-			skipped = fmt.Sprintf("the channel bound to agent %s is disabled: %s", agentId, id)
+		if provider.Status != "enabled" {
+			skipped = fmt.Sprintf("the provider bound to agent %s is disabled: %s", agentId, id)
 			continue
 		}
-		channels = append(channels, channel)
+		providers = append(providers, provider)
 	}
 
-	if len(channels) == 0 {
+	if len(providers) == 0 {
 		if skipped == "" {
-			return nil, fmt.Errorf("%w: %s", ErrAgentNoChannel, agentId)
+			return nil, fmt.Errorf("%w: %s", ErrAgentNoProvider, agentId)
 		}
 		return nil, errors.New(skipped)
 	}
-	return channels, nil
+	return providers, nil
 }
 
-// GetChannelByAgent resolves the first channel of an agent's chain.
-func GetChannelByAgent(agentId string) (*Channel, error) {
-	channels, err := GetChannelsByAgent(agentId)
+// GetProviderByAgent resolves the first provider of an agent's chain.
+func GetProviderByAgent(agentId string) (*Provider, error) {
+	providers, err := GetProvidersByAgent(agentId)
 	if err != nil {
 		return nil, err
 	}
-	return channels[0], nil
+	return providers[0], nil
 }
 
-// getChannelById is GetChannel() without its panic on a malformed id.
-func getChannelById(channelId string) (*Channel, error) {
-	tokens := strings.Split(channelId, "/")
+// getProviderById is GetProvider() without its panic on a malformed id.
+func getProviderById(providerId string) (*Provider, error) {
+	tokens := strings.Split(providerId, "/")
 	if len(tokens) != 2 || tokens[0] == "" || tokens[1] == "" {
-		return nil, fmt.Errorf("invalid channel ID: %s", channelId)
+		return nil, fmt.Errorf("invalid provider ID: %s", providerId)
 	}
-	return getChannel(tokens[0], tokens[1])
+	return getProvider(tokens[0], tokens[1])
 }

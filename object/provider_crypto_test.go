@@ -24,19 +24,19 @@ import (
 func readStoredApiKey(t *testing.T, owner, name string) string {
 	t.Helper()
 
-	results, err := ormer.Engine.Table("channel").
+	results, err := ormer.Engine.Table("provider").
 		Where("owner = ? and name = ?", owner, name).QueryString()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(results) != 1 {
-		t.Fatalf("expected 1 stored channel, got %d", len(results))
+		t.Fatalf("expected 1 stored provider, got %d", len(results))
 	}
 	return results[0]["api_key"]
 }
 
-func newTestChannel(name, apiKey string) *Channel {
-	return &Channel{
+func newTestProvider(name, apiKey string) *Provider {
+	return &Provider{
 		Owner:  "admin",
 		Name:   name,
 		Type:   "openai",
@@ -46,12 +46,12 @@ func newTestChannel(name, apiKey string) *Channel {
 	}
 }
 
-func TestChannelApiKeyIsEncryptedAtRest(t *testing.T) {
+func TestProviderApiKeyIsEncryptedAtRest(t *testing.T) {
 	initSqliteOrmer(t)
 	setEnv(t, map[string]string{"apiKeyEncryptionKey": "test-encryption-key"})
 
 	const plainKey = "sk-1234567890abcdef"
-	if _, err := AddChannel(newTestChannel("encrypted", plainKey)); err != nil {
+	if _, err := AddProvider(newTestProvider("encrypted", plainKey)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,21 +63,21 @@ func TestChannelApiKeyIsEncryptedAtRest(t *testing.T) {
 		t.Fatalf("the stored api key is missing the encryption marker: %q", stored)
 	}
 
-	channel, err := GetChannel("admin/encrypted")
+	provider, err := GetProvider("admin/encrypted")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if channel.ApiKey != plainKey {
-		t.Fatalf("reading back the channel gave %q, want %q", channel.ApiKey, plainKey)
+	if provider.ApiKey != plainKey {
+		t.Fatalf("reading back the provider gave %q, want %q", provider.ApiKey, plainKey)
 	}
 }
 
-func TestChannelApiKeyStaysPlaintextWithoutKey(t *testing.T) {
+func TestProviderApiKeyStaysPlaintextWithoutKey(t *testing.T) {
 	initSqliteOrmer(t)
 	setEnv(t, map[string]string{"apiKeyEncryptionKey": ""})
 
 	const plainKey = "sk-not-encrypted"
-	if _, err := AddChannel(newTestChannel("plain", plainKey)); err != nil {
+	if _, err := AddProvider(newTestProvider("plain", plainKey)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +91,7 @@ func TestLegacyPlaintextIsUpgradedOnRead(t *testing.T) {
 	setEnv(t, map[string]string{"apiKeyEncryptionKey": ""})
 
 	const plainKey = "sk-legacy-plaintext"
-	if _, err := AddChannel(newTestChannel("legacy", plainKey)); err != nil {
+	if _, err := AddProvider(newTestProvider("legacy", plainKey)); err != nil {
 		t.Fatal(err)
 	}
 	if stored := readStoredApiKey(t, "admin", "legacy"); stored != plainKey {
@@ -100,12 +100,12 @@ func TestLegacyPlaintextIsUpgradedOnRead(t *testing.T) {
 
 	setEnv(t, map[string]string{"apiKeyEncryptionKey": "test-encryption-key"})
 
-	channel, err := GetChannel("admin/legacy")
+	provider, err := GetProvider("admin/legacy")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if channel.ApiKey != plainKey {
-		t.Fatalf("a legacy plaintext key should still be readable, got %q", channel.ApiKey)
+	if provider.ApiKey != plainKey {
+		t.Fatalf("a legacy plaintext key should still be readable, got %q", provider.ApiKey)
 	}
 
 	stored := readStoredApiKey(t, "admin", "legacy")
@@ -113,12 +113,12 @@ func TestLegacyPlaintextIsUpgradedOnRead(t *testing.T) {
 		t.Fatalf("the legacy key should have been re-written as ciphertext, got %q", stored)
 	}
 
-	channel, err = GetChannel("admin/legacy")
+	provider, err = GetProvider("admin/legacy")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if channel.ApiKey != plainKey {
-		t.Fatalf("after the upgrade the key read back as %q, want %q", channel.ApiKey, plainKey)
+	if provider.ApiKey != plainKey {
+		t.Fatalf("after the upgrade the key read back as %q, want %q", provider.ApiKey, plainKey)
 	}
 }
 
@@ -126,20 +126,20 @@ func TestUpgradeOnlyTouchesTheApiKeyColumn(t *testing.T) {
 	initSqliteOrmer(t)
 	setEnv(t, map[string]string{"apiKeyEncryptionKey": ""})
 
-	if _, err := AddChannel(newTestChannel("untouched", "sk-legacy")); err != nil {
+	if _, err := AddProvider(newTestProvider("untouched", "sk-legacy")); err != nil {
 		t.Fatal(err)
 	}
-	before, err := GetChannel("admin/untouched")
+	before, err := GetProvider("admin/untouched")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	setEnv(t, map[string]string{"apiKeyEncryptionKey": "test-encryption-key"})
-	if _, err = GetChannel("admin/untouched"); err != nil {
+	if _, err = GetProvider("admin/untouched"); err != nil {
 		t.Fatal(err)
 	}
 
-	after, err := GetChannel("admin/untouched")
+	after, err := GetProvider("admin/untouched")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,66 +154,66 @@ func TestUpgradeOnlyTouchesTheApiKeyColumn(t *testing.T) {
 	}
 }
 
-func TestCiphertextIsBoundToItsChannel(t *testing.T) {
+func TestCiphertextIsBoundToItsProvider(t *testing.T) {
 	initSqliteOrmer(t)
 	setEnv(t, map[string]string{"apiKeyEncryptionKey": "test-encryption-key"})
 
-	if _, err := AddChannel(newTestChannel("victim", "sk-victims-key")); err != nil {
+	if _, err := AddProvider(newTestProvider("victim", "sk-victims-key")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := AddChannel(newTestChannel("thief", "sk-thiefs-key")); err != nil {
+	if _, err := AddProvider(newTestProvider("thief", "sk-thiefs-key")); err != nil {
 		t.Fatal(err)
 	}
 
 	victimCipher := readStoredApiKey(t, "admin", "victim")
 	if _, err := ormer.Engine.ID(core.PK{"admin", "thief"}).
-		Cols("api_key").Update(&Channel{ApiKey: victimCipher}); err != nil {
+		Cols("api_key").Update(&Provider{ApiKey: victimCipher}); err != nil {
 		t.Fatal(err)
 	}
 
-	thief, err := GetChannel("admin/thief")
+	thief, err := GetProvider("admin/thief")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if thief.ApiKey == "sk-victims-key" {
-		t.Fatal("a ciphertext moved to another channel decrypted, it is not bound to its row")
+		t.Fatal("a ciphertext moved to another provider decrypted, it is not bound to its row")
 	}
 	if !util.IsEncrypted(thief.ApiKey) {
 		t.Fatalf("a value that cannot be decrypted should be left alone, got %q", thief.ApiKey)
 	}
 
-	victim, err := GetChannel("admin/victim")
+	victim, err := GetProvider("admin/victim")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if victim.ApiKey != "sk-victims-key" {
-		t.Fatalf("the victim channel read back as %q", victim.ApiKey)
+		t.Fatalf("the victim provider read back as %q", victim.ApiKey)
 	}
 }
 
-func TestUpdateChannelKeepsMaskedApiKey(t *testing.T) {
+func TestUpdateProviderKeepsMaskedApiKey(t *testing.T) {
 	initSqliteOrmer(t)
 	setEnv(t, map[string]string{"apiKeyEncryptionKey": "test-encryption-key"})
 
 	const plainKey = "sk-keep-me"
-	if _, err := AddChannel(newTestChannel("masked", plainKey)); err != nil {
+	if _, err := AddProvider(newTestProvider("masked", plainKey)); err != nil {
 		t.Fatal(err)
 	}
 
-	edited := newTestChannel("masked", ApiKeyMask)
+	edited := newTestProvider("masked", ApiKeyMask)
 	edited.DisplayName = "renamed"
-	if _, err := UpdateChannel("admin/masked", edited); err != nil {
+	if _, err := UpdateProvider("admin/masked", edited); err != nil {
 		t.Fatal(err)
 	}
 
-	channel, err := GetChannel("admin/masked")
+	provider, err := GetProvider("admin/masked")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if channel.ApiKey != plainKey {
-		t.Fatalf("the stored key changed on a masked update: got %q, want %q", channel.ApiKey, plainKey)
+	if provider.ApiKey != plainKey {
+		t.Fatalf("the stored key changed on a masked update: got %q, want %q", provider.ApiKey, plainKey)
 	}
-	if channel.DisplayName != "renamed" {
-		t.Fatalf("the update did not apply: displayName is %q", channel.DisplayName)
+	if provider.DisplayName != "renamed" {
+		t.Fatalf("the update did not apply: displayName is %q", provider.DisplayName)
 	}
 }

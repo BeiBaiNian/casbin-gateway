@@ -66,7 +66,7 @@ func (c *ApiController) GetLlmRecords() {
 func (c *ApiController) readLlmRecordFilter() object.LlmRecordFilter {
 	filter := object.LlmRecordFilter{
 		Model:    c.Input().Get("model"),
-		Channel:  c.Input().Get("channel"),
+		Provider: c.Input().Get("provider"),
 		Agent:    c.Input().Get("agent"),
 		ClientIp: c.Input().Get("clientIp"),
 		Outcome:  c.Input().Get("outcome"),

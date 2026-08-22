@@ -13,10 +13,10 @@
 // limitations under the License.
 
 import {query, request} from "@/backend/request";
-import type {Application, GatewayStatus, MetricPoint, Provider} from "@/types";
+import type {Application, CasdoorProvider, GatewayStatus, MetricPoint} from "@/types";
 
-export function getProviders() {
-  return request<Provider[]>("/api/get-providers");
+export function getCasdoorProviders() {
+  return request<CasdoorProvider[]>("/api/get-casdoor-providers");
 }
 
 export function getApplications(owner: string) {
