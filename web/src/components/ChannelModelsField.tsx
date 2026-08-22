@@ -1,0 +1,155 @@
+// Copyright 2026 The casbin Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import * as React from "react";
+import {Check, RefreshCw, X} from "lucide-react";
+import i18next from "i18next";
+
+import * as ChannelBackend from "@/backend/ChannelBackend";
+import * as Setting from "@/Setting";
+import {Field} from "@/components/shared/form-dialog";
+import {Badge} from "@/components/ui/badge";
+import {Button} from "@/components/ui/button";
+import {TagsInput} from "@/components/ui/tags-input";
+import {modelPresets, modelsPlaceholder, usesClientAuth} from "@/lib/channels";
+import type {Channel} from "@/types";
+
+/**
+ * The Models field of both channel forms: the names can be typed, or asked of
+ * the upstream itself, which every OpenAI- and Anthropic-compatible API answers
+ * at its models endpoint. What comes back is offered as chips to pick from
+ * rather than written straight into the field: an aggregator lists hundreds of
+ * models, most of which this channel is not meant to serve.
+ */
+export function ChannelModelsField({
+  channel,
+  hint,
+  onChange,
+}: {
+  channel: Channel;
+  hint?: React.ReactNode;
+  onChange: (models: string[]) => void;
+}) {
+  const [fetching, setFetching] = React.useState(false);
+  const [fetched, setFetched] = React.useState<string[] | null>(null);
+
+  // The list belongs to one upstream, so it stops being an answer as soon as
+  // the form points somewhere else.
+  React.useEffect(() => {
+    setFetched(null);
+  }, [channel.baseUrl, channel.type]);
+
+  const models = channel.models ?? [];
+  // A channel that forwards the caller's login sends no key upstream, so there
+  // is nothing to list models with, and an empty list already means "any model".
+  const canFetch = !usesClientAuth(channel) && channel.baseUrl !== "";
+
+  const fetchModels = () => {
+    setFetching(true);
+    ChannelBackend.getChannelModels(channel)
+      .then(res => {
+        setFetching(false);
+        if (res.status === "error") {
+          Setting.showMessage("error", `${i18next.t("channel:Failed to fetch models")}: ${res.msg}`);
+          return;
+        }
+        const list = res.data ?? [];
+        setFetched(list);
+        Setting.showMessage(
+          "success",
+          i18next.t("channel:Fetched {count} models").replace("{count}", `${list.length}`),
+        );
+      })
+      .catch(error => {
+        setFetching(false);
+        Setting.showMessage("error", `${i18next.t("channel:Failed to fetch models")}: ${error}`);
+      });
+  };
+
+  const toggle = (model: string) => {
+    onChange(models.includes(model) ? models.filter(item => item !== model) : [...models, model]);
+  };
+
+  const selectAll = () => {
+    onChange([...models, ...(fetched ?? []).filter(model => !models.includes(model))]);
+  };
+
+  // Only the fetched names are dropped, so anything typed by hand survives.
+  const clearFetched = () => {
+    onChange(models.filter(model => !(fetched ?? []).includes(model)));
+  };
+
+  return (
+    <Field
+      label={
+        <span className="flex items-center gap-2">
+          {i18next.t("channel:Models")}
+          {canFetch ? (
+            <Button type="button" size="xs" variant="outline" loading={fetching} onClick={fetchModels}>
+              <RefreshCw />
+              {i18next.t("channel:Fetch models")}
+            </Button>
+          ) : null}
+        </span>
+      }
+      hint={hint}
+    >
+      <TagsInput
+        value={models}
+        placeholder={modelsPlaceholder(channel.type)}
+        suggestions={fetched ?? modelPresets(channel.type)}
+        onChange={onChange}
+      />
+      {fetched === null ? null : (
+        <div className="grid gap-2 rounded-md border p-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">
+              {i18next.t("channel:Models from upstream")} ({fetched.length})
+            </span>
+            <div className="flex items-center gap-1">
+              <Button type="button" size="xs" variant="ghost" onClick={selectAll}>
+                {i18next.t("channel:Select all")}
+              </Button>
+              <Button type="button" size="xs" variant="ghost" onClick={clearFetched}>
+                {i18next.t("channel:Clear")}
+              </Button>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-label={i18next.t("general:Close")}
+                onClick={() => setFetched(null)}
+              >
+                <X />
+              </Button>
+            </div>
+          </div>
+          <div className="scrollbar-thin flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+            {fetched.map(model => {
+              const selected = models.includes(model);
+              return (
+                <button key={model} type="button" onClick={() => toggle(model)}>
+                  <Badge variant={selected ? "success" : "muted"} className="cursor-pointer">
+                    {selected ? <Check /> : null}
+                    {model}
+                  </Badge>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </Field>
+  );
+}

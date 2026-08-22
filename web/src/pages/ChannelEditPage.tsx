@@ -19,6 +19,7 @@ import i18next from "i18next";
 
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
+import {ChannelModelsField} from "@/components/ChannelModelsField";
 import {EnvSnippet} from "@/components/EnvSnippet";
 import {Field} from "@/components/shared/form-dialog";
 import {Loading} from "@/components/shared/loading";
@@ -30,7 +31,6 @@ import {SearchSelect, SimpleSelect} from "@/components/shared/simple-select";
 import {MessageAlert} from "@/components/ui/alert";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
-import {TagsInput} from "@/components/ui/tags-input";
 import {
   authClient,
   baseUrlPlaceholder,
@@ -38,8 +38,6 @@ import {
   channelProtocol,
   gatewayBaseUrl,
   localShell,
-  modelPresets,
-  modelsPlaceholder,
   usesClientAuth,
 } from "@/lib/channels";
 import type {Channel, ChannelTestResult} from "@/types";
@@ -282,17 +280,11 @@ export default function ChannelEditPage() {
             />
           </Field>
         )}
-        <Field
-          label={i18next.t("channel:Models")}
+        <ChannelModelsField
+          channel={channel}
           hint={usesClientAuth(channel) ? i18next.t("channel:Any model hint") : undefined}
-        >
-          <TagsInput
-            value={channel.models}
-            placeholder={modelsPlaceholder(channel.type)}
-            suggestions={modelPresets(channel.type)}
-            onChange={value => setField("models", value)}
-          />
-        </Field>
+          onChange={value => setField("models", value)}
+        />
         <Field label={i18next.t("channel:Priority")} hint={i18next.t("channel:Priority hint")}>
           <NumberInput min={0} value={channel.priority} onChange={value => setField("priority", value)} />
         </Field>

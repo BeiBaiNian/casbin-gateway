@@ -107,6 +107,7 @@ func initAPI() {
 	beego.Router("/api/add-channel", &controllers.ApiController{}, "POST:AddChannel")
 	beego.Router("/api/update-channel", &controllers.ApiController{}, "POST:UpdateChannel")
 	beego.Router("/api/delete-channel", &controllers.ApiController{}, "POST:DeleteChannel")
+	beego.Router("/api/get-channel-models", &controllers.ApiController{}, "POST:GetChannelModels")
 	beego.Router("/api/test-channel", &controllers.ApiController{}, "POST:TestChannel")
 	beego.Router("/api/get-channel-health", &controllers.ApiController{}, "GET:GetChannelHealth")
 

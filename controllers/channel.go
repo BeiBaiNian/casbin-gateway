@@ -206,6 +206,53 @@ func (c *ApiController) DeleteChannel() {
 	c.ServeJSON()
 }
 
+// GetChannelModels lists the models a channel's upstream reports. The channel
+// comes from the request body rather than from the database: the new-channel
+// form has nothing saved yet.
+func (c *ApiController) GetChannelModels() {
+	if c.RequireSignedIn() {
+		return
+	}
+
+	var channel object.Channel
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &channel); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if channel.Owner == "" {
+		channel.Owner = c.GetSessionUsername()
+	}
+	if !c.channelAccess(channel.Owner) {
+		c.ResponseError("unauthorized")
+		return
+	}
+
+	// The browser only ever sees the mask, so an untouched key field means the
+	// probe has to use the one the channel already has stored.
+	if channel.ApiKey == object.ApiKeyMask {
+		channel.ApiKey = ""
+		if channel.Name != "" {
+			stored, err := object.GetChannel(channel.GetId())
+			if err != nil {
+				c.ResponseError(err.Error())
+				return
+			}
+			if stored != nil {
+				channel.ApiKey = stored.ApiKey
+			}
+		}
+	}
+
+	models, err := object.FetchChannelModels(&channel)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(models)
+}
+
 // TestChannel tests connectivity to an upstream channel.
 func (c *ApiController) TestChannel() {
 	if c.RequireSignedIn() {

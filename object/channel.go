@@ -15,6 +15,7 @@
 package object
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -457,49 +458,58 @@ func DeleteChannel(channel *Channel) (bool, error) {
 	return affected != 0, err
 }
 
-// TestChannelConnectivity performs a read-only probe against the channel's
-// upstream. It returns whether the probe succeeded, the upstream HTTP status
-// code (0 when no response was received) and a human-readable message.
-func TestChannelConnectivity(channel *Channel) (bool, int, string) {
-	stored, err := getChannel(channel.Owner, channel.Name)
-	if err != nil {
-		return false, 0, err.Error()
-	}
-	if stored == nil {
-		return false, 0, "the channel does not exist"
+// maxProbeBody caps what is read back from an upstream: a model list from an
+// aggregator is long, and an error page can be arbitrarily long.
+const maxProbeBody = 1 << 20
+
+// channelProbe is what a read-only GET against a channel's models endpoint
+// returned. The same probe answers both "is this upstream reachable" and
+// "which models does it serve".
+type channelProbe struct {
+	statusCode int
+	status     string
+	body       []byte
+}
+
+func (probe *channelProbe) ok() bool {
+	return probe.statusCode >= 200 && probe.statusCode < 300
+}
+
+// probeChannel performs the read-only GET against the channel's models
+// endpoint. The channel is used as given rather than read back from the
+// database, so a channel that is not saved yet can be probed too.
+func probeChannel(channel *Channel) (*channelProbe, error) {
+	if !IsChannelTypeSupported(channel) {
+		return nil, fmt.Errorf("the %s channel type is not supported", channel.Type)
 	}
 
-	if !IsChannelTypeSupported(stored) {
-		return false, 0, fmt.Sprintf("the %s channel type is not supported", stored.Type)
+	if channel.BaseUrl == "" {
+		return nil, errors.New("the base URL is empty")
+	}
+	if err := validateBaseUrl(channel.BaseUrl); err != nil {
+		return nil, err
 	}
 
-	if stored.BaseUrl == "" {
-		return false, 0, "the base URL is empty"
-	}
-	if err = validateBaseUrl(stored.BaseUrl); err != nil {
-		return false, 0, err.Error()
-	}
-
-	protocol := ChannelProtocol(stored)
+	protocol := ChannelProtocol(channel)
 	probeEndpoint := "/models"
 	if protocol == ProtocolAnthropic {
 		probeEndpoint = "/v1/models"
 	}
 
-	probeUrl, err := BuildChannelUrl(stored.BaseUrl, protocol, probeEndpoint)
+	probeUrl, err := BuildChannelUrl(channel.BaseUrl, protocol, probeEndpoint)
 	if err != nil {
-		return false, 0, err.Error()
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodGet, probeUrl, nil)
 	if err != nil {
-		return false, 0, err.Error()
+		return nil, err
 	}
 	if protocol == ProtocolAnthropic {
 		req.Header.Set("Anthropic-Version", AnthropicVersion)
 	}
-	if stored.ApiKey != "" {
-		SetChannelAuth(req.Header, stored)
+	if channel.ApiKey != "" {
+		SetChannelAuth(req.Header, channel)
 	}
 
 	client := &http.Client{
@@ -515,21 +525,105 @@ func TestChannelConnectivity(channel *Channel) (bool, int, string) {
 		// Unwrap the *url.Error so the reason is not buried behind the URL.
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) {
-			return false, 0, urlErr.Err.Error()
+			return nil, urlErr.Err
 		}
-		return false, 0, err.Error()
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxProbeBody))
+	if err != nil {
+		return nil, err
+	}
+
+	return &channelProbe{statusCode: resp.StatusCode, status: resp.Status, body: body}, nil
+}
+
+// TestChannelConnectivity performs a read-only probe against the channel's
+// upstream. It returns whether the probe succeeded, the upstream HTTP status
+// code (0 when no response was received) and a human-readable message.
+func TestChannelConnectivity(channel *Channel) (bool, int, string) {
+	stored, err := getChannel(channel.Owner, channel.Name)
+	if err != nil {
+		return false, 0, err.Error()
+	}
+	if stored == nil {
+		return false, 0, "the channel does not exist"
+	}
+
+	probe, err := probeChannel(stored)
+	if err != nil {
+		return false, 0, err.Error()
+	}
 
 	// A client-auth channel has no key to probe with, so an upstream that
 	// rejects the unauthenticated probe has still proven it is reachable.
-	if UsesClientAuth(stored) && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
-		return true, resp.StatusCode, "reachable, and authenticated with the caller's own credentials"
+	if UsesClientAuth(stored) && (probe.statusCode == http.StatusUnauthorized || probe.statusCode == http.StatusForbidden) {
+		return true, probe.statusCode, "reachable, and authenticated with the caller's own credentials"
 	}
 
-	return resp.StatusCode >= 200 && resp.StatusCode < 300, resp.StatusCode, resp.Status
+	return probe.ok(), probe.statusCode, probe.status
+}
+
+// FetchChannelModels lists what the channel's upstream reports at its models
+// endpoint, so the model names do not have to be typed by hand.
+func FetchChannelModels(channel *Channel) ([]string, error) {
+	probe, err := probeChannel(channel)
+	if err != nil {
+		return nil, err
+	}
+	if !probe.ok() {
+		return nil, fmt.Errorf("the upstream answered %s%s", probe.status, probeDetail(probe.body))
+	}
+
+	models, err := parseModelList(probe.body)
+	if err != nil {
+		return nil, err
+	}
+	if len(models) == 0 {
+		return nil, errors.New("the upstream did not report any model")
+	}
+	return models, nil
+}
+
+// parseModelList reads the model ids out of a models response. OpenAI and
+// Anthropic both answer {"data": [{"id": ...}]}, and an OpenAI-compatible
+// vendor follows OpenAI.
+func parseModelList(body []byte) ([]string, error) {
+	var payload struct {
+		Data []struct {
+			Id string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("the upstream did not answer with a model list: %s", err.Error())
+	}
+
+	models := []string{}
+	seen := map[string]bool{}
+	for _, item := range payload.Data {
+		id := strings.TrimSpace(item.Id)
+		if id == "" || len(id) > maxChannelModelChars || seen[id] {
+			continue
+		}
+		seen[id] = true
+		models = append(models, id)
+	}
+	// The upstream order is kept: Anthropic returns its newest model first.
+	return models, nil
+}
+
+// probeDetail is the upstream's own error text, trimmed to what fits in a
+// toast: a status code alone rarely says which of key, URL or plan is wrong.
+func probeDetail(body []byte) string {
+	text := strings.Join(strings.Fields(string(body)), " ")
+	if text == "" {
+		return ""
+	}
+	if runes := []rune(text); len(runes) > 200 {
+		text = string(runes[:200]) + "..."
+	}
+	return ": " + text
 }
 
 // GetChannelsByModel returns every enabled channel that supports the given

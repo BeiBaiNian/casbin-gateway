@@ -49,6 +49,12 @@ export function deleteChannel(channel: Channel) {
   return request("/api/delete-channel", "POST", channel);
 }
 
+/** The models the channel's upstream reports. The whole channel is posted, not
+ * an id: the new-channel form has nothing saved to look up yet. */
+export function getChannelModels(channel: Channel) {
+  return request<string[]>("/api/get-channel-models", "POST", channel);
+}
+
 export function testChannel(owner: string, name: string) {
   return request<ChannelTestResult>("/api/test-channel", "POST", {owner: owner, name: name});
 }

@@ -19,6 +19,7 @@ import i18next from "i18next";
 
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
+import {ChannelModelsField} from "@/components/ChannelModelsField";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {DataTable, type Column, type SortOrder} from "@/components/shared/data-table";
 import {Field, FormDialog} from "@/components/shared/form-dialog";
@@ -30,7 +31,6 @@ import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
-import {TagsInput} from "@/components/ui/tags-input";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {
   authClient,
@@ -38,8 +38,6 @@ import {
   baseUrlPresets,
   channelPresets,
   clientAuthDefaults,
-  modelPresets,
-  modelsPlaceholder,
   usesClientAuth,
   type ChannelPreset,
 } from "@/lib/channels";
@@ -525,17 +523,11 @@ export default function ChannelListPage({account}: {account: Account}) {
             />
           </Field>
         )}
-        <Field
-          label={i18next.t("channel:Models")}
+        <ChannelModelsField
+          channel={form}
           hint={usesClientAuth(form) ? i18next.t("channel:Any model hint") : i18next.t("channel:Models hint")}
-        >
-          <TagsInput
-            value={form.models}
-            placeholder={modelsPlaceholder(form.type)}
-            suggestions={modelPresets(form.type)}
-            onChange={value => setFormField("models", value)}
-          />
-        </Field>
+          onChange={value => setFormField("models", value)}
+        />
       </FormDialog>
     </PageContainer>
   );
