@@ -15,6 +15,7 @@
 import {KeyRound, LogIn, Settings2} from "lucide-react";
 import i18next from "i18next";
 
+import {ProviderIcon} from "@/components/ProviderIcon";
 import {providerSources, customSource, subscriptionSource, type ProviderSource} from "@/lib/providers";
 
 /**
@@ -70,7 +71,11 @@ export function ProviderSourcePicker({onPick}: {onPick: (source: ProviderSource)
             className="hover:border-primary hover:bg-accent/40 flex flex-col items-start gap-1 rounded-lg border p-4 text-left transition-colors"
           >
             <span className="flex items-center gap-2 text-sm font-medium">
-              <Icon className="size-4 shrink-0" />
+              <ProviderIcon
+                baseUrl={source.provider.baseUrl}
+                size={16}
+                fallback={<Icon className="size-4 shrink-0" />}
+              />
               {sourceTitle(source)}
             </span>
             <span className="text-muted-foreground break-all text-xs">{sourceDetail(source)}</span>

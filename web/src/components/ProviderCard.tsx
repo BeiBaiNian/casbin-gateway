@@ -18,6 +18,7 @@ import i18next from "i18next";
 
 import * as AgentBackend from "@/backend/AgentBackend";
 import {EnvSnippet} from "@/components/EnvSnippet";
+import {ProviderIcon} from "@/components/ProviderIcon";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {Loading} from "@/components/shared/loading";
 import {MessageAlert} from "@/components/ui/alert";
@@ -227,6 +228,7 @@ export function ProviderCard({
             </SelectItem>
             {providers.map(provider => (
               <SelectItem key={providerIdOf(provider)} value={providerIdOf(provider)}>
+                <ProviderIcon icon={provider.icon} baseUrl={provider.baseUrl} size={16} />
                 {provider.displayName || provider.name}
                 {/* The type is the wire format, which has to match the one the agent speaks. */}
                 <span className="ml-2 text-xs text-muted-foreground">{provider.type}</span>

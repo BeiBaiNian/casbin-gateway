@@ -157,6 +157,11 @@ export interface Provider {
   baseUrl: string;
   apiKey: string;
   authMode: string;
+  /** A site the vendor's icon is taken from, or an image URL. Empty derives it
+   * from the base URL. */
+  icon: string;
+  /** Whatever the person who added the provider wants to remember about it. */
+  notes: string;
 }
 
 export interface ProviderTestResult {

@@ -14,12 +14,14 @@
 
 import * as React from "react";
 import {useNavigate, useParams} from "react-router-dom";
-import {CircleCheck, CircleX, Save, Zap} from "lucide-react";
+import {CircleCheck, CircleX, Save} from "lucide-react";
 import i18next from "i18next";
 
 import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
+import {ProviderIcon, ProviderIconField} from "@/components/ProviderIcon";
 import {ProviderModelsField} from "@/components/ProviderModelsField";
+import {ProviderTestField, useProviderTest} from "@/components/ProviderTestField";
 import {EnvSnippet} from "@/components/EnvSnippet";
 import {Field} from "@/components/shared/form-dialog";
 import {Loading} from "@/components/shared/loading";
@@ -28,9 +30,9 @@ import {NumberInput} from "@/components/shared/number-input";
 import {PageContainer, PageHeader, Section} from "@/components/shared/page-header";
 import {PasswordInput} from "@/components/shared/password-input";
 import {SearchSelect, SimpleSelect} from "@/components/shared/simple-select";
-import {MessageAlert} from "@/components/ui/alert";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
+import {Textarea} from "@/components/ui/textarea";
 import {
   authClient,
   baseUrlPlaceholder,
@@ -40,7 +42,7 @@ import {
   localShell,
   usesClientAuth,
 } from "@/lib/providers";
-import type {Provider, ProviderTestResult} from "@/types";
+import type {Provider} from "@/types";
 
 // Mirrors object.BuildOpenAiUrl on the server.
 function buildOpenAiUrl(baseUrl: string, endpoint: string) {
@@ -101,8 +103,7 @@ export default function ProviderEditPage() {
   const navigate = useNavigate();
   // undefined while loading, null when the provider could not be loaded.
   const [provider, setProvider] = React.useState<Provider | null | undefined>(undefined);
-  const [testing, setTesting] = React.useState(false);
-  const [result, setResult] = React.useState<ProviderTestResult | null>(null);
+  const test = useProviderTest(provider);
 
   React.useEffect(() => {
     ProviderBackend.getProvider(owner, providerName)
@@ -126,44 +127,19 @@ export default function ProviderEditPage() {
 
   const save = () => {
     if (!provider) {
-      return Promise.resolve(false);
+      return;
     }
 
-    return ProviderBackend.updateProvider(owner, providerName, provider)
+    ProviderBackend.updateProvider(owner, providerName, provider)
       .then(res => {
         if (res.status === "error") {
           Setting.showMessage("error", `${i18next.t("provider:Failed to save")}: ${res.msg}`);
-          return false;
+          return;
         }
         Setting.showMessage("success", i18next.t("provider:Provider saved"));
-        return true;
       })
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("provider:Failed to save")}: ${error}`);
-        return false;
-      });
-  };
-
-  // The test probes the stored provider, so the edits have to be saved first.
-  const test = () => {
-    setTesting(true);
-    setResult(null);
-    save()
-      .then(saved => (saved ? ProviderBackend.testProvider(owner, providerName) : null))
-      .then(res => {
-        setTesting(false);
-        if (res === null) {
-          return;
-        }
-        if (res.status === "error") {
-          Setting.showMessage("error", `${i18next.t("provider:Failed to test")}: ${res.msg}`);
-          return;
-        }
-        setResult(res.data);
-      })
-      .catch(error => {
-        setTesting(false);
-        Setting.showMessage("error", `${i18next.t("provider:Failed to test")}: ${error}`);
       });
   };
 
@@ -186,31 +162,20 @@ export default function ProviderEditPage() {
   return (
     <PageContainer>
       <PageHeader
-        title={i18next.t("provider:Edit Provider")}
+        title={
+          <span className="flex items-center gap-2">
+            <ProviderIcon icon={provider.icon} baseUrl={provider.baseUrl} alt={provider.name} size={22} />
+            {i18next.t("provider:Edit Provider")}
+          </span>
+        }
         description={`${provider.owner} / ${provider.name}`}
         actions={
-          <>
-            <Button variant="outline" onClick={test} loading={testing}>
-              <Zap />
-              {i18next.t("provider:Test Connectivity")}
-            </Button>
-            <Button onClick={save}>
-              <Save />
-              {i18next.t("general:Save")}
-            </Button>
-          </>
+          <Button onClick={() => test.guard(save)} loading={test.testing}>
+            <Save />
+            {i18next.t("general:Save")}
+          </Button>
         }
       />
-
-      {result ? (
-        <MessageAlert
-          variant={result.success ? "success" : "destructive"}
-          title={
-            result.success ? i18next.t("provider:Connection Successful") : i18next.t("provider:Connection Failed")
-          }
-          description={result.statusCode ? `HTTP ${result.statusCode} - ${result.message}` : result.message}
-        />
-      ) : null}
 
       <Section title={i18next.t("provider:Provider")}>
         <Field label={i18next.t("general:Display name")} htmlFor="provider-display-name">
@@ -312,6 +277,21 @@ export default function ProviderEditPage() {
                 value: "disabled",
               },
             ]}
+          />
+        </Field>
+        <ProviderIconField provider={provider} onChange={value => setField("icon", value)} />
+        <ProviderTestField test={test} submitText={i18next.t("general:Save")} />
+        <Field
+          label={i18next.t("provider:Notes")}
+          htmlFor="provider-notes"
+          hint={i18next.t("provider:Notes hint")}
+          className="md:col-span-2 lg:col-span-3"
+        >
+          <Textarea
+            id="provider-notes"
+            rows={3}
+            value={provider.notes ?? ""}
+            onChange={event => setField("notes", event.target.value)}
           />
         </Field>
       </Section>

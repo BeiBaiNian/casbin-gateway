@@ -55,8 +55,10 @@ export function getProviderModels(provider: Provider) {
   return request<string[]>("/api/get-provider-models", "POST", provider);
 }
 
-export function testProvider(owner: string, name: string) {
-  return request<ProviderTestResult>("/api/test-provider", "POST", {owner: owner, name: name});
+/** Probes the provider's upstream. The whole provider is posted rather than an
+ * id, so a form can be checked before it is saved. */
+export function testProvider(provider: Provider) {
+  return request<ProviderTestResult>("/api/test-provider", "POST", provider);
 }
 
 /** What the proxy has seen of each provider, which is what says why a request

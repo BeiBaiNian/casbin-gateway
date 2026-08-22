@@ -19,8 +19,10 @@ import i18next from "i18next";
 
 import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
+import {ProviderIcon, ProviderIconField} from "@/components/ProviderIcon";
 import {ProviderModelsField} from "@/components/ProviderModelsField";
 import {ProviderSourcePicker, sourceTitle} from "@/components/ProviderSourcePicker";
+import {ProviderTestField, useProviderTest} from "@/components/ProviderTestField";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {DataTable, type Column, type SortOrder} from "@/components/shared/data-table";
 import {Field, FormDialog} from "@/components/shared/form-dialog";
@@ -32,6 +34,7 @@ import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
+import {Textarea} from "@/components/ui/textarea";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {
   authProvider,
@@ -58,6 +61,8 @@ function newProvider(owner: string, label = "New Provider"): Provider {
     baseUrl: "",
     apiKey: "",
     authMode: authProvider,
+    icon: "",
+    notes: "",
   };
 }
 
@@ -108,6 +113,7 @@ export default function ProviderListPage({account}: {account: Account}) {
   const [source, setSource] = React.useState<ProviderSource | null>(null);
   const [nameError, setNameError] = React.useState("");
   const [health, setHealth] = React.useState<ProviderHealth[]>([]);
+  const test = useProviderTest(form);
 
   const fetchProviders = React.useCallback(
     (nextPage = page, nextPageSize = pageSize, nextSort = sort) => {
@@ -177,12 +183,18 @@ export default function ProviderListPage({account}: {account: Account}) {
     setSource(picked);
   };
 
-  const addProvider = () => {
-    const name = form.name.trim();
-    if (name === "") {
+  // The upstream is probed before the provider is stored, so a key that was
+  // pasted wrong is caught here rather than by the first agent that uses it.
+  const submitProvider = () => {
+    if (form.name.trim() === "") {
       setNameError(i18next.t("general:Name cannot be empty"));
       return;
     }
+    test.guard(addProvider);
+  };
+
+  const addProvider = () => {
+    const name = form.name.trim();
     setAdding(true);
     ProviderBackend.addProvider({...form, name: name})
       .then(res => {
@@ -226,14 +238,17 @@ export default function ProviderListPage({account}: {account: Account}) {
       // the current page.
       sorter: true,
       render: (text: string, record) => (
-        <SimpleTooltip title={text}>
-          <Link
-            to={`/providers/${record.owner}/${record.name}`}
-            className="text-primary block truncate font-medium hover:underline"
-          >
-            {text}
-          </Link>
-        </SimpleTooltip>
+        <div className="flex min-w-0 items-center gap-2">
+          <ProviderIcon icon={record.icon} baseUrl={record.baseUrl} alt={text} size={18} />
+          <SimpleTooltip title={text}>
+            <Link
+              to={`/providers/${record.owner}/${record.name}`}
+              className="text-primary block truncate font-medium hover:underline"
+            >
+              {text}
+            </Link>
+          </SimpleTooltip>
+        </div>
       ),
     },
     {
@@ -243,6 +258,21 @@ export default function ProviderListPage({account}: {account: Account}) {
       width: "200px",
       sorter: true,
       render: (text: string) => (text ? <span className="block truncate">{text}</span> : "-"),
+    },
+    {
+      title: i18next.t("provider:Notes"),
+      key: "notes",
+      dataIndex: "notes",
+      width: "180px",
+      ellipsis: true,
+      render: (text: string) =>
+        text ? (
+          <SimpleTooltip title={text}>
+            <span className="text-muted-foreground block truncate">{text}</span>
+          </SimpleTooltip>
+        ) : (
+          "-"
+        ),
     },
     {
       title: i18next.t("provider:Type"),
@@ -431,8 +461,9 @@ export default function ProviderListPage({account}: {account: Account}) {
         title={i18next.t("provider:New Provider")}
         description={source === null ? i18next.t("provider:Source hint") : undefined}
         size={source === null ? "lg" : "default"}
-        submitting={adding}
-        onSubmit={addProvider}
+        submitting={adding || test.testing}
+        submitText={i18next.t("provider:Add provider")}
+        onSubmit={submitProvider}
         // Nothing is filled in yet while the source is still being picked, so
         // there is nothing to submit.
         footer={
@@ -494,6 +525,19 @@ export default function ProviderListPage({account}: {account: Account}) {
               hint={usesClientAuth(form) ? i18next.t("provider:Any model hint") : i18next.t("provider:Models hint")}
               onChange={value => setFormField("models", value)}
             />
+            <ProviderTestField test={test} submitText={i18next.t("provider:Add provider")} />
+            <Field
+              label={i18next.t("provider:Notes")}
+              htmlFor="provider-notes"
+              hint={i18next.t("provider:Notes hint")}
+            >
+              <Textarea
+                id="provider-notes"
+                rows={2}
+                value={form.notes}
+                onChange={event => setFormField("notes", event.target.value)}
+              />
+            </Field>
             <Advanced key={source.key} defaultOpen={source.key === customSource}>
               <Field label={i18next.t("provider:Type")}>
                 <SimpleSelect
@@ -530,6 +574,7 @@ export default function ProviderListPage({account}: {account: Account}) {
                   ]}
                 />
               </Field>
+              <ProviderIconField provider={form} onChange={value => setFormField("icon", value)} />
             </Advanced>
           </>
         )}

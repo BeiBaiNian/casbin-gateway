@@ -227,21 +227,9 @@ func (c *ApiController) GetProviderModels() {
 		c.ResponseError("unauthorized")
 		return
 	}
-
-	// The browser only ever sees the mask, so an untouched key field means the
-	// probe has to use the one the provider already has stored.
-	if provider.ApiKey == object.ApiKeyMask {
-		provider.ApiKey = ""
-		if provider.Name != "" {
-			stored, err := object.GetProvider(provider.GetId())
-			if err != nil {
-				c.ResponseError(err.Error())
-				return
-			}
-			if stored != nil {
-				provider.ApiKey = stored.ApiKey
-			}
-		}
+	if err := resolveProviderApiKey(&provider); err != nil {
+		c.ResponseError(err.Error())
+		return
 	}
 
 	models, err := object.FetchProviderModels(&provider)
@@ -253,31 +241,72 @@ func (c *ApiController) GetProviderModels() {
 	c.ResponseOk(models)
 }
 
-// TestProvider tests connectivity to an upstream provider.
+// resolveProviderApiKey fills in the key a probe has to be made with. The
+// browser only ever sees the mask, so an untouched key field means the one the
+// provider already has stored; a provider that is not saved yet has none.
+func resolveProviderApiKey(provider *object.Provider) error {
+	if provider.ApiKey != object.ApiKeyMask {
+		return nil
+	}
+
+	provider.ApiKey = ""
+	if _, _, ok := getProviderOwnerAndName(provider.GetId()); !ok {
+		return nil
+	}
+
+	stored, err := object.GetProvider(provider.GetId())
+	if err != nil {
+		return err
+	}
+	if stored != nil {
+		provider.ApiKey = stored.ApiKey
+	}
+	return nil
+}
+
+// TestProvider tests connectivity to an upstream provider. The provider comes
+// from the request body so that a form can be checked before it is saved; a
+// body carrying only an id falls back to the stored provider.
 func (c *ApiController) TestProvider() {
 	if c.RequireSignedIn() {
 		return
 	}
 
-	var request struct {
-		Owner string `json:"owner"`
-		Name  string `json:"name"`
-	}
-	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &request); err != nil {
+	var provider object.Provider
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &provider); err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	if request.Owner == "" || request.Name == "" {
-		c.ResponseError("the provider owner and name cannot be empty")
-		return
+	if provider.Owner == "" {
+		provider.Owner = c.GetSessionUsername()
 	}
-	if !c.providerAccess(request.Owner) {
+	if !c.providerAccess(provider.Owner) {
 		c.ResponseError("unauthorized")
 		return
 	}
 
-	provider := &object.Provider{Owner: request.Owner, Name: request.Name}
-	success, statusCode, message := object.TestProviderConnectivity(provider)
+	if provider.BaseUrl == "" {
+		id := provider.GetId()
+		if _, _, ok := getProviderOwnerAndName(id); !ok {
+			c.ResponseError("invalid provider ID: " + id)
+			return
+		}
+		stored, err := object.GetProvider(id)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+		if stored == nil {
+			c.ResponseError("the provider does not exist")
+			return
+		}
+		provider = *stored
+	} else if err := resolveProviderApiKey(&provider); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	success, statusCode, message := object.TestProviderConnectivity(&provider)
 	c.ResponseOk(map[string]interface{}{"success": success, "statusCode": statusCode, "message": message})
 }

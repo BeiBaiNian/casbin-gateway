@@ -200,6 +200,12 @@ type Provider struct {
 	// Models is JSON-serialized by xorm, so it needs a text column rather than
 	// a varchar: the serialized form is longer than the joined model names.
 	Models []string `xorm:"mediumtext" json:"models"`
+	// Icon is a site the vendor's favicon is taken from, or an image URL. Empty
+	// means the icon is derived from BaseUrl.
+	Icon string `xorm:"varchar(255)" json:"icon"`
+	// Notes is whatever the person who added the provider wants to remember
+	// about it: which account the key belongs to, when it expires, who pays.
+	Notes string `xorm:"varchar(500)" json:"notes"`
 	// TODO(1.2): Priority routing strategy will be defined in milestone 1.2.
 	Priority int    `xorm:"int" json:"priority"`
 	Status   string `xorm:"varchar(100)" json:"status"`
@@ -562,28 +568,24 @@ func probeProvider(provider *Provider) (*providerProbe, error) {
 
 // TestProviderConnectivity performs a read-only probe against the provider's
 // upstream. It returns whether the probe succeeded, the upstream HTTP status
-// code (0 when no response was received) and a human-readable message.
+// code (0 when no response was received) and a human-readable message. The
+// provider is probed as given, so a form can be checked before it is saved.
 func TestProviderConnectivity(provider *Provider) (bool, int, string) {
-	stored, err := getProvider(provider.Owner, provider.Name)
-	if err != nil {
-		return false, 0, err.Error()
-	}
-	if stored == nil {
-		return false, 0, "the provider does not exist"
-	}
-
-	probe, err := probeProvider(stored)
+	probe, err := probeProvider(provider)
 	if err != nil {
 		return false, 0, err.Error()
 	}
 
 	// A client-auth provider has no key to probe with, so an upstream that
 	// rejects the unauthenticated probe has still proven it is reachable.
-	if UsesClientAuth(stored) && (probe.statusCode == http.StatusUnauthorized || probe.statusCode == http.StatusForbidden) {
+	if UsesClientAuth(provider) && (probe.statusCode == http.StatusUnauthorized || probe.statusCode == http.StatusForbidden) {
 		return true, probe.statusCode, "reachable, and authenticated with the caller's own credentials"
 	}
 
-	return probe.ok(), probe.statusCode, probe.status
+	if !probe.ok() {
+		return false, probe.statusCode, probe.status + probeDetail(probe.body)
+	}
+	return true, probe.statusCode, probe.status
 }
 
 // FetchProviderModels lists what the provider's upstream reports at its models
