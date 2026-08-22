@@ -13,13 +13,15 @@
 // limitations under the License.
 
 import * as Setting from "@/Setting";
+import type {Channel} from "@/types";
 
 /** Mirrors object.ChannelProtocol on the server. */
 export function channelProtocol(type: string) {
   return type === "anthropic" ? "anthropic" : "openai";
 }
 
-/** Mirrors object.ChannelAuthClient on the server. */
+/** Mirrors object.ChannelAuthChannel and object.ChannelAuthClient on the server. */
+export const authChannel = "channel";
 export const authClient = "client";
 
 /** Mirrors object.UsesClientAuth: whose credentials reach the upstream. */
@@ -122,21 +124,53 @@ export const channelPresets: ChannelPreset[] = [
   },
 ];
 
-/**
- * What a channel starts from when it is meant to forward the caller's own
- * login. Anthropic is the vendor of the clients that mode exists for; Codex
- * signs in against an API Gateway does not relay.
- */
-export function clientAuthDefaults() {
-  const preset = channelPresets.find(item => item.type === "anthropic");
-  return {
-    type: "anthropic",
-    baseUrl: preset?.baseUrl ?? "",
-    models: [] as string[],
-    apiKey: "",
-    authMode: authClient,
-  };
+/** Where a new channel gets its credentials: one card of the picker. */
+export interface ChannelSource {
+  /** Stable id. The two cards that are not a vendor are titled by the picker. */
+  key: string;
+  /** The vendor's own name, empty when the picker titles the card itself. */
+  label: string;
+  /** What the form starts from once the card is picked. */
+  channel: Partial<Channel>;
 }
+
+export const subscriptionSource = "subscription";
+export const customSource = "custom";
+
+/**
+ * The sign-in comes first: it is the only source that needs nothing filled in,
+ * and the one people with a subscription and no API key are here for. Anthropic
+ * is the vendor of the clients that mode works with; Codex signs in against an
+ * API Gateway does not relay.
+ */
+export const channelSources: ChannelSource[] = [
+  {
+    key: subscriptionSource,
+    label: "",
+    channel: {
+      type: "anthropic",
+      baseUrl: channelPresets.find(preset => preset.type === "anthropic")?.baseUrl ?? "",
+      models: [],
+      apiKey: "",
+      authMode: authClient,
+    },
+  },
+  ...channelPresets.map(preset => ({
+    key: preset.label.toLowerCase(),
+    label: preset.label,
+    channel: {
+      type: preset.type,
+      baseUrl: preset.baseUrl,
+      models: preset.models,
+      authMode: authChannel,
+    },
+  })),
+  {
+    key: customSource,
+    label: "",
+    channel: {type: "custom", baseUrl: "", models: [], authMode: authChannel},
+  },
+];
 
 /** The base URLs and models offered for a channel type, from the vendors of it. */
 export function baseUrlPresets(type: string) {

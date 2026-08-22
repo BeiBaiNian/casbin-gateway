@@ -14,12 +14,13 @@
 
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
-import {CircleCheck, CircleX, KeyRound, LogIn, Pencil, Plug, Plus, RefreshCw, Trash2} from "lucide-react";
+import {ChevronDown, CircleCheck, CircleX, Pencil, Plug, Plus, RefreshCw, Trash2} from "lucide-react";
 import i18next from "i18next";
 
 import * as ChannelBackend from "@/backend/ChannelBackend";
 import * as Setting from "@/Setting";
 import {ChannelModelsField} from "@/components/ChannelModelsField";
+import {ChannelSourcePicker, sourceTitle} from "@/components/ChannelSourcePicker";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {DataTable, type Column, type SortOrder} from "@/components/shared/data-table";
 import {Field, FormDialog} from "@/components/shared/form-dialog";
@@ -33,56 +34,58 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/compo
 import {Input} from "@/components/ui/input";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {
+  authChannel,
   authClient,
   baseUrlPlaceholder,
   baseUrlPresets,
-  channelPresets,
-  clientAuthDefaults,
+  customSource,
   usesClientAuth,
-  type ChannelPreset,
+  type ChannelSource,
 } from "@/lib/channels";
+import {cn} from "@/lib/utils";
 import type {Account, Channel, ChannelHealth} from "@/types";
 
-function newChannel(owner: string): Channel {
+function newChannel(owner: string, label = "New Channel"): Channel {
   const randomName = Setting.getRandomName();
   return {
     owner: owner,
     name: `channel_${randomName}`,
-    displayName: `New Channel - ${randomName}`,
+    displayName: `${label} - ${randomName}`,
     type: "openai",
     status: "enabled",
     models: [],
     priority: 0,
     baseUrl: "",
     apiKey: "",
-    authMode: "channel",
+    authMode: authChannel,
   };
 }
 
-/** One of the ways to get a first channel, offered while the list is empty. */
-function StartOption({
-  icon: Icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: React.ComponentType<{className?: string}>;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
+/** What a picked source leaves to fill in, which for a subscription is nothing. */
+function channelFromSource(owner: string, source: ChannelSource): Channel {
+  return {...newChannel(owner, sourceTitle(source)), ...source.channel};
+}
+
+/**
+ * The fields the source already answered. They stay reachable — a preset is a
+ * starting point, not a lock — but out of the way of the one field, if any,
+ * that is actually left to fill in.
+ */
+function Advanced({defaultOpen, children}: {defaultOpen: boolean; children: React.ReactNode}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="hover:border-primary hover:bg-accent/40 flex flex-col items-start gap-1 rounded-lg border p-4 text-left transition-colors"
-    >
-      <span className="flex items-center gap-2 text-sm font-medium">
-        <Icon className="size-4" />
-        {title}
-      </span>
-      <span className="text-muted-foreground text-xs">{description}</span>
-    </button>
+    <div className="grid gap-4">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
+      >
+        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+        {i18next.t("general:Advanced")}
+      </button>
+      {open ? children : null}
+    </div>
   );
 }
 
@@ -101,6 +104,8 @@ export default function ChannelListPage({account}: {account: Account}) {
   const [addOpen, setAddOpen] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
   const [form, setForm] = React.useState<Channel>(() => newChannel(account.name));
+  // null while the dialog is still asking where the credentials come from.
+  const [source, setSource] = React.useState<ChannelSource | null>(null);
   const [nameError, setNameError] = React.useState("");
   const [health, setHealth] = React.useState<ChannelHealth[]>([]);
 
@@ -155,8 +160,9 @@ export default function ChannelListPage({account}: {account: Account}) {
     return () => clearInterval(interval);
   }, []);
 
-  const openAddDialog = (start?: Partial<Channel>) => {
-    setForm({...newChannel(account.name), ...start});
+  const openAddDialog = (start?: ChannelSource) => {
+    setForm(start ? channelFromSource(account.name, start) : newChannel(account.name));
+    setSource(start ?? null);
     setNameError("");
     setAddOpen(true);
   };
@@ -165,15 +171,10 @@ export default function ChannelListPage({account}: {account: Account}) {
     setForm(prev => ({...prev, [key]: value}));
   };
 
-  const applyPreset = (preset: ChannelPreset) => {
-    setForm(prev => ({
-      ...prev,
-      type: preset.type,
-      baseUrl: preset.baseUrl,
-      // A client-auth channel takes any model, so the vendor's list would only
-      // narrow it.
-      models: usesClientAuth(prev) ? prev.models : preset.models,
-    }));
+  const pickSource = (picked: ChannelSource) => {
+    setForm(channelFromSource(account.name, picked));
+    setNameError("");
+    setSource(picked);
   };
 
   const addChannel = () => {
@@ -394,19 +395,8 @@ export default function ChannelListPage({account}: {account: Account}) {
             </CardTitle>
             <CardDescription>{i18next.t("channel:No channels yet detail")}</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            <StartOption
-              icon={LogIn}
-              title={i18next.t("channel:Start from a sign-in")}
-              description={i18next.t("channel:Start from a sign-in detail")}
-              onClick={() => openAddDialog(clientAuthDefaults())}
-            />
-            <StartOption
-              icon={KeyRound}
-              title={i18next.t("channel:Start from an API key")}
-              description={i18next.t("channel:Start from an API key detail")}
-              onClick={() => openAddDialog()}
-            />
+          <CardContent>
+            <ChannelSourcePicker onPick={openAddDialog} />
           </CardContent>
         </Card>
       ) : (
@@ -439,95 +429,110 @@ export default function ChannelListPage({account}: {account: Account}) {
         open={addOpen}
         onOpenChange={setAddOpen}
         title={i18next.t("channel:New Channel")}
+        description={source === null ? i18next.t("channel:Source hint") : undefined}
+        size={source === null ? "lg" : "default"}
         submitting={adding}
         onSubmit={addChannel}
+        // Nothing is filled in yet while the source is still being picked, so
+        // there is nothing to submit.
+        footer={
+          source === null ? (
+            <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
+              {i18next.t("general:Cancel")}
+            </Button>
+          ) : undefined
+        }
       >
-        <Field label={i18next.t("general:Name")} htmlFor="channel-name" required error={nameError}>
-          <Input
-            id="channel-name"
-            value={form.name}
-            onChange={event => {
-              setFormField("name", event.target.value);
-              setNameError("");
-            }}
-          />
-        </Field>
-        <Field label={i18next.t("general:Display name")} htmlFor="channel-display-name">
-          <Input
-            id="channel-display-name"
-            value={form.displayName}
-            onChange={event => setFormField("displayName", event.target.value)}
-          />
-        </Field>
-        <Field label={i18next.t("channel:Vendor")} hint={i18next.t("channel:Vendor hint")}>
-          <div className="flex flex-wrap gap-2">
-            {channelPresets.map(preset => (
-              <Button
-                key={preset.label}
-                type="button"
-                size="sm"
-                variant={form.baseUrl === preset.baseUrl ? "default" : "outline"}
-                onClick={() => applyPreset(preset)}
+        {source === null ? (
+          <ChannelSourcePicker onPick={pickSource} />
+        ) : (
+          <>
+            <Field label={i18next.t("channel:Source")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="info">{sourceTitle(source)}</Badge>
+                {usesClientAuth(form) ? (
+                  <Badge variant="muted">{i18next.t("channel:Caller's own login")}</Badge>
+                ) : null}
+                <Button type="button" size="xs" variant="ghost" onClick={() => setSource(null)}>
+                  {i18next.t("channel:Change source")}
+                </Button>
+              </div>
+            </Field>
+            <Field label={i18next.t("general:Name")} htmlFor="channel-name" required error={nameError}>
+              <Input
+                id="channel-name"
+                value={form.name}
+                onChange={event => {
+                  setFormField("name", event.target.value);
+                  setNameError("");
+                }}
+              />
+            </Field>
+            <Field label={i18next.t("general:Display name")} htmlFor="channel-display-name">
+              <Input
+                id="channel-display-name"
+                value={form.displayName}
+                onChange={event => setFormField("displayName", event.target.value)}
+              />
+            </Field>
+            {usesClientAuth(form) ? null : (
+              <Field
+                label={i18next.t("channel:API Key")}
+                htmlFor="channel-api-key"
+                hint={i18next.t("channel:API Key ownership hint")}
               >
-                {preset.label}
-              </Button>
-            ))}
-          </div>
-        </Field>
-        <Field label={i18next.t("channel:Type")}>
-          <SimpleSelect
-            value={form.type}
-            onChange={value => setFormField("type", value)}
-            options={[
-              {label: "OpenAI", value: "openai"},
-              {label: "Anthropic", value: "anthropic"},
-              {label: "Custom", value: "custom"},
-            ]}
-          />
-        </Field>
-        <Field label={i18next.t("channel:Base URL")} htmlFor="channel-base-url">
-          <SearchSelect
-            allowCustomValue
-            id="channel-base-url"
-            value={form.baseUrl}
-            placeholder={baseUrlPlaceholder(form.type)}
-            options={baseUrlPresets(form.type)}
-            onChange={value => setFormField("baseUrl", value)}
-          />
-        </Field>
-        <Field
-          label={i18next.t("channel:Authentication")}
-          hint={usesClientAuth(form) ? i18next.t("channel:Client auth hint") : undefined}
-        >
-          <SimpleSelect
-            value={form.authMode}
-            // The stored key is meaningless once the caller's own is forwarded.
-            onChange={value => setForm(prev => ({...prev, authMode: value, apiKey: ""}))}
-            options={[
-              {label: i18next.t("channel:Stored API key"), value: "channel"},
-              {label: i18next.t("channel:Caller's own login"), value: authClient},
-            ]}
-          />
-        </Field>
-        {usesClientAuth(form) ? null : (
-          <Field
-            label={i18next.t("channel:API Key")}
-            htmlFor="channel-api-key"
-            hint={i18next.t("channel:API Key ownership hint")}
-          >
-            <PasswordInput
-              id="channel-api-key"
-              placeholder="sk-..."
-              value={form.apiKey}
-              onChange={event => setFormField("apiKey", event.target.value)}
+                <PasswordInput
+                  id="channel-api-key"
+                  placeholder="sk-..."
+                  value={form.apiKey}
+                  onChange={event => setFormField("apiKey", event.target.value)}
+                />
+              </Field>
+            )}
+            <ChannelModelsField
+              channel={form}
+              hint={usesClientAuth(form) ? i18next.t("channel:Any model hint") : i18next.t("channel:Models hint")}
+              onChange={value => setFormField("models", value)}
             />
-          </Field>
+            <Advanced key={source.key} defaultOpen={source.key === customSource}>
+              <Field label={i18next.t("channel:Type")}>
+                <SimpleSelect
+                  value={form.type}
+                  onChange={value => setFormField("type", value)}
+                  options={[
+                    {label: "OpenAI", value: "openai"},
+                    {label: "Anthropic", value: "anthropic"},
+                    {label: "Custom", value: "custom"},
+                  ]}
+                />
+              </Field>
+              <Field label={i18next.t("channel:Base URL")} htmlFor="channel-base-url">
+                <SearchSelect
+                  allowCustomValue
+                  id="channel-base-url"
+                  value={form.baseUrl}
+                  placeholder={baseUrlPlaceholder(form.type)}
+                  options={baseUrlPresets(form.type)}
+                  onChange={value => setFormField("baseUrl", value)}
+                />
+              </Field>
+              <Field
+                label={i18next.t("channel:Authentication")}
+                hint={usesClientAuth(form) ? i18next.t("channel:Client auth hint") : undefined}
+              >
+                <SimpleSelect
+                  value={form.authMode}
+                  // The stored key is meaningless once the caller's own is forwarded.
+                  onChange={value => setForm(prev => ({...prev, authMode: value, apiKey: ""}))}
+                  options={[
+                    {label: i18next.t("channel:Stored API key"), value: authChannel},
+                    {label: i18next.t("channel:Caller's own login"), value: authClient},
+                  ]}
+                />
+              </Field>
+            </Advanced>
+          </>
         )}
-        <ChannelModelsField
-          channel={form}
-          hint={usesClientAuth(form) ? i18next.t("channel:Any model hint") : i18next.t("channel:Models hint")}
-          onChange={value => setFormField("models", value)}
-        />
       </FormDialog>
     </PageContainer>
   );
