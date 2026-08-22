@@ -179,8 +179,44 @@ func matches(target Target, process Process) bool {
 		if samePath(process.Path, candidate) || containsPath(process.Command, candidate) {
 			return true
 		}
+		if isRelocatedCopy(candidate, process.Path) {
+			return true
+		}
 	}
 	return false
+}
+
+// isRelocatedCopy recognises the copy a self-updating desktop app runs: the
+// installed file stays a stub beside one directory per version, and what starts
+// is the same program inside the current one.
+func isRelocatedCopy(installed, path string) bool {
+	if installed == "" || path == "" {
+		return false
+	}
+	if !sameName(filepath.Base(installed), filepath.Base(path)) {
+		return false
+	}
+	return isUnder(filepath.Dir(installed), path)
+}
+
+func sameName(left, right string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
+}
+
+// isUnder reports whether path sits somewhere below dir.
+func isUnder(dir, path string) bool {
+	dir, path = filepath.Clean(dir), filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		dir, path = strings.ToLower(dir), strings.ToLower(path)
+	}
+	relative, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func samePath(left, right string) bool {
