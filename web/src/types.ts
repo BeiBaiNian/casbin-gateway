@@ -205,6 +205,20 @@ export interface Agent {
   providerConfig: AgentProviderConfig;
 }
 
+/** The live processes of one agent installation, keyed by owner and path. */
+export interface AgentRuntime {
+  agentId: string;
+  path: string;
+  owner: string;
+  running: boolean;
+  pids: number[];
+  /** True for a windowed app: a CLI is started in a console window instead. */
+  desktop: boolean;
+  /** False when no launcher was resolved, so the agent cannot be started here. */
+  canStart: boolean;
+  detail?: string;
+}
+
 /** What the proxy has seen of one provider since Gateway started. */
 export interface ProviderHealth {
   provider: string;

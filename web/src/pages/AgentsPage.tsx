@@ -18,6 +18,7 @@ import i18next from "i18next";
 
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
+import {RunBadge, RunButton} from "@/components/AgentRunControl";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {DataTable, type Column} from "@/components/shared/data-table";
 import {CodeText, UnauthorizedResult} from "@/components/shared/misc";
@@ -26,12 +27,31 @@ import {MessageAlert} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
 import {SimpleTooltip} from "@/components/ui/tooltip";
-import {agentDetailPath, agentKey, directMode, monitorAgentId, useAgents} from "@/lib/agents";
+import {
+  agentDetailPath,
+  agentKey,
+  directMode,
+  monitorAgentId,
+  runtimeOf,
+  useAgents,
+} from "@/lib/agents";
 import type {Account, Agent} from "@/types";
 
 export default function AgentsPage({account}: {account: Account}) {
   const isAdmin = Setting.isAdminUser(account);
-  const {agents, loading, error, busyKey, inContainer, scan, togglePatch} = useAgents(isAdmin);
+  const {
+    agents,
+    loading,
+    error,
+    busyKey,
+    inContainer,
+    runtime,
+    runBusyKey,
+    scan,
+    loadRuntime,
+    toggleRunning,
+    togglePatch,
+  } = useAgents(isAdmin);
 
   if (!isAdmin) {
     return <UnauthorizedResult />;
@@ -48,6 +68,11 @@ export default function AgentsPage({account}: {account: Account}) {
           <span className="font-medium hover:underline">{value}</span>
         </Link>
       ),
+    },
+    {
+      title: i18next.t("agent:Run Status"),
+      key: "running",
+      render: (_value, record) => <RunBadge status={runtimeOf(runtime, record)} />,
     },
     {
       title: i18next.t("agent:Version"),
@@ -136,37 +161,49 @@ export default function AgentsPage({account}: {account: Account}) {
     {
       title: i18next.t("general:Action"),
       key: "action",
-      render: (_value, record) => {
-        if (!record.supported) {
-          return (
-            <Button size="sm" variant="outline" disabled>
-              {i18next.t("agent:Patch")}
-            </Button>
-          );
-        }
-
-        const action = i18next.t(`agent:${record.patched ? "Unpatch" : "Patch"}`);
-        const note = [record.notice, record.followup].filter(Boolean).join(" ");
-        return (
-          <ConfirmDialog
-            title={`${action} ${record.name}?`}
-            description={note || undefined}
-            confirmText={action}
-            variant={record.patched ? "destructive" : "default"}
-            onConfirm={() => togglePatch(record)}
-          >
-            <Button
-              size="sm"
-              variant={record.patched ? "outline" : "default"}
-              loading={busyKey === agentKey(record)}
-            >
-              {action}
-            </Button>
-          </ConfirmDialog>
-        );
-      },
+      render: (_value, record) => (
+        <div className="flex items-center gap-2">
+          <RunButton
+            agent={record}
+            status={runtimeOf(runtime, record)}
+            busy={runBusyKey === agentKey(record)}
+            onToggle={toggleRunning}
+          />
+          {patchButton(record)}
+        </div>
+      ),
     },
   ];
+
+  function patchButton(record: Agent) {
+    if (!record.supported) {
+      return (
+        <Button size="sm" variant="outline" disabled>
+          {i18next.t("agent:Patch")}
+        </Button>
+      );
+    }
+
+    const action = i18next.t(`agent:${record.patched ? "Unpatch" : "Patch"}`);
+    const note = [record.notice, record.followup].filter(Boolean).join(" ");
+    return (
+      <ConfirmDialog
+        title={`${action} ${record.name}?`}
+        description={note || undefined}
+        confirmText={action}
+        variant={record.patched ? "destructive" : "default"}
+        onConfirm={() => togglePatch(record)}
+      >
+        <Button
+          size="sm"
+          variant={record.patched ? "outline" : "default"}
+          loading={busyKey === agentKey(record)}
+        >
+          {action}
+        </Button>
+      </ConfirmDialog>
+    );
+  }
 
   return (
     <PageContainer>
@@ -188,7 +225,15 @@ export default function AgentsPage({account}: {account: Account}) {
           inContainer ? "agent:Running in a container detail" : "agent:No supported agents found",
         )}
         toolbar={
-          <Button variant="outline" size="sm" onClick={() => scan(true)} loading={loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              scan(true);
+              loadRuntime();
+            }}
+            loading={loading}
+          >
             <RefreshCw />
             {i18next.t("agent:Scan")}
           </Button>

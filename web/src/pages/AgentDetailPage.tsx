@@ -23,6 +23,7 @@ import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as LlmRecordBackend from "@/backend/LlmRecordBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
+import {RunBadge, RunButton} from "@/components/AgentRunControl";
 import {DataTable, type Column} from "@/components/shared/data-table";
 import {ProviderCard} from "@/components/ProviderCard";
 import {ResultScreen, UnauthorizedResult} from "@/components/shared/misc";
@@ -38,6 +39,7 @@ import {
   agentKey,
   getOutcomeVariant,
   monitorAgentId,
+  runtimeOf,
   useAgents,
   useAgentSessions,
 } from "@/lib/agents";
@@ -46,6 +48,7 @@ import type {
   Account,
   Agent,
   AgentRecord,
+  AgentRuntime,
   AgentSession,
   Provider,
   ProviderHealth,
@@ -121,6 +124,44 @@ function MonitoringCard({
   );
 }
 
+/** The run state of the installation, with the control that changes it. */
+function RuntimeCard({
+  agent,
+  status,
+  busy,
+  onToggle,
+}: {
+  agent: Agent;
+  status?: AgentRuntime;
+  busy: boolean;
+  onToggle: (agent: Agent, running: boolean) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="text-base">{i18next.t("agent:Run Status")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
+        <div>
+          <RunBadge status={status} />
+        </div>
+
+        {status?.running ? (
+          <p className="text-sm text-muted-foreground">
+            {`${i18next.t("agent:Processes")}: ${status.pids.join(", ")}`}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {i18next.t(status?.desktop ? "agent:Start app hint" : "agent:Start console hint")}
+          </p>
+        )}
+
+        <RunButton agent={agent} status={status} busy={busy} onToggle={onToggle} />
+      </CardContent>
+    </Card>
+  );
+}
+
 /** What this agent has spent through the proxy, and on which provider. */
 function UsageCard({stats}: {stats: LlmRecordStats | null}) {
   return (
@@ -176,8 +217,20 @@ export default function AgentDetailPage({account}: {account: Account}) {
   const params = useParams();
   const [searchParams] = useSearchParams();
   const isAdmin = Setting.isAdminUser(account);
-  const {agents, error, busyKey, scanned, scan, togglePatch, setRouting, writeProvider} =
-    useAgents(isAdmin);
+  const {
+    agents,
+    error,
+    busyKey,
+    scanned,
+    runtime,
+    runBusyKey,
+    scan,
+    loadRuntime,
+    toggleRunning,
+    togglePatch,
+    setRouting,
+    writeProvider,
+  } = useAgents(isAdmin);
   const [tab, setTab] = React.useState<Tab>("Agent Sessions");
   const [records, setRecords] = React.useState<AgentRecord[]>([]);
   const [recordError, setRecordError] = React.useState("");
@@ -370,7 +423,15 @@ export default function AgentDetailPage({account}: {account: Account}) {
         />
         <h1 className="text-xl font-semibold tracking-tight">{agent.name}</h1>
         <Badge variant="secondary">{agent.version || i18next.t("agent:Unknown")}</Badge>
-        <Button variant="outline" size="sm" className="ml-auto" onClick={() => scan(true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          onClick={() => {
+            scan(true);
+            loadRuntime();
+          }}
+        >
           <RefreshCw />
           {i18next.t("agent:Scan")}
         </Button>
@@ -384,6 +445,13 @@ export default function AgentDetailPage({account}: {account: Account}) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <RuntimeCard
+          agent={agent}
+          status={runtimeOf(runtime, agent)}
+          busy={runBusyKey === agentKey(agent)}
+          onToggle={toggleRunning}
+        />
+
         <MonitoringCard
           agent={agent}
           busy={busyKey === agentKey(agent)}

@@ -29,6 +29,7 @@ import i18next from "i18next";
 import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
 import {AgentIcon} from "@/components/AgentIcon";
+import {RunBadge, RunButton} from "@/components/AgentRunControl";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
 import {EmptyState} from "@/components/shared/empty-state";
 import {Loading} from "@/components/shared/loading";
@@ -41,9 +42,16 @@ import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardHeader} from "@/components/ui/card";
 import {Switch} from "@/components/ui/switch";
 import {SimpleTooltip} from "@/components/ui/tooltip";
-import {activityOf, agentDetailPath, agentKey, useAgents, useAgentSessions} from "@/lib/agents";
+import {
+  activityOf,
+  agentDetailPath,
+  agentKey,
+  runtimeOf,
+  useAgents,
+  useAgentSessions,
+} from "@/lib/agents";
 import {cn} from "@/lib/utils";
-import type {Account, Agent} from "@/types";
+import type {Account, Agent, AgentRuntime} from "@/types";
 
 /** One labelled line inside an agent card. */
 function CardRow({label, children}: {label: string; children: React.ReactNode}) {
@@ -59,12 +67,18 @@ function AgentCard({
   agent,
   busy,
   activity,
+  status,
+  runBusy,
   onToggle,
+  onRun,
 }: {
   agent: Agent;
   busy: boolean;
   activity?: {sessionCount: number; recordCount: number; lastTime: string};
+  status?: AgentRuntime;
+  runBusy: boolean;
   onToggle: () => void;
+  onRun: (agent: Agent, running: boolean) => void;
 }) {
   const action = i18next.t(`agent:${agent.patched ? "Unpatch" : "Patch"}`);
   const note = [agent.notice, agent.followup].filter(Boolean).join(" ");
@@ -93,6 +107,7 @@ function AgentCard({
             {agent.name}
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <RunBadge status={status} />
             <Badge variant="muted">{agent.version || i18next.t("agent:Unknown")}</Badge>
             {agent.installMethod ? <Badge variant="muted">{agent.installMethod}</Badge> : null}
           </div>
@@ -132,7 +147,7 @@ function AgentCard({
           <span className="truncate text-xs">{agent.owner}</span>
         </CardRow>
 
-        <div className="mt-auto flex items-center justify-between border-t pt-3">
+        <div className="mt-auto flex flex-col gap-2 border-t pt-3">
           {/* The patcher's own wording is the most precise thing there is about
               a given state, so it hangs off the status line as its tooltip. */}
           <SimpleTooltip title={agent.detail}>
@@ -150,13 +165,16 @@ function AgentCard({
                     : i18next.t("agent:Monitoring, no activity yet")}
             </span>
           </SimpleTooltip>
-          <Link
-            to={agentDetailPath(agent)}
-            className="text-primary inline-flex shrink-0 items-center text-xs hover:underline"
-          >
-            {i18next.t("agent:Details")}
-            <ChevronRight className="size-3.5" />
-          </Link>
+          <div className="flex items-center justify-between gap-2">
+            <RunButton agent={agent} status={status} busy={runBusy} onToggle={onRun} />
+            <Link
+              to={agentDetailPath(agent)}
+              className="text-primary inline-flex shrink-0 items-center text-xs hover:underline"
+            >
+              {i18next.t("agent:Details")}
+              <ChevronRight className="size-3.5" />
+            </Link>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -214,7 +232,20 @@ function SetupGuide({hasProvider, agents}: {hasProvider: boolean; agents: Agent[
 
 export default function AgentDashboardPage({account}: {account: Account}) {
   const isAdmin = Setting.isAdminUser(account);
-  const {agents, loading, error, busyKey, scanned, inContainer, scan, togglePatch} = useAgents(isAdmin);
+  const {
+    agents,
+    loading,
+    error,
+    busyKey,
+    scanned,
+    inContainer,
+    runtime,
+    runBusyKey,
+    scan,
+    loadRuntime,
+    toggleRunning,
+    togglePatch,
+  } = useAgents(isAdmin);
   const {activity, recordCount} = useAgentSessions(isAdmin, "", 5000);
   // null until the provider count is known, so the guide never flashes.
   const [hasProvider, setHasProvider] = React.useState<boolean | null>(null);
@@ -242,7 +273,14 @@ export default function AgentDashboardPage({account}: {account: Account}) {
         title={i18next.t("agent:Agents on this machine")}
         description={account.hostname}
         actions={
-          <Button variant="outline" onClick={() => scan(true)} loading={loading}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              scan(true);
+              loadRuntime(true);
+            }}
+            loading={loading}
+          >
             <RefreshCw />
             {i18next.t("agent:Scan")}
           </Button>
@@ -275,7 +313,14 @@ export default function AgentDashboardPage({account}: {account: Account}) {
                 : "agent:Install an AI agent on this machine, then scan again",
             )}
             action={
-              <Button variant="outline" onClick={() => scan(true)} loading={loading}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  scan(true);
+                  loadRuntime(true);
+                }}
+                loading={loading}
+              >
                 <RefreshCw />
                 {i18next.t("agent:Scan")}
               </Button>
@@ -290,7 +335,10 @@ export default function AgentDashboardPage({account}: {account: Account}) {
               agent={agent}
               busy={busyKey === agentKey(agent)}
               activity={activityOf(activity, agent)}
+              status={runtimeOf(runtime, agent)}
+              runBusy={runBusyKey === agentKey(agent)}
               onToggle={() => togglePatch(agent)}
+              onRun={toggleRunning}
             />
           ))}
         </div>

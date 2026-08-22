@@ -2,6 +2,7 @@
   "id": "cursor",
   "displayName": "Cursor",
   "execName": "Cursor",
+  "desktop": true,
   "windowsProgramDirs": ["cursor"],
   "homebrewCasks": ["cursor"]
 }

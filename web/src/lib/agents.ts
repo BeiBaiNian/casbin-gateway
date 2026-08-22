@@ -18,7 +18,10 @@ import i18next from "i18next";
 import * as AgentBackend from "@/backend/AgentBackend";
 import * as Setting from "@/Setting";
 import type {BadgeVariant} from "@/components/ui/badge";
-import type {Agent, AgentSession} from "@/types";
+import type {Agent, AgentRuntime, AgentSession} from "@/types";
+
+/** How long a started app is given before its process is looked for again. */
+const runtimeSettleMs = 2000;
 
 /** Routing through the local proxy, which is what makes a switch hot. */
 export const gatewayMode = "gateway";
@@ -76,6 +79,10 @@ export function useAgents(enabled = true) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [busyKey, setBusyKey] = React.useState("");
+  // The run state is keyed by installation and loaded on its own, so it can be
+  // refreshed after a start or a stop without scanning the disk again.
+  const [runtime, setRuntime] = React.useState<Record<string, AgentRuntime>>({});
+  const [runBusyKey, setRunBusyKey] = React.useState("");
   // A scan inside a container reads the container's filesystem, not the host's,
   // which is why it can come back empty on a machine full of agents.
   const [inContainer, setInContainer] = React.useState(false);
@@ -109,9 +116,61 @@ export function useAgents(enabled = true) {
     [enabled],
   );
 
+  const loadRuntime = React.useCallback((forceRefresh = false) => {
+    if (!enabled) {
+      return;
+    }
+
+    AgentBackend.getAgentProcesses(forceRefresh)
+      .then(res => {
+        if (res.status === "ok") {
+          const next: Record<string, AgentRuntime> = {};
+          (res.data ?? []).forEach(item => {
+            next[agentKey(item)] = item;
+          });
+          setRuntime(next);
+        }
+      })
+      .catch(() => undefined);
+  }, [enabled]);
+
   React.useEffect(() => {
     scan();
-  }, [scan]);
+    loadRuntime();
+  }, [scan, loadRuntime]);
+
+  /**
+   * toggleRunning starts the agent or ends every process of it. A desktop app
+   * takes a moment to show up in the process table, so the run state is read
+   * again shortly after the call rather than only once.
+   */
+  const toggleRunning = React.useCallback(
+    (agent: Agent, running: boolean) => {
+      const target = {agentId: agent.agentId, path: agent.path, owner: agent.owner};
+
+      setRunBusyKey(agentKey(agent));
+      (running ? AgentBackend.stopAgent(target) : AgentBackend.startAgent(target))
+        .then(res => {
+          if (res.status === "ok") {
+            Setting.showMessage(
+              "success",
+              `${i18next.t(running ? "agent:Agent stopped" : "agent:Agent started")}: ${agent.name}`,
+            );
+            setTimeout(() => loadRuntime(true), runtimeSettleMs);
+          } else {
+            Setting.showMessage(
+              "error",
+              res.msg ||
+                i18next.t(running ? "agent:Failed to stop the agent" : "agent:Failed to start the agent"),
+            );
+          }
+          loadRuntime(true);
+        })
+        .catch(err => Setting.showMessage("error", err.message || String(err)))
+        .then(() => setRunBusyKey(""));
+    },
+    [loadRuntime],
+  );
 
   const togglePatch = React.useCallback(
     (agent: Agent) => {
@@ -222,11 +281,20 @@ export function useAgents(enabled = true) {
     busyKey,
     scanned,
     inContainer,
+    runtime,
+    runBusyKey,
     scan,
+    loadRuntime,
+    toggleRunning,
     togglePatch,
     setRouting,
     writeProvider,
   };
+}
+
+/** The run state of one installation, before the first listing has landed. */
+export function runtimeOf(runtime: Record<string, AgentRuntime>, agent: Agent) {
+  return runtime[agentKey(agent)];
 }
 
 /** What one agent has been up to, derived from its monitoring sessions. */

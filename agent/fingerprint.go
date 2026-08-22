@@ -21,7 +21,10 @@ type Fingerprint struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"displayName"`
 
-	ExecName            string              `json:"execName,omitempty"`
+	ExecName string `json:"execName,omitempty"`
+	// Desktop marks a windowed app, which is launched without a console.
+	Desktop bool `json:"desktop,omitempty"`
+
 	StateDir            string              `json:"stateDir,omitempty"`
 	NpmPackage          string              `json:"npmPackage,omitempty"`
 	ExtraUnixNpmDirs    []string            `json:"extraUnixNpmDirs,omitempty"`

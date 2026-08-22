@@ -13,7 +13,14 @@
 // limitations under the License.
 
 import {query, request} from "@/backend/request";
-import type {Agent, AgentProviderConfig, AgentProviderFile, AgentRecord, AgentSession} from "@/types";
+import type {
+  Agent,
+  AgentProviderConfig,
+  AgentProviderFile,
+  AgentRecord,
+  AgentRuntime,
+  AgentSession,
+} from "@/types";
 
 export interface PatchTarget {
   agentId: string;
@@ -32,6 +39,18 @@ export function patchAgent(target: PatchTarget) {
 
 export function unpatchAgent(target: PatchTarget) {
   return request<{followup?: string}>("/api/unpatch-agent", "POST", target);
+}
+
+export function getAgentProcesses(forceRefresh = false) {
+  return request<AgentRuntime[]>(`/api/get-agent-processes${forceRefresh ? "?refresh=true" : ""}`);
+}
+
+export function startAgent(target: PatchTarget) {
+  return request<AgentRuntime>("/api/start-agent", "POST", target);
+}
+
+export function stopAgent(target: PatchTarget) {
+  return request<AgentRuntime>("/api/stop-agent", "POST", target);
 }
 
 export interface AgentRouting {

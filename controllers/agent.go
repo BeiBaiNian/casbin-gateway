@@ -253,28 +253,37 @@ func (c *ApiController) directLoopbackClient() (net.IP, bool) {
 	return ip, true
 }
 
-// readAgentPatchTarget resolves the request body against the installations that
-// were actually discovered. Patching writes into the owner's home directory, so
-// an unverified body would let a caller name any account on the host.
-func (c *ApiController) readAgentPatchTarget() (agentpatch.Target, bool) {
-	var target agentpatch.Target
-	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &target); err != nil {
+// readAgentInstallation resolves the request body against the installations that
+// were actually discovered. Patching writes into the owner's home directory and
+// starting runs a program, so an unverified body would let a caller name any
+// account, and any file, on the host.
+func (c *ApiController) readAgentInstallation() (agent.Installation, bool) {
+	var requested agentpatch.Target
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &requested); err != nil {
 		c.ResponseError(err.Error())
-		return target, false
+		return agent.Installation{}, false
 	}
 
 	installations, err := agent.Scan(false)
 	if err != nil {
 		c.ResponseError(err.Error())
-		return target, false
+		return agent.Installation{}, false
 	}
 	for _, installation := range installations {
-		if candidate := targetOf(installation); matchesTarget(candidate, target) {
-			return candidate, true
+		if matchesTarget(targetOf(installation), requested) {
+			return installation, true
 		}
 	}
 	c.ResponseError("no discovered agent installation matches this target")
-	return target, false
+	return agent.Installation{}, false
+}
+
+func (c *ApiController) readAgentPatchTarget() (agentpatch.Target, bool) {
+	installation, ok := c.readAgentInstallation()
+	if !ok {
+		return agentpatch.Target{}, false
+	}
+	return targetOf(installation), true
 }
 
 func matchesTarget(discovered, requested agentpatch.Target) bool {

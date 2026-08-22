@@ -2,6 +2,7 @@
   "id": "windsurf",
   "displayName": "Windsurf",
   "execName": "Windsurf",
+  "desktop": true,
   "windowsProgramDirs": ["Windsurf"],
   "homebrewCasks": ["windsurf"]
 }
