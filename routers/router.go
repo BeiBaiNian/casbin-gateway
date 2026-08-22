@@ -113,6 +113,8 @@ func initAPI() {
 	beego.Router("/api/get-provider-models", &controllers.ApiController{}, "POST:GetProviderModels")
 	beego.Router("/api/test-provider", &controllers.ApiController{}, "POST:TestProvider")
 	beego.Router("/api/get-provider-health", &controllers.ApiController{}, "GET:GetProviderHealth")
+	beego.Router("/api/get-provider-quotas", &controllers.ApiController{}, "GET:GetProviderQuotas")
+	beego.Router("/api/refresh-provider-quotas", &controllers.ApiController{}, "POST:RefreshProviderQuotas")
 
 	beego.Router("/api/get-llm-records", &controllers.ApiController{}, "GET:GetLlmRecords")
 	beego.Router("/api/get-llm-record", &controllers.ApiController{}, "GET:GetLlmRecord")

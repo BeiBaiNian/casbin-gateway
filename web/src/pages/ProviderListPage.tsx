@@ -14,13 +14,14 @@
 
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
-import {ChevronDown, CircleCheck, CircleX, Pencil, Plug, Plus, RefreshCw, Trash2} from "lucide-react";
+import {ChevronDown, CircleCheck, CircleX, Pencil, Plug, Plus, RefreshCw, Trash2, Wallet} from "lucide-react";
 import i18next from "i18next";
 
 import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
 import {ProviderIcon, ProviderIconField} from "@/components/ProviderIcon";
 import {ProviderModelsField} from "@/components/ProviderModelsField";
+import {QuotaBadge} from "@/components/ProviderQuota";
 import {ProviderSourcePicker, sourceTitle} from "@/components/ProviderSourcePicker";
 import {ProviderTestField, useProviderTest} from "@/components/ProviderTestField";
 import {ConfirmDialog} from "@/components/shared/confirm-dialog";
@@ -46,7 +47,7 @@ import {
   type ProviderSource,
 } from "@/lib/providers";
 import {cn} from "@/lib/utils";
-import type {Account, Provider, ProviderHealth} from "@/types";
+import type {Account, Provider, ProviderHealth, ProviderQuota} from "@/types";
 
 function newProvider(owner: string, label = "New Provider"): Provider {
   const randomName = Setting.getRandomName();
@@ -113,6 +114,8 @@ export default function ProviderListPage({account}: {account: Account}) {
   const [source, setSource] = React.useState<ProviderSource | null>(null);
   const [nameError, setNameError] = React.useState("");
   const [health, setHealth] = React.useState<ProviderHealth[]>([]);
+  const [quotas, setQuotas] = React.useState<ProviderQuota[]>([]);
+  const [refreshingQuotas, setRefreshingQuotas] = React.useState(false);
   const test = useProviderTest(form);
 
   const fetchProviders = React.useCallback(
@@ -165,6 +168,23 @@ export default function ProviderListPage({account}: {account: Account}) {
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // The balances are read from the cache first so the table fills in at once,
+  // then refreshed for whichever provider has a stale answer.
+  const loadQuotas = React.useCallback((force: boolean) => {
+    setRefreshingQuotas(true);
+    ProviderBackend.refreshProviderQuotas("", force)
+      .then(res => setQuotas(res.status === "ok" ? (res.data ?? []) : []))
+      .catch(() => undefined)
+      .then(() => setRefreshingQuotas(false));
+  }, []);
+
+  React.useEffect(() => {
+    ProviderBackend.getProviderQuotas()
+      .then(res => setQuotas(res.status === "ok" ? (res.data ?? []) : []))
+      .catch(() => undefined)
+      .then(() => loadQuotas(false));
+  }, [loadQuotas]);
 
   const openAddDialog = (start?: ProviderSource) => {
     setForm(start ? providerFromSource(account.name, start) : newProvider(account.name));
@@ -342,6 +362,14 @@ export default function ProviderListPage({account}: {account: Account}) {
         ),
     },
     {
+      title: i18next.t("provider:Balance"),
+      key: "quota",
+      width: "140px",
+      render: (_text, record) => (
+        <QuotaBadge quota={quotas.find(item => item.provider === `${record.owner}/${record.name}`)} />
+      ),
+    },
+    {
       title: i18next.t("provider:Health"),
       key: "health",
       width: "150px",
@@ -447,10 +475,21 @@ export default function ProviderListPage({account}: {account: Account}) {
           description={`${total} ${i18next.t("provider:Providers")}`}
           emptyIcon={Plug}
           toolbar={
-            <Button variant="outline" size="sm" onClick={() => fetchProviders()} loading={loading}>
-              <RefreshCw />
-              {i18next.t("general:Refresh")}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadQuotas(true)}
+                loading={refreshingQuotas}
+              >
+                <Wallet />
+                {i18next.t("provider:Refresh balances")}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => fetchProviders()} loading={loading}>
+                <RefreshCw />
+                {i18next.t("general:Refresh")}
+              </Button>
+            </>
           }
         />
       )}

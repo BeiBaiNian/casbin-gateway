@@ -21,6 +21,7 @@ import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
 import {ProviderIcon, ProviderIconField} from "@/components/ProviderIcon";
 import {ProviderModelsField} from "@/components/ProviderModelsField";
+import {ProviderQuotaSection} from "@/components/ProviderQuota";
 import {ProviderTestField, useProviderTest} from "@/components/ProviderTestField";
 import {EnvSnippet} from "@/components/EnvSnippet";
 import {Field} from "@/components/shared/form-dialog";
@@ -42,7 +43,7 @@ import {
   localShell,
   usesClientAuth,
 } from "@/lib/providers";
-import type {Provider} from "@/types";
+import type {Provider, QuotaConfig} from "@/types";
 
 // Mirrors object.BuildOpenAiUrl on the server.
 function buildOpenAiUrl(baseUrl: string, endpoint: string) {
@@ -295,6 +296,11 @@ export default function ProviderEditPage() {
           />
         </Field>
       </Section>
+
+      <ProviderQuotaSection
+        provider={provider}
+        onChange={(quota: QuotaConfig | null) => setField("quota", quota)}
+      />
 
       <Section title={i18next.t("provider:Usage")} description={i18next.t("provider:Usage hint")} columns={1}>
         <EnvSnippet

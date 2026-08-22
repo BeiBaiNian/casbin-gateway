@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import {itemId, query, request} from "@/backend/request";
-import type {Provider, ProviderHealth, ProviderTestResult} from "@/types";
+import type {Provider, ProviderHealth, ProviderQuota, ProviderTestResult} from "@/types";
 
 export function getProviders(
   owner: string,
@@ -65,4 +65,15 @@ export function testProvider(provider: Provider) {
  * went to a fallback rather than to the bound provider. */
 export function getProviderHealth() {
   return request<ProviderHealth[]>("/api/get-provider-health");
+}
+
+/** The vendor balances already known. Asks no vendor anything. */
+export function getProviderQuotas() {
+  return request<ProviderQuota[]>("/api/get-provider-quotas");
+}
+
+/** Asks the vendors what is left. Without an id every provider the caller can
+ * see is refreshed, and without force only the ones with a stale answer. */
+export function refreshProviderQuotas(id = "", force = false) {
+  return request<ProviderQuota[]>("/api/refresh-provider-quotas", "POST", {id: id, force: force});
 }

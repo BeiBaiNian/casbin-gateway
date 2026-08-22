@@ -162,6 +162,36 @@ export interface Provider {
   icon: string;
   /** Whatever the person who added the provider wants to remember about it. */
   notes: string;
+  /** Null leaves the built-in balance endpoints to answer. */
+  quota?: QuotaConfig | null;
+}
+
+/** Where a provider's balance is read from, when there is no built-in endpoint
+ * for its vendor. Mirrors object.QuotaConfig on the server. */
+export interface QuotaConfig {
+  url: string;
+  // An index signature rather than Record: this module declares a Record entity
+  // of its own, which shadows the built-in type.
+  headers: {[name: string]: string};
+  token: string;
+  remaining: string;
+  used: string;
+  total: string;
+  unit: string;
+  scale: number;
+}
+
+/** What the vendor last said is left on the account behind a provider. */
+export interface ProviderQuota {
+  provider: string;
+  /** False when nothing knows where to ask, which is not an error. */
+  supported: boolean;
+  remaining: number | null;
+  used: number | null;
+  total: number | null;
+  unit: string;
+  error: string;
+  time: string;
 }
 
 export interface ProviderTestResult {

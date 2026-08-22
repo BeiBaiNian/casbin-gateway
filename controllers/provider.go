@@ -241,6 +241,86 @@ func (c *ApiController) GetProviderModels() {
 	c.ResponseOk(models)
 }
 
+// quotaProviders are the providers whose vendor balances the caller may see: an
+// admin sees every one, anybody else only their own.
+func (c *ApiController) quotaProviders() ([]*object.Provider, error) {
+	owner := c.GetSessionUsername()
+	if c.GetSessionUser().IsAdmin {
+		owner = ""
+	}
+	return object.GetProviders(owner)
+}
+
+// GetProviderQuotas returns the vendor balances that are already known. It asks
+// no vendor anything, so a page can call it as often as it likes.
+func (c *ApiController) GetProviderQuotas() {
+	if c.RequireSignedIn() {
+		return
+	}
+
+	providers, err := c.quotaProviders()
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(object.GetProviderQuotas(providers))
+}
+
+// RefreshProviderQuotas asks the vendors what is left. Without an id every
+// provider the caller can see is refreshed, and without force the ones whose
+// last answer is still fresh are left alone.
+func (c *ApiController) RefreshProviderQuotas() {
+	if c.RequireSignedIn() {
+		return
+	}
+
+	var request struct {
+		Id    string `json:"id"`
+		Force bool   `json:"force"`
+	}
+	if len(c.Ctx.Input.RequestBody) > 0 {
+		if err := json.Unmarshal(c.Ctx.Input.RequestBody, &request); err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+	}
+
+	if request.Id == "" {
+		providers, err := c.quotaProviders()
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+		c.ResponseOk(object.RefreshProviderQuotas(providers, request.Force))
+		return
+	}
+
+	owner, _, ok := getProviderOwnerAndName(request.Id)
+	if !ok {
+		c.ResponseError("invalid provider ID: " + request.Id)
+		return
+	}
+	if !c.providerAccess(owner) {
+		c.ResponseError("unauthorized")
+		return
+	}
+
+	provider, err := object.GetProvider(request.Id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if provider == nil {
+		c.ResponseError("the provider does not exist")
+		return
+	}
+
+	// A refresh of one provider is always somebody pressing a button, so it is
+	// never answered from the cache.
+	c.ResponseOk(object.RefreshProviderQuotas([]*object.Provider{provider}, true))
+}
+
 // resolveProviderApiKey fills in the key a probe has to be made with. The
 // browser only ever sees the mask, so an untouched key field means the one the
 // provider already has stored; a provider that is not saved yet has none.

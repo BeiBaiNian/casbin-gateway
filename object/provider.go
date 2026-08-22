@@ -68,6 +68,40 @@ func encryptApiKey(provider *Provider) error {
 	return nil
 }
 
+// quotaTokenAad keeps the quota token's ciphertext from being usable in the
+// api_key column of the same row, or in any other row.
+func quotaTokenAad(provider *Provider) string {
+	return provider.GetId() + "/quota"
+}
+
+// encryptQuotaToken mirrors encryptApiKey for the credential a quota endpoint
+// needs when the inference key is not the one it takes.
+func encryptQuotaToken(provider *Provider) error {
+	if provider.Quota == nil || provider.Quota.Token == "" {
+		return nil
+	}
+
+	encrypted, err := util.EncryptWithKey(apiKeyEncryptionSecret(), provider.Quota.Token, quotaTokenAad(provider))
+	if err != nil {
+		return err
+	}
+	provider.Quota.Token = encrypted
+	return nil
+}
+
+func decryptQuotaToken(provider *Provider) {
+	if provider.Quota == nil || provider.Quota.Token == "" {
+		return
+	}
+
+	plain, err := util.DecryptWithKey(apiKeyEncryptionSecret(), provider.Quota.Token, quotaTokenAad(provider))
+	if err != nil {
+		fmt.Printf("decryptQuotaToken(): provider [%s]: %v\n", provider.GetId(), err)
+		return
+	}
+	provider.Quota.Token = plain
+}
+
 // decryptProvider restores the plaintext ApiKey on a provider just read from the
 // database. A failure leaves the stored value in place rather than dropping the
 // provider, but is logged: otherwise a changed key looks exactly like a healthy
@@ -76,6 +110,8 @@ func decryptProvider(provider *Provider) {
 	if provider == nil {
 		return
 	}
+
+	decryptQuotaToken(provider)
 
 	secret := apiKeyEncryptionSecret()
 	stored := provider.ApiKey
@@ -206,6 +242,9 @@ type Provider struct {
 	// Notes is whatever the person who added the provider wants to remember
 	// about it: which account the key belongs to, when it expires, who pays.
 	Notes string `xorm:"varchar(500)" json:"notes"`
+	// Quota names the vendor's balance endpoint when there is no built-in one
+	// for it. Nil leaves the built-in table in provider_quota.go to answer.
+	Quota *QuotaConfig `xorm:"mediumtext json" json:"quota"`
 	// TODO(1.2): Priority routing strategy will be defined in milestone 1.2.
 	Priority int    `xorm:"int" json:"priority"`
 	Status   string `xorm:"varchar(100)" json:"status"`
@@ -264,6 +303,13 @@ func GetMaskedProvider(provider *Provider) *Provider {
 	masked := *provider
 	if masked.ApiKey != "" {
 		masked.ApiKey = ApiKeyMask
+	}
+	// The quota token shares a column with the rest of the quota configuration,
+	// so the whole struct is copied before the token is replaced.
+	if masked.Quota != nil && masked.Quota.Token != "" {
+		quota := *masked.Quota
+		quota.Token = ApiKeyMask
+		masked.Quota = &quota
 	}
 	return &masked
 }
@@ -434,6 +480,9 @@ func AddProvider(provider *Provider) (bool, error) {
 	}
 	provider.UpdatedTime = now
 
+	if err := encryptQuotaToken(provider); err != nil {
+		return false, err
+	}
 	if err := encryptApiKey(provider); err != nil {
 		return false, err
 	}
@@ -444,9 +493,11 @@ func AddProvider(provider *Provider) (bool, error) {
 
 func UpdateProvider(id string, provider *Provider) (bool, error) {
 	owner, name := util.GetOwnerAndNameFromId(id)
-	if stored, err := getProvider(owner, name); err != nil {
+	stored, err := getProvider(owner, name)
+	if err != nil {
 		return false, err
-	} else if stored == nil {
+	}
+	if stored == nil {
 		return false, nil
 	}
 
@@ -458,21 +509,34 @@ func UpdateProvider(id string, provider *Provider) (bool, error) {
 	provider.Name = name
 	provider.UpdatedTime = util.GetCurrentTime()
 
+	// The quota token is masked on read like the API key, but it shares its
+	// column with the rest of the quota configuration, so the stored one is put
+	// back rather than the column left out of the write.
+	if provider.Quota != nil && provider.Quota.Token == ApiKeyMask {
+		provider.Quota.Token = stored.Quota.token()
+	}
+	if err := encryptQuotaToken(provider); err != nil {
+		return false, err
+	}
+
 	session := ormer.Engine.ID(core.PK{owner, name})
 	// The browser only ever sees the mask, so getting it back means the user
 	// did not touch the field. Any other value (including "") is written, which
 	// is what makes clearing a key possible.
 	if provider.ApiKey == ApiKeyMask {
 		session = session.Omit("api_key")
-	} else if err := encryptApiKey(provider); err != nil {
+	} else if err = encryptApiKey(provider); err != nil {
 		return false, err
 	}
 
-	affected, err := session.AllCols().Update(provider)
+	var affected int64
+
+	affected, err = session.AllCols().Update(provider)
 	if err == nil {
 		// The edit may be the fix for whatever the proxy last saw, so the
 		// provider starts from a clean slate.
 		ClearProviderHealth(provider.GetId())
+		ClearProviderQuota(provider.GetId())
 	}
 	return affected != 0, err
 }
@@ -481,6 +545,7 @@ func DeleteProvider(provider *Provider) (bool, error) {
 	affected, err := ormer.Engine.ID(core.PK{provider.Owner, provider.Name}).Delete(&Provider{})
 	if err == nil {
 		ClearProviderHealth(provider.GetId())
+		ClearProviderQuota(provider.GetId())
 	}
 	return affected != 0, err
 }

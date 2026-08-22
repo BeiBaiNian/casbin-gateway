@@ -36,23 +36,8 @@ import {Switch} from "@/components/ui/switch";
 import {TagsInput} from "@/components/ui/tags-input";
 import {Textarea} from "@/components/ui/textarea";
 import {counted} from "@/lib/agent-configs";
+import {parsePairs} from "@/lib/pairs";
 import type {AgentConfigInventory, AgentConfigPlanItem, McpTransport} from "@/types";
-
-/** "KEY=VALUE" per line, which is how both env and headers are written here. */
-function parsePairs(text: string) {
-  const pairs: Record<string, string> = {};
-  text.split("\n").forEach(line => {
-    const separator = line.indexOf("=");
-    if (separator <= 0) {
-      return;
-    }
-    const key = line.slice(0, separator).trim();
-    if (key !== "") {
-      pairs[key] = line.slice(separator + 1).trim();
-    }
-  });
-  return pairs;
-}
 
 /**
  * Setting up one MCP server from Gateway: it is written into every agent picked
