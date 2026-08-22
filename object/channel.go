@@ -380,6 +380,27 @@ func BuildChannelUrl(baseUrl string, protocol string, endpoint string) (string, 
 	return BuildOpenAiUrl(baseUrl, endpoint)
 }
 
+// AppendQuery puts the query of the client request back on an upstream URL.
+// The query selects a variant of the endpoint — the Anthropic clients ask for
+// the beta one with "?beta=true" — so dropping it would forward a different
+// request than the one that was made. A base URL carrying a query of its own
+// keeps it, with the client's appended.
+func AppendQuery(rawUrl string, rawQuery string) string {
+	if rawQuery == "" {
+		return rawUrl
+	}
+
+	u, err := url.Parse(rawUrl)
+	if err != nil {
+		return rawUrl
+	}
+	if u.RawQuery != "" {
+		rawQuery = u.RawQuery + "&" + rawQuery
+	}
+	u.RawQuery = rawQuery
+	return u.String()
+}
+
 // SetChannelAuth puts the channel's credentials on an upstream request, in the
 // header the channel's protocol authenticates with.
 func SetChannelAuth(header http.Header, channel *Channel) {

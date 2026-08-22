@@ -319,6 +319,7 @@ func (c *ApiController) forwardToChannel(channel *object.Channel, route *proxyRo
 		object.ReportChannelFailure(channel.GetId(), err.Error())
 		return http.StatusBadGateway, err.Error(), false
 	}
+	upstreamUrl = object.AppendQuery(upstreamUrl, c.Ctx.Request.URL.RawQuery)
 
 	// The context is cancelled when this function returns, which happens only
 	// after the response body has been relayed to the client.
