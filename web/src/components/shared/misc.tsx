@@ -40,6 +40,18 @@ export function LabelWithTip({
   );
 }
 
+function copyBySelection(text: string) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  const copied = document.execCommand("copy");
+  area.remove();
+  return copied;
+}
+
 /** Copies text to the clipboard and confirms it in place for a moment. */
 export function CopyButton({
   value,
@@ -64,13 +76,16 @@ export function CopyButton({
   }, [copied]);
 
   const handleCopy = async() => {
+    const text = String(value ?? "");
     try {
-      await navigator.clipboard.writeText(String(value ?? ""));
+      await navigator.clipboard.writeText(text);
       setCopied(true);
+      return;
     } catch {
-      // Clipboard access is denied in some embedded contexts; failing quietly
-      // is better than a toast the reader cannot act on.
+      // The clipboard API is missing on a plain-HTTP deployment and refuses an
+      // unfocused document, so the older selection copy has to carry those.
     }
+    setCopied(copyBySelection(text));
   };
 
   return (

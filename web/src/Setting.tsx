@@ -17,6 +17,7 @@ import Sdk from "casdoor-js-sdk";
 import {toast} from "sonner";
 
 import * as Conf from "@/Conf";
+import {CopyButton} from "@/components/shared/misc";
 import type {Account, ApiResponse, ThemeAlgorithm} from "@/types";
 
 /**
@@ -102,14 +103,18 @@ export function goToLink(link: string) {
 }
 
 export function showMessage(type: "" | "success" | "error" | "info", text: string) {
+  // Backend messages are worth pasting into a bug report, and a toast is gone
+  // before it can be selected by hand, so every one carries a copy button.
+  const options = {action: <CopyButton value={text} className="text-current" />};
+
   if (type === "") {
     return;
   } else if (type === "success") {
-    toast.success(text);
+    toast.success(text, options);
   } else if (type === "error") {
-    toast.error(text);
+    toast.error(text, options);
   } else {
-    toast(text);
+    toast(text, options);
   }
 }
 
