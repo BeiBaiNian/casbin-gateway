@@ -127,12 +127,14 @@ func initAPI() {
 	beego.Router("/api/delete-llm-record", &controllers.ApiController{}, "POST:DeleteLlmRecord")
 	beego.Router("/api/clear-llm-records", &controllers.ApiController{}, "POST:ClearLlmRecords")
 
-	// The LLM gateway, in both wire formats. The agent routes carry the two
-	// endpoint shapes an OpenAI and an Anthropic client append to one base URL.
+	// The LLM gateway, in every wire format a client speaks. The agent routes
+	// carry the endpoint shapes those clients append to one base URL.
 	beego.Router("/v1/chat/completions", &controllers.ApiController{}, "POST:ChatCompletions")
+	beego.Router("/v1/responses", &controllers.ApiController{}, "POST:Responses")
 	beego.Router("/v1/messages", &controllers.ApiController{}, "POST:Messages")
 	beego.Router("/v1/messages/count_tokens", &controllers.ApiController{}, "POST:CountTokens")
 	beego.Router("/v1/agents/:agentId/chat/completions", &controllers.ApiController{}, "POST:AgentChatCompletions")
+	beego.Router("/v1/agents/:agentId/responses", &controllers.ApiController{}, "POST:AgentResponses")
 	beego.Router("/v1/agents/:agentId/v1/messages", &controllers.ApiController{}, "POST:AgentMessages")
 	beego.Router("/v1/agents/:agentId/v1/messages/count_tokens", &controllers.ApiController{}, "POST:AgentCountTokens")
 }

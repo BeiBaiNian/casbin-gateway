@@ -86,13 +86,15 @@ export ANTHROPIC_AUTH_TOKEN="cg-..."
 
 这个 token 是 Gateway 自己的中继令牌，不是厂商的 Key：Agent 没有它就拒绝启动，而 Gateway 会用 Provider 自己的 Key 去认证上游。页面上的片段里已经填好了真实的值。
 
+同一个 base URL 会按 Agent 说的那套 API 应答：OpenAI 客户端走 `/chat/completions`，Anthropic 客户端走 `/v1/messages`，Codex 走 `/responses` —— 它去掉了 chat completions 这套线格式，只剩这一种。Gateway 会把它翻译成 Provider 应答的 chat completions，所以 Codex 也能跑在 DeepSeek、Kimi、Qwen 这些模型上。
+
 ### 没有 API Key：沿用 Agent 已有的登录
 
 用 ChatGPT 或 Claude 订阅登录的 Agent 根本没有 API Key 可填。把 Provider 的**认证方式**设成**调用方自己的登录**，它就不需要 Key：base URL 指向厂商，每个请求都带着 Agent 自己发来的凭据转发上游，Agent 继续用它已有的登录。**Models** 留空，这个 Provider 就接受任何模型名。
 
 这种 Provider 的环境变量片段只设 base URL，不设别的 —— 在这里再设一个 token 会覆盖 Agent 已有的登录。记录和路由和有 Key 的 Provider 完全一样，只是 Gateway 从头到尾没见过任何 Key。
 
-Codex 是例外：它的 ChatGPT 登录走的是另一套 API，不是 Gateway 转发的 chat completions，所以 Codex CLI 仍然需要一个带 API Key 的 Provider。
+Codex 是例外：它的 ChatGPT 登录走的是没有任何 Provider 能替代的端点，所以 Codex CLI 仍然需要一个带 API Key 的 Provider。
 
 ### 停止、升级、卸载
 

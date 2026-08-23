@@ -129,7 +129,7 @@ func TestRelayResponse(t *testing.T) {
 			"X-Ratelimit-Remaining": {"0"},
 		},
 	}
-	c.relayResponse(upstreamResp, strings.NewReader(`{"error":{"message":"slow down"}}`), false)
+	c.relayResponse(&proxyRoute{target: openAiChat}, upstreamResp, strings.NewReader(`{"error":{"message":"slow down"}}`), false)
 
 	if recorder.Code != 429 {
 		t.Errorf("status code = %d, expected 429", recorder.Code)
@@ -158,7 +158,7 @@ func TestRelayResponseStream(t *testing.T) {
 			"Connection":   {"keep-alive"},
 		},
 	}
-	c.relayResponse(upstreamResp, strings.NewReader("data: a\n\ndata: [DONE]\n\n"), true)
+	c.relayResponse(&proxyRoute{target: openAiChat}, upstreamResp, strings.NewReader("data: a\n\ndata: [DONE]\n\n"), true)
 
 	if header := recorder.Header().Get("Content-Type"); header != "text/event-stream" {
 		t.Errorf("Content-Type = %s, expected text/event-stream", header)

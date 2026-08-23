@@ -43,9 +43,14 @@ const (
 var codexProviderPath = []string{"model_providers", codexProviderName}
 
 // errCodexNoKey rejects a provider that forwards the caller's own credentials:
-// Codex reads its key from auth.json, and its own ChatGPT sign-in speaks a
-// different API than the chat completions this provider entry points at.
+// Codex reads its key from auth.json, so there is nothing for this provider
+// entry to forward.
 var errCodexNoKey = errors.New("Codex needs an API key, so it cannot use a provider that forwards the credentials of the caller")
+
+// errCodexResponsesApi rejects writing an upstream Codex cannot reach. Codex
+// dropped the chat completions wire format, so a provider that serves only that
+// is reachable through the gateway, which translates, but not directly.
+var errCodexResponsesApi = errors.New("Codex only speaks the OpenAI Responses API, which this provider does not serve, so switch this agent to gateway mode")
 
 type codexWriter struct {
 	id string
@@ -65,8 +70,8 @@ func (w codexWriter) AgentId() string { return w.id }
 func (codexWriter) Protocol() string { return "openai" }
 
 func (w codexWriter) Plan(target Target, endpoint Endpoint) ([]File, error) {
-	if endpoint.ApiKey == "" {
-		return nil, errCodexNoKey
+	if err := w.check(endpoint); err != nil {
+		return nil, err
 	}
 
 	home, err := agentmonitor.ResolveCodexHome(target.Path, target.Owner)
@@ -91,8 +96,8 @@ func (w codexWriter) Plan(target Target, endpoint Endpoint) ([]File, error) {
 }
 
 func (w codexWriter) Apply(target Target, endpoint Endpoint) (map[string]string, error) {
-	if endpoint.ApiKey == "" {
-		return nil, errCodexNoKey
+	if err := w.check(endpoint); err != nil {
+		return nil, err
 	}
 
 	configPath, authPath, err := w.paths(target)
@@ -226,6 +231,17 @@ func (w codexWriter) Current(target Target) (string, error) {
 	return selected, nil
 }
 
+// check reports why Codex cannot be pointed at endpoint.
+func (codexWriter) check(endpoint Endpoint) error {
+	if endpoint.ApiKey == "" {
+		return errCodexNoKey
+	}
+	if !endpoint.ServesResponsesApi {
+		return errCodexResponsesApi
+	}
+	return nil
+}
+
 // providerTable is the [model_providers.casbin-gateway] block. The key lives in
 // auth.json under env_key, so config.toml can be read without exposing it.
 func (codexWriter) providerTable(endpoint Endpoint) string {
@@ -234,7 +250,7 @@ func (codexWriter) providerTable(endpoint Endpoint) string {
 		map[string]string{
 			"name":     "Casbin Gateway",
 			"base_url": endpoint.BaseUrl,
-			"wire_api": "chat",
+			"wire_api": "responses",
 			"env_key":  codexAuthKey,
 		})
 }

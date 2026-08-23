@@ -62,12 +62,21 @@ var hopByHopHeaders = []string{
 type proxyTarget struct {
 	protocol string
 	endpoint string
+	// clientEndpoint names the API the client called when it is not the one the
+	// upstream serves, which means both bodies are translated on the way.
+	clientEndpoint string
 }
 
+// responsesEndpoint is the Responses API front end. Recent Codex versions speak
+// nothing else, while almost every provider behind the gateway serves chat
+// completions, so requests and responses are translated in both directions.
+const responsesEndpoint = "/responses"
+
 var (
-	openAiChat           = proxyTarget{object.ProtocolOpenAi, "/chat/completions"}
-	anthropicMessages    = proxyTarget{object.ProtocolAnthropic, "/v1/messages"}
-	anthropicCountTokens = proxyTarget{object.ProtocolAnthropic, "/v1/messages/count_tokens"}
+	openAiChat           = proxyTarget{protocol: object.ProtocolOpenAi, endpoint: "/chat/completions"}
+	openAiResponses      = proxyTarget{protocol: object.ProtocolOpenAi, endpoint: "/chat/completions", clientEndpoint: responsesEndpoint}
+	anthropicMessages    = proxyTarget{protocol: object.ProtocolAnthropic, endpoint: "/v1/messages"}
+	anthropicCountTokens = proxyTarget{protocol: object.ProtocolAnthropic, endpoint: "/v1/messages/count_tokens"}
 )
 
 // proxyRoute is one client request being relayed. Everything except model and
@@ -141,6 +150,13 @@ func (c *ApiController) ChatCompletions() {
 	c.proxyByModel(openAiChat)
 }
 
+// Responses is the OpenAI Responses API entry point. The request is translated
+// to chat completions on the way out and the answer back on the way in, so an
+// upstream that never served the Responses API can still answer it.
+func (c *ApiController) Responses() {
+	c.proxyByModel(openAiResponses)
+}
+
 // Messages is the Anthropic-compatible counterpart of ChatCompletions, for the
 // agents that speak that API rather than OpenAI's.
 func (c *ApiController) Messages() {
@@ -158,6 +174,12 @@ func (c *ApiController) CountTokens() {
 // than one chosen by model name.
 func (c *ApiController) AgentChatCompletions() {
 	c.proxyByAgent(openAiChat)
+}
+
+// AgentResponses is the per-agent entry point of the Responses API, which is
+// the one Codex reaches the gateway on.
+func (c *ApiController) AgentResponses() {
+	c.proxyByAgent(openAiResponses)
 }
 
 // AgentMessages is the per-agent entry point for Anthropic clients. One base URL
@@ -250,11 +272,21 @@ func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
 		return nil, false
 	}
 
-	route := &proxyRoute{target: target, body: rawBody, model: fields.Model, stream: fields.Stream, start: time.Now()}
+	body := rawBody
+	if target.clientEndpoint == responsesEndpoint {
+		converted, err := responsesToChat(rawBody)
+		if err != nil {
+			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
+			return nil, false
+		}
+		body = converted
+	}
+
+	route := &proxyRoute{target: target, body: body, model: fields.Model, stream: fields.Stream, start: time.Now()}
 	if object.IsLlmRecording() {
 		route.record = &object.LlmRecord{
 			Protocol: target.protocol,
-			Endpoint: target.endpoint,
+			Endpoint: emptyAsValue(target.clientEndpoint, target.endpoint),
 			Model:    fields.Model,
 			ClientIp: util.GetClientIp(c.Ctx.Request),
 			Stream:   fields.Stream,
@@ -381,12 +413,12 @@ func (c *ApiController) forwardToProvider(provider *object.Provider, route *prox
 
 	route.recordOutcome(upstreamResp.StatusCode, "")
 	if route.record == nil {
-		c.relayResponse(upstreamResp, body, route.stream && isEventStream(upstreamResp))
+		c.relayResponse(route, upstreamResp, body, route.stream && isEventStream(upstreamResp))
 		return 0, "", true
 	}
 
 	tap := &usageTap{reader: body}
-	c.relayResponse(upstreamResp, tap, route.stream && isEventStream(upstreamResp))
+	c.relayResponse(route, upstreamResp, tap, route.stream && isEventStream(upstreamResp))
 	route.recordUsage(tap.tail)
 	return 0, "", true
 }
@@ -483,8 +515,19 @@ func (c *ApiController) copyAnthropicHeaders(dst http.Header) {
 // relayResponse copies the upstream status code, headers and body to the client
 // without any transformation (pass-through mode). When flush is true, every
 // chunk is written out as soon as it arrives so that SSE clients receive the
-// events in real time.
-func (c *ApiController) relayResponse(upstreamResp *http.Response, body io.Reader, flush bool) {
+// events in real time. A client that called an endpoint the upstream does not
+// serve gets the answer translated back into the API it asked in; an upstream
+// error is passed through either way, since both APIs report errors alike.
+func (c *ApiController) relayResponse(route *proxyRoute, upstreamResp *http.Response, body io.Reader, flush bool) {
+	if route.target.clientEndpoint == responsesEndpoint && upstreamResp.StatusCode == http.StatusOK {
+		if flush {
+			c.relayResponsesStream(route, body)
+		} else {
+			c.relayResponsesBody(route, body)
+		}
+		return
+	}
+
 	copyResponseHeaders(c.Ctx.ResponseWriter.Header(), upstreamResp.Header)
 	if flush {
 		c.Ctx.ResponseWriter.Header().Set("Cache-Control", "no-cache")

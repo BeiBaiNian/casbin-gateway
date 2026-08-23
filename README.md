@@ -88,13 +88,15 @@ export ANTHROPIC_AUTH_TOKEN="cg-..."
 
 The token is Gateway's own relay token, not a vendor key: the agent refuses to start without something in that variable, and Gateway authenticates upstream with the provider's key instead. The snippet on the page already has the real value filled in.
 
+One base URL answers whichever API the agent speaks: `/chat/completions` for an OpenAI client, `/v1/messages` for an Anthropic one, and `/responses` for Codex, which speaks nothing else since it dropped the chat completions wire format. Gateway translates that last one to the chat completions its providers answer, which is what lets Codex run on DeepSeek, Kimi, Qwen and the rest.
+
 ### No API key: keep the sign-in the agent already has
 
 An agent signed in with a ChatGPT or Claude subscription has no API key to paste. Set the provider's **Authentication** to **the caller's own login** and it needs none: the base URL points at the vendor, and every request is forwarded with the credentials the agent itself sent, so it keeps its own sign-in. Leave **Models** empty and the provider accepts any model name.
 
 The environment snippet for such a provider sets the base URL and nothing else — a token there would replace the sign-in the agent already has. Gateway records and routes the traffic exactly as it does for a provider with a key; it just never sees one.
 
-Codex is the exception: its ChatGPT sign-in talks to a different API than the chat completions Gateway relays, so a Codex CLI still needs a provider with an API key.
+Codex is the exception: its ChatGPT sign-in talks to an endpoint no provider stands in for, so a Codex CLI still needs a provider with an API key.
 
 ### Stopping, upgrading, removing
 

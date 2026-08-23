@@ -53,6 +53,10 @@ type Endpoint struct {
 	ApiKey   string `json:"apiKey"`
 	Model    string `json:"model"`
 	Mode     string `json:"mode"`
+	// ServesResponsesApi reports whether BaseUrl answers on the OpenAI Responses
+	// API, which is all Codex speaks. The gateway always does, since it
+	// translates; a provider's own upstream usually stops at chat completions.
+	ServesResponsesApi bool `json:"servesResponsesApi"`
 }
 
 // File is one configuration file a switch writes, with the section it will

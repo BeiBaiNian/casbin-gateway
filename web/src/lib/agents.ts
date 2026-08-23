@@ -43,8 +43,8 @@ export function agentKey(agent: Pick<Agent, "owner" | "path">) {
 
 /**
  * The base URL an agent is pointed at to reach its own provider. One URL serves
- * both wire formats: an OpenAI client appends /chat/completions to it, an
- * Anthropic one appends /v1/messages.
+ * every wire format: an OpenAI client appends /chat/completions to it, Codex
+ * appends /responses, and an Anthropic one appends /v1/messages.
  */
 export function agentProxyBaseUrl(agentId: string) {
   return `${Setting.ServerUrl || window.location.origin}/v1/agents/${encodeURIComponent(agentId)}`;

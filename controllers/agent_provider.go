@@ -128,10 +128,12 @@ func agentEndpoint(agentId string) (agentprovider.Endpoint, error) {
 	if endpoint.Mode == object.ModeDirect {
 		endpoint.BaseUrl = provider.BaseUrl
 		endpoint.ApiKey = provider.ApiKey
+		endpoint.ServesResponsesApi = object.ServesResponsesApi(provider)
 		return endpoint, nil
 	}
 
 	endpoint.BaseUrl = gatewayAgentUrl(agentId)
+	endpoint.ServesResponsesApi = true
 	// A client-auth provider forwards whatever the agent sends, so it must keep
 	// sending its own credentials: a placeholder token written into the agent's
 	// configuration would replace the sign-in it already has.

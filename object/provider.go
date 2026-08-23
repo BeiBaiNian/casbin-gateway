@@ -210,6 +210,14 @@ func ProviderProtocol(provider *Provider) string {
 	return ProtocolOpenAi
 }
 
+// ServesResponsesApi reports whether the provider's own upstream answers on the
+// OpenAI Responses API. Only OpenAI itself does; the OpenAI-compatible vendors
+// stop at chat completions, which the gateway translates for the clients that
+// speak nothing else.
+func ServesResponsesApi(provider *Provider) bool {
+	return provider.Type == "openai"
+}
+
 func containsString(values []string, value string) bool {
 	for _, v := range values {
 		if v == value {
