@@ -157,6 +157,15 @@ var layouts = map[string]layout{
 			store: &jsonStore{paths: [][]string{{"mcpServers"}}},
 		},
 	},
+	// dsh reads the shared ~/.agents skills too, but writes go to its own
+	// directory, which is the first user source.
+	"dsh": {
+		skills: &skillLayout{sources: []skillSource{
+			userSkills(".dsh", "skills"),
+			userSkills(".agents", "skills"),
+		}},
+		mcp: &mcpLayout{file: under(".dsh", "cordis.patch.yml"), store: &cordisStore{}},
+	},
 	"openclaw": {
 		skills: &skillLayout{sources: []skillSource{
 			userSkills(".openclaw", "skills"),
