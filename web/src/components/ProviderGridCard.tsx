@@ -30,13 +30,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {agentSpeaks} from "@/lib/agents";
-import {providerProtocol, usesClientAuth} from "@/lib/providers";
+import {providerIdOf, providerProtocol, usesClientAuth} from "@/lib/providers";
 import {cn} from "@/lib/utils";
 import type {Agent, Provider, ProviderHealth, ProviderQuota} from "@/types";
-
-export function providerIdOf(provider: Provider) {
-  return `${provider.owner}/${provider.name}`;
-}
 
 /** How many model badges fit before the rest become a count. */
 const visibleModels = 3;

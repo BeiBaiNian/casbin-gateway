@@ -28,7 +28,7 @@ import * as AgentBackend from "@/backend/AgentBackend";
 import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
 import {ProviderIconField} from "@/components/ProviderIcon";
-import {ProviderGridCard, providerIdOf} from "@/components/ProviderGridCard";
+import {ProviderGridCard} from "@/components/ProviderGridCard";
 import {ProviderModelsField} from "@/components/ProviderModelsField";
 import {ProviderSourcePicker, sourceTitle} from "@/components/ProviderSourcePicker";
 import {ProviderTestField, useProviderTest} from "@/components/ProviderTestField";
@@ -48,6 +48,7 @@ import {
   baseUrlPlaceholder,
   baseUrlPresets,
   customSource,
+  providerIdOf,
   providerSlug,
   providerSources,
   usesClientAuth,

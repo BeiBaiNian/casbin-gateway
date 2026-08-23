@@ -326,7 +326,7 @@ export default function AgentDetailPage({account}: {account: Account}) {
         subTitle={error || path || agentId}
         extra={
           <Button asChild>
-            <Link to="/agents">{i18next.t("agent:Agents")}</Link>
+            <Link to="/">{i18next.t("agent:Agents")}</Link>
           </Button>
         }
       />
@@ -408,7 +408,7 @@ export default function AgentDetailPage({account}: {account: Account}) {
   return (
     <div className="space-y-4 p-4 md:p-6">
       <Link
-        to="/agents"
+        to="/"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />

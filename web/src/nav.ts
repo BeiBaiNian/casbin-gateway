@@ -18,7 +18,6 @@ import {
   ChartColumn,
   FileSearch,
   Globe,
-  LayoutDashboard,
   ListFilter,
   Logs,
   MessageSquare,
@@ -28,6 +27,7 @@ import {
   Settings,
   SlidersHorizontal,
   ShieldCheck,
+  Table2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +37,8 @@ export interface NavLeaf {
   path: string;
   icon?: LucideIcon;
   adminOnly?: boolean;
+  /** Reached from a page rather than the rail, but still named by the breadcrumb. */
+  hidden?: boolean;
 }
 
 export interface NavGroup {
@@ -45,6 +47,7 @@ export interface NavGroup {
   icon?: LucideIcon;
   path?: string;
   adminOnly?: boolean;
+  hidden?: boolean;
   /** Hidden until the reverse proxy is turned on, since nothing under it works before that. */
   gatewayOnly?: boolean;
   children?: NavLeaf[];
@@ -61,8 +64,10 @@ export interface NavGroup {
  * them, so they live in one group instead of competing with the agent pages.
  */
 export const navGroups: NavGroup[] = [
-  {key: "/", label: "general:Dashboard", icon: LayoutDashboard, path: "/"},
-  {key: "/agents", label: "agent:Agents", icon: Bot, path: "/agents", adminOnly: true},
+  {key: "/", label: "agent:Agents", icon: Bot, path: "/"},
+  // The table of installations is the home screen's own advanced view, linked
+  // from it rather than competing with it in the rail.
+  {key: "/agents", label: "agent:Advanced view", icon: Table2, path: "/agents", adminOnly: true, hidden: true},
   {
     key: "/agent-configs",
     label: "agentConfig:Skills & MCP",

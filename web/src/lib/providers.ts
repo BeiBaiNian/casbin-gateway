@@ -15,6 +15,11 @@
 import * as Setting from "@/Setting";
 import type {Provider} from "@/types";
 
+/** The "owner/name" id an agent's routing names a provider by. */
+export function providerIdOf(provider: Pick<Provider, "owner" | "name">) {
+  return `${provider.owner}/${provider.name}`;
+}
+
 /** Mirrors object.ProviderProtocol on the server. */
 export function providerProtocol(type: string) {
   return type === "anthropic" ? "anthropic" : "openai";

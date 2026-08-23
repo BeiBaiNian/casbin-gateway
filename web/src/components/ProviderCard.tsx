@@ -48,16 +48,18 @@ import {
   directMode,
   gatewayMode,
 } from "@/lib/agents";
-import {providerProtocol, servesResponsesApi, shellForPath, usesClientAuth} from "@/lib/providers";
+import {
+  providerIdOf,
+  providerProtocol,
+  servesResponsesApi,
+  shellForPath,
+  usesClientAuth,
+} from "@/lib/providers";
 import {cn} from "@/lib/utils";
 import type {Agent, AgentProviderFile, Provider, ProviderHealth} from "@/types";
 
 /** Radix rejects an empty item value, so "unbound" needs a stand-in. */
 const noProvider = "-";
-
-function providerIdOf(provider: Provider) {
-  return `${provider.owner}/${provider.name}`;
-}
 
 /** The file preview, loaded when the dialog opens rather than on every render. */
 function PreviewDialog({

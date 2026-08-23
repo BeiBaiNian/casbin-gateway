@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import {Link} from "react-router-dom";
-import {Bot, Container, RefreshCw} from "lucide-react";
+import {ArrowLeft, Bot, Container, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
 import * as Setting from "@/Setting";
@@ -207,7 +207,18 @@ export default function AgentsPage({account}: {account: Account}) {
 
   return (
     <PageContainer>
-      <PageHeader title={i18next.t("agent:Agents")} description={account.hostname} />
+      <Link
+        to="/"
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+      >
+        <ArrowLeft className="size-4" />
+        {i18next.t("agent:Agents")}
+      </Link>
+
+      <PageHeader
+        title={i18next.t("agent:Advanced view")}
+        description={`${account.hostname} · ${i18next.t("agent:Advanced view hint")}`}
+      />
 
       {error ? <MessageAlert title={error} /> : null}
 

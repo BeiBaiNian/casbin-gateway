@@ -18,7 +18,8 @@ import i18next from "i18next";
 import * as AgentBackend from "@/backend/AgentBackend";
 import * as Setting from "@/Setting";
 import type {BadgeVariant} from "@/components/ui/badge";
-import type {Agent, AgentRuntime, AgentSession} from "@/types";
+import {providerProtocol, servesResponsesApi} from "@/lib/providers";
+import type {Agent, AgentRuntime, AgentSession, Provider} from "@/types";
 
 /** How long a started app is given before its process is looked for again. */
 const runtimeSettleMs = 2000;
@@ -94,6 +95,22 @@ export function agentSpeaks(agent: Agent, protocol: string) {
   }
   const spoken = agentProtocol(agent);
   return spoken === "" || spoken === protocol;
+}
+
+/**
+ * Whether this agent, routed the way it is now, can be pointed at this provider
+ * at all. Through the gateway anything goes, since the proxy translates; a
+ * direct binding hands the agent the provider's own URL, and there both the
+ * wire format and, for Codex, the Responses API have to line up.
+ */
+export function agentCanUse(agent: Agent, provider: Provider) {
+  if ((agent.mode || gatewayMode) !== directMode) {
+    return true;
+  }
+  if (agentNeedsResponsesApi(agent.agentId) && !servesResponsesApi(provider)) {
+    return false;
+  }
+  return agentSpeaks(agent, providerProtocol(provider.type));
 }
 
 /**
@@ -278,6 +295,52 @@ export function useAgents(enabled = true) {
   );
 
   /**
+   * activateProvider is the one click the home page is built around: it stores
+   * the routing and, for an agent whose configuration file Gateway knows how to
+   * write, writes it, so the agent is on the new provider with nothing left to
+   * press.
+   */
+  const activateProvider = React.useCallback(
+    (agent: Agent, providerId: string) => {
+      const target = {agentId: agent.agentId, path: agent.path, owner: agent.owner};
+      const routing: AgentBackend.AgentRouting = {
+        provider: providerId,
+        fallbacks: [],
+        mode: agent.mode || gatewayMode,
+      };
+      const writes = providerId !== "" && (agent.providerConfig?.supported ?? false);
+
+      setBusyKey(agentKey(agent));
+      AgentBackend.updateAgentRouting(agent.agentId, routing)
+        .then(res => {
+          if (res.status !== "ok") {
+            throw new Error(res.msg || i18next.t("agent:Failed to update agent provider"));
+          }
+          return writes ? AgentBackend.applyAgentProvider(target) : res;
+        })
+        .then(res => {
+          if (res.status !== "ok") {
+            throw new Error(res.msg || i18next.t("agent:Failed to write the agent configuration"));
+          }
+          Setting.showMessage(
+            "success",
+            providerId === ""
+              ? i18next.t("agent:Provider cleared")
+              : `${i18next.t("agent:Provider enabled")}: ${providerId}`,
+          );
+        })
+        .catch(err => Setting.showMessage("error", err.message || String(err)))
+        // The routing may be stored even when the file write failed, so the
+        // scan runs either way and the page shows what actually happened.
+        .then(() => {
+          scan();
+          setBusyKey("");
+        });
+    },
+    [scan],
+  );
+
+  /**
    * writeProvider writes the bound provider into the agent's own config file, or
    * puts back what the file held before Gateway first wrote it.
    */
@@ -325,6 +388,7 @@ export function useAgents(enabled = true) {
     toggleRunning,
     togglePatch,
     setRouting,
+    activateProvider,
     writeProvider,
   };
 }

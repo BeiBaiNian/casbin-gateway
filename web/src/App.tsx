@@ -29,7 +29,6 @@ import {TooltipProvider} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import AccountPage from "@/pages/AccountPage";
 import AgentConfigsPage from "@/pages/AgentConfigsPage";
-import AgentDashboardPage from "@/pages/AgentDashboardPage";
 import AgentDetailPage from "@/pages/AgentDetailPage";
 import AgentRecordsPage from "@/pages/AgentRecordsPage";
 import AgentSessionPage from "@/pages/AgentSessionPage";
@@ -38,6 +37,7 @@ import AgentsPage from "@/pages/AgentsPage";
 import AuthCallback from "@/pages/AuthCallback";
 import CertEditPage from "@/pages/CertEditPage";
 import CertListPage from "@/pages/CertListPage";
+import HomePage from "@/pages/HomePage";
 import ProviderEditPage from "@/pages/ProviderEditPage";
 import ProviderListPage from "@/pages/ProviderListPage";
 import LlmRecordsPage from "@/pages/LlmRecordsPage";
@@ -272,9 +272,9 @@ export default function App() {
                   path="/"
                   element={requireSignin(user =>
                     Setting.isAdminUser(user) ? (
-                      <AgentDashboardPage account={user} />
+                      <HomePage account={user} />
                     ) : (
-                      // The dashboard is about the agents on this host, which
+                      // The home screen is about the agents on this host, which
                       // only an admin may see, so everyone else lands on the
                       // first page they can actually use.
                       <Navigate to="/sites" replace />
