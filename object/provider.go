@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/apache/casbin-gateway/conf"
+	"github.com/apache/casbin-gateway/protocol"
 	"github.com/apache/casbin-gateway/proxy"
 	"github.com/apache/casbin-gateway/util"
 	"github.com/xorm-io/core"
@@ -188,11 +189,11 @@ func UsesClientAuth(provider *Provider) bool {
 	return provider.AuthMode == ProviderAuthClient
 }
 
-// The wire formats the gateway can speak. A request in one of them can only be
-// forwarded to a provider whose upstream speaks the same one.
+// The wire formats a provider's upstream can serve. A request that arrived in
+// another one is translated by the proxy, see the protocol package.
 const (
-	ProtocolOpenAi    = "openai"
-	ProtocolAnthropic = "anthropic"
+	ProtocolOpenAi    = protocol.OpenAi
+	ProtocolAnthropic = protocol.Anthropic
 )
 
 // IsProviderTypeSupported reports whether the gateway can talk to the provider's

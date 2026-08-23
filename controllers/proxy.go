@@ -28,6 +28,7 @@ import (
 
 	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/protocol"
 	"github.com/apache/casbin-gateway/proxy"
 	"github.com/apache/casbin-gateway/util"
 	"github.com/beego/beego"
@@ -57,32 +58,40 @@ var hopByHopHeaders = []string{
 	"Upgrade",
 }
 
-// proxyTarget is one upstream API this proxy relays to: the wire format it
-// speaks and the endpoint the request lands on.
+// proxyTarget is one API this proxy answers on: the wire format the client
+// speaks there and the path it called, which is what a record names it by.
 type proxyTarget struct {
 	protocol string
 	endpoint string
-	// clientEndpoint names the API the client called when it is not the one the
-	// upstream serves, which means both bodies are translated on the way.
-	clientEndpoint string
+	// countTokens marks the Anthropic token-counting endpoint, which is not a
+	// completion at all. No other API serves one, so a provider that does not
+	// speak Anthropic is answered by the gateway itself.
+	countTokens bool
 }
 
-// responsesEndpoint is the Responses API front end. Recent Codex versions speak
-// nothing else, while almost every provider behind the gateway serves chat
-// completions, so requests and responses are translated in both directions.
-const responsesEndpoint = "/responses"
+// countTokensEndpoint is where the Anthropic clients ask how much of their
+// context a request would take.
+const countTokensEndpoint = "/v1/messages/count_tokens"
+
+// maxErrorBodyBytes bounds the upstream error body read to write the failure
+// back out in the client's own format.
+const maxErrorBodyBytes = 64 * 1024
 
 var (
-	openAiChat           = proxyTarget{protocol: object.ProtocolOpenAi, endpoint: "/chat/completions"}
-	openAiResponses      = proxyTarget{protocol: object.ProtocolOpenAi, endpoint: "/chat/completions", clientEndpoint: responsesEndpoint}
-	anthropicMessages    = proxyTarget{protocol: object.ProtocolAnthropic, endpoint: "/v1/messages"}
-	anthropicCountTokens = proxyTarget{protocol: object.ProtocolAnthropic, endpoint: "/v1/messages/count_tokens"}
+	openAiChat           = proxyTarget{protocol: protocol.OpenAi, endpoint: "/chat/completions"}
+	openAiResponses      = proxyTarget{protocol: protocol.Responses, endpoint: "/responses"}
+	anthropicMessages    = proxyTarget{protocol: protocol.Anthropic, endpoint: "/v1/messages"}
+	anthropicCountTokens = proxyTarget{protocol: protocol.Anthropic, endpoint: countTokensEndpoint, countTokens: true}
 )
 
-// proxyRoute is one client request being relayed. Everything except model and
-// stream (messages, temperature, ...) is forwarded as-is to the upstream.
+// proxyRoute is one client request being relayed. A provider speaking the
+// format the request arrived in is forwarded to as-is; any other provider is
+// reached through the canonical form, which is what makes a client of one API
+// and a provider of another able to talk at all.
 type proxyRoute struct {
 	target proxyTarget
+	// codec reads the client's request and writes its answer.
+	codec  protocol.Codec
 	body   []byte
 	model  string
 	stream bool
@@ -93,6 +102,46 @@ type proxyRoute struct {
 	// record accumulates what is written to the LLM record of this request. It
 	// is nil while recording is off.
 	record *object.LlmRecord
+	// request is the body in canonical form, decoded on first use: a provider
+	// speaking the client's own format never needs one.
+	request    *protocol.Request
+	requestErr error
+}
+
+// canonical is the request in the form every format is translated through.
+func (route *proxyRoute) canonical() (*protocol.Request, error) {
+	if route.request == nil && route.requestErr == nil {
+		route.request, route.requestErr = route.codec.DecodeRequest(route.body)
+	}
+	return route.request, route.requestErr
+}
+
+// passthrough reports whether an upstream speaks the format the request arrived
+// in. Such a request is relayed byte for byte, so nothing the canonical form
+// does not model - a cache breakpoint, a field added last week - is lost.
+func (route *proxyRoute) passthrough(upstream protocol.Upstream) bool {
+	return route.target.protocol == upstream.Name()
+}
+
+// upstreamBody is the request body an upstream speaking the given format takes.
+func (route *proxyRoute) upstreamBody(upstream protocol.Upstream) ([]byte, error) {
+	if route.passthrough(upstream) {
+		return route.body, nil
+	}
+
+	request, err := route.canonical()
+	if err != nil {
+		return nil, err
+	}
+	return upstream.EncodeRequest(request)
+}
+
+// upstreamEndpoint is the path on the provider that answers this request.
+func (route *proxyRoute) upstreamEndpoint(upstream protocol.Upstream) string {
+	if route.target.countTokens {
+		return countTokensEndpoint
+	}
+	return upstream.Endpoint()
 }
 
 // routingFields are the only fields read out of the request body. Both the
@@ -100,24 +149,6 @@ type proxyRoute struct {
 type routingFields struct {
 	Model  string `json:"model"`
 	Stream bool   `json:"stream"`
-}
-
-// proxyErrorDetail is the {message, type} object both APIs report errors in.
-type proxyErrorDetail struct {
-	Message string `json:"message"`
-	Type    string `json:"type"`
-}
-
-// openaiErrorResponse follows the OpenAI API error format.
-type openaiErrorResponse struct {
-	Error proxyErrorDetail `json:"error"`
-}
-
-// anthropicErrorResponse follows the Anthropic API error format, which wraps
-// the same detail in a typed envelope.
-type anthropicErrorResponse struct {
-	Type  string           `json:"type"`
-	Error proxyErrorDetail `json:"error"`
 }
 
 // proxyClient is a shared HTTP client for upstream requests.
@@ -141,18 +172,18 @@ var proxyClient = &http.Client{
 }
 
 // ChatCompletions is the OpenAI-compatible chat completions proxy endpoint.
-// It matches the upstream providers by model name and forwards the request and
-// response body as-is (pass-through), trying the providers in priority order
-// until one of them answers. Supports SSE streaming when stream=true in the
-// request body.
+// It matches the upstream providers by model name, trying them in priority
+// order until one of them answers. A provider serving this same API is relayed
+// to as-is; one serving another is translated for, in both directions. Supports
+// SSE streaming when stream=true in the request body.
 // This endpoint does NOT require Casdoor authentication (auth deferred to milestone 1.3).
 func (c *ApiController) ChatCompletions() {
 	c.proxyByModel(openAiChat)
 }
 
-// Responses is the OpenAI Responses API entry point. The request is translated
-// to chat completions on the way out and the answer back on the way in, so an
-// upstream that never served the Responses API can still answer it.
+// Responses is the OpenAI Responses API entry point, which recent Codex
+// versions speak and no provider serves: the request is translated on the way
+// out and the answer back on the way in, whichever API the provider serves.
 func (c *ApiController) Responses() {
 	c.proxyByModel(openAiResponses)
 }
@@ -163,8 +194,9 @@ func (c *ApiController) Messages() {
 	c.proxyByModel(anthropicMessages)
 }
 
-// CountTokens relays the Anthropic token-counting endpoint, which clients call
-// alongside Messages to size their context.
+// CountTokens answers the Anthropic token-counting endpoint, which clients call
+// alongside Messages to size their context. Only an Anthropic provider is asked;
+// for any other the gateway estimates the count itself.
 func (c *ApiController) CountTokens() {
 	c.proxyByModel(anthropicCountTokens)
 }
@@ -183,8 +215,8 @@ func (c *ApiController) AgentResponses() {
 }
 
 // AgentMessages is the per-agent entry point for Anthropic clients. One base URL
-// serves both APIs: an OpenAI client appends /chat/completions to it, while an
-// Anthropic one appends /v1/messages.
+// serves every API: an OpenAI client appends /chat/completions to it, Codex
+// appends /responses, and an Anthropic one appends /v1/messages.
 func (c *ApiController) AgentMessages() {
 	c.proxyByAgent(anthropicMessages)
 }
@@ -210,11 +242,11 @@ func (c *ApiController) proxyByModel(target proxyTarget) {
 	if err != nil {
 		if errors.Is(err, object.ErrNoProviderAvailable) {
 			route.recordOutcome(http.StatusBadRequest, err.Error())
-			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
+			c.writeProxyError(route.codec, http.StatusBadRequest, "invalid_request_error", err.Error())
 		} else {
 			beego.Error("provider lookup failed:", err)
 			route.recordOutcome(http.StatusBadGateway, "provider lookup failed")
-			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", "provider lookup failed")
+			c.writeProxyError(route.codec, http.StatusBadGateway, "server_error", "provider lookup failed")
 		}
 		return
 	}
@@ -241,11 +273,11 @@ func (c *ApiController) proxyByAgent(target proxyTarget) {
 	if err != nil {
 		if errors.Is(err, object.ErrAgentNoProvider) {
 			route.recordOutcome(http.StatusBadRequest, err.Error())
-			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
+			c.writeProxyError(route.codec, http.StatusBadRequest, "invalid_request_error", err.Error())
 		} else {
 			beego.Error("agent provider lookup failed:", err)
 			route.recordOutcome(http.StatusBadGateway, err.Error())
-			c.writeProxyError(target.protocol, http.StatusBadGateway, "server_error", err.Error())
+			c.writeProxyError(route.codec, http.StatusBadGateway, "server_error", err.Error())
 		}
 		return
 	}
@@ -254,8 +286,9 @@ func (c *ApiController) proxyByAgent(target proxyTarget) {
 }
 
 func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
+	codec := protocol.Of(target.protocol)
 	if !c.allowRelay() {
-		c.writeProxyError(target.protocol, http.StatusUnauthorized, "authentication_error",
+		c.writeProxyError(codec, http.StatusUnauthorized, "authentication_error",
 			"this relay is reachable from the network, so it needs the token shown next to the provider in Casbin Gateway")
 		return nil, false
 	}
@@ -264,29 +297,22 @@ func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
 
 	var fields routingFields
 	if err := json.Unmarshal(rawBody, &fields); err != nil {
-		c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", "invalid request body")
+		c.writeProxyError(codec, http.StatusBadRequest, "invalid_request_error", "invalid request body")
 		return nil, false
 	}
 	if fields.Model == "" {
-		c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", "model is required")
+		c.writeProxyError(codec, http.StatusBadRequest, "invalid_request_error", "model is required")
 		return nil, false
 	}
 
-	body := rawBody
-	if target.clientEndpoint == responsesEndpoint {
-		converted, err := responsesToChat(rawBody)
-		if err != nil {
-			c.writeProxyError(target.protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
-			return nil, false
-		}
-		body = converted
+	route := &proxyRoute{
+		target: target, codec: codec, body: rawBody,
+		model: fields.Model, stream: fields.Stream, start: time.Now(),
 	}
-
-	route := &proxyRoute{target: target, body: body, model: fields.Model, stream: fields.Stream, start: time.Now()}
 	if object.IsLlmRecording() {
 		route.record = &object.LlmRecord{
 			Protocol: target.protocol,
-			Endpoint: emptyAsValue(target.clientEndpoint, target.endpoint),
+			Endpoint: target.endpoint,
 			Model:    fields.Model,
 			ClientIp: util.GetClientIp(c.Ctx.Request),
 			Stream:   fields.Stream,
@@ -302,7 +328,7 @@ func (c *ApiController) forwardToProviders(providers []*object.Provider, route *
 	usableProviders := []*object.Provider{}
 	skipReason := ""
 	for _, provider := range providers {
-		if reason := c.providerUnusableReason(provider, route.target.protocol); reason != "" {
+		if reason := c.providerUnusableReason(provider); reason != "" {
 			beego.Error("skipped provider", provider.GetId()+":", reason)
 			skipReason = reason
 			continue
@@ -315,7 +341,7 @@ func (c *ApiController) forwardToProviders(providers []*object.Provider, route *
 			message = skipReason
 		}
 		route.recordOutcome(http.StatusBadGateway, message)
-		c.writeProxyError(route.target.protocol, http.StatusBadGateway, "server_error", message)
+		c.writeProxyError(route.codec, http.StatusBadGateway, "server_error", message)
 		return
 	}
 
@@ -342,7 +368,7 @@ func (c *ApiController) forwardToProviders(providers []*object.Provider, route *
 	}
 
 	route.recordOutcome(lastStatus, lastMessage)
-	c.writeProxyError(route.target.protocol, lastStatus, "server_error", lastMessage)
+	c.writeProxyError(route.codec, lastStatus, "server_error", lastMessage)
 }
 
 // forwardToProvider sends the request to a single provider's upstream. It reports
@@ -353,28 +379,48 @@ func (c *ApiController) forwardToProviders(providers []*object.Provider, route *
 func (c *ApiController) forwardToProvider(provider *object.Provider, route *proxyRoute, isLast bool) (int, string, bool) {
 	route.recordAttempt(provider.GetId())
 
-	upstreamUrl, err := object.BuildProviderUrl(provider.BaseUrl, route.target.protocol, route.target.endpoint)
+	upstream, err := protocol.UpstreamOf(object.ProviderProtocol(provider))
+	if err != nil {
+		return http.StatusBadGateway, err.Error(), false
+	}
+	// Counting tokens is an Anthropic endpoint alone. A provider serving another
+	// API has none to ask, so rather than failing a request the client needs to
+	// size its context, the gateway answers with an estimate of its own.
+	if route.target.countTokens && !route.passthrough(upstream) {
+		return c.answerCountTokens(route)
+	}
+
+	requestBody, err := route.upstreamBody(upstream)
+	if err != nil {
+		return http.StatusBadRequest, err.Error(), false
+	}
+
+	upstreamUrl, err := object.BuildProviderUrl(provider.BaseUrl, upstream.Name(), route.upstreamEndpoint(upstream))
 	if err != nil {
 		object.ReportProviderFailure(provider.GetId(), err.Error())
 		return http.StatusBadGateway, err.Error(), false
 	}
-	upstreamUrl = object.AppendQuery(upstreamUrl, c.Ctx.Request.URL.RawQuery)
+	// The query selects a variant of the endpoint the client called, which only
+	// means the same thing on an upstream serving that same API.
+	if route.passthrough(upstream) {
+		upstreamUrl = object.AppendQuery(upstreamUrl, c.Ctx.Request.URL.RawQuery)
+	}
 
 	// The context is cancelled when this function returns, which happens only
 	// after the response body has been relayed to the client.
 	ctx, cancel := context.WithCancel(c.Ctx.Request.Context())
 	defer cancel()
 
-	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamUrl, bytes.NewReader(route.body))
+	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamUrl, bytes.NewReader(requestBody))
 	if err != nil {
 		return http.StatusBadGateway, "upstream connection failed", false
 	}
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	object.SetProviderAuth(upstreamReq.Header, provider)
 	if object.UsesClientAuth(provider) {
-		c.copyClientAuthHeaders(upstreamReq.Header)
+		c.copyClientAuthHeaders(upstreamReq.Header, upstream)
 	}
-	if route.target.protocol == object.ProtocolAnthropic {
+	if upstream.Name() == object.ProtocolAnthropic {
 		c.copyAnthropicHeaders(upstreamReq.Header)
 	}
 
@@ -413,13 +459,32 @@ func (c *ApiController) forwardToProvider(provider *object.Provider, route *prox
 
 	route.recordOutcome(upstreamResp.StatusCode, "")
 	if route.record == nil {
-		c.relayResponse(route, upstreamResp, body, route.stream && isEventStream(upstreamResp))
+		c.relayResponse(route, upstream, upstreamResp, body)
 		return 0, "", true
 	}
 
+	// The tap reads the counters out of the upstream answer as it passes, so it
+	// sees them in the provider's own spelling, translated or not.
 	tap := &usageTap{reader: body}
-	c.relayResponse(route, upstreamResp, tap, route.stream && isEventStream(upstreamResp))
+	c.relayResponse(route, upstream, upstreamResp, tap)
 	route.recordUsage(tap.tail)
+	return 0, "", true
+}
+
+// answerCountTokens answers the token-counting endpoint out of the gateway's
+// own estimate, for a provider whose API has no endpoint to ask.
+func (c *ApiController) answerCountTokens(route *proxyRoute) (int, string, bool) {
+	request, err := route.canonical()
+	if err != nil {
+		return http.StatusBadRequest, err.Error(), false
+	}
+
+	body, err := json.Marshal(map[string]any{"input_tokens": protocol.EstimateTokens(request)})
+	if err != nil {
+		return http.StatusBadGateway, "token count failed", false
+	}
+	route.recordOutcome(http.StatusOK, "")
+	c.writeProxyBody(http.StatusOK, body)
 	return 0, "", true
 }
 
@@ -488,12 +553,25 @@ func (c *ApiController) hasClientCredentials() bool {
 	return header.Get("Authorization") != "" || header.Get("X-Api-Key") != ""
 }
 
-func (c *ApiController) copyClientAuthHeaders(dst http.Header) {
+func (c *ApiController) copyClientAuthHeaders(dst http.Header, upstream protocol.Upstream) {
 	for _, name := range clientAuthHeaders {
 		dst.Del(name)
 		for _, value := range c.Ctx.Request.Header.Values(name) {
 			dst.Add(name, value)
 		}
+	}
+
+	// The two APIs carry the credential in different headers, so a client
+	// speaking one of them and a provider serving the other would end up
+	// authenticating with nothing at all.
+	if upstream.Name() == object.ProtocolAnthropic {
+		if bearer := strings.TrimPrefix(dst.Get("Authorization"), "Bearer "); dst.Get("X-Api-Key") == "" && bearer != "" {
+			dst.Set("X-Api-Key", bearer)
+		}
+		return
+	}
+	if key := dst.Get("X-Api-Key"); dst.Get("Authorization") == "" && key != "" {
+		dst.Set("Authorization", "Bearer "+key)
 	}
 }
 
@@ -512,22 +590,100 @@ func (c *ApiController) copyAnthropicHeaders(dst http.Header) {
 	}
 }
 
-// relayResponse copies the upstream status code, headers and body to the client
-// without any transformation (pass-through mode). When flush is true, every
-// chunk is written out as soon as it arrives so that SSE clients receive the
-// events in real time. A client that called an endpoint the upstream does not
-// serve gets the answer translated back into the API it asked in; an upstream
-// error is passed through either way, since both APIs report errors alike.
-func (c *ApiController) relayResponse(route *proxyRoute, upstreamResp *http.Response, body io.Reader, flush bool) {
-	if route.target.clientEndpoint == responsesEndpoint && upstreamResp.StatusCode == http.StatusOK {
-		if flush {
-			c.relayResponsesStream(route, body)
-		} else {
-			c.relayResponsesBody(route, body)
-		}
+// relayResponse writes the upstream answer back to the client. A provider
+// speaking the format the request arrived in is relayed byte for byte, headers
+// and all; any other provider is read into the canonical form and written back
+// out in the format the client asked in.
+func (c *ApiController) relayResponse(route *proxyRoute, upstream protocol.Upstream, upstreamResp *http.Response, body io.Reader) {
+	streamed := isEventStream(upstreamResp)
+	if route.passthrough(upstream) {
+		c.relayVerbatim(upstreamResp, body, route.stream && streamed)
+		return
+	}
+	if !isSuccessStatus(upstreamResp.StatusCode) {
+		// An error body names the same two things in both formats, so it is
+		// read out of the one and written back in the other.
+		raw, _ := io.ReadAll(io.LimitReader(body, maxErrorBodyBytes))
+		kind, message := protocol.ReadError(raw, "upstream returned "+upstreamResp.Status)
+		c.writeProxyError(route.codec, upstreamResp.StatusCode, kind, message)
 		return
 	}
 
+	c.translateResponse(route, upstream, body, streamed)
+}
+
+// translateResponse rewrites a successful answer into the client's own format.
+// Both sides may be streamed or whole, and the four ways round are covered: an
+// upstream that ignored stream=true still owes the client its events, and one
+// that streamed at a client waiting for a body is collected into one.
+func (c *ApiController) translateResponse(route *proxyRoute, upstream protocol.Upstream, body io.Reader, streamed bool) {
+	if streamed && route.stream {
+		writer := route.codec.NewStreamWriter(c.startEventStream(), c.Ctx.ResponseWriter.Flush, route.model)
+		writer.Open()
+		err := upstream.DecodeStream(body, func(event protocol.Event) bool {
+			writer.Write(event)
+			return true
+		})
+		if err != nil {
+			beego.Error("proxy stream read failed:", err)
+			writer.Write(protocol.Event{Kind: protocol.EventFailure, Failure: &protocol.Failure{
+				Kind: "server_error", Message: err.Error(),
+			}})
+		}
+		writer.Close()
+		return
+	}
+
+	response, err := c.readUpstreamAnswer(route, upstream, body, streamed)
+	if err != nil {
+		c.writeProxyError(route.codec, http.StatusBadGateway, "server_error", err.Error())
+		return
+	}
+	if response.Model == "" {
+		response.Model = route.model
+	}
+
+	if route.stream {
+		// The upstream answered in one piece at a client waiting for events, so
+		// the whole answer is written out as a stream of one turn.
+		writer := route.codec.NewStreamWriter(c.startEventStream(), c.Ctx.ResponseWriter.Flush, route.model)
+		protocol.WriteStream(writer, response)
+		return
+	}
+
+	data, err := route.codec.EncodeResponse(response)
+	if err != nil {
+		c.writeProxyError(route.codec, http.StatusBadGateway, "server_error", err.Error())
+		return
+	}
+	c.writeProxyBody(http.StatusOK, data)
+}
+
+// readUpstreamAnswer reads a whole answer, however the upstream sent it.
+func (c *ApiController) readUpstreamAnswer(route *proxyRoute, upstream protocol.Upstream, body io.Reader, streamed bool) (*protocol.Response, error) {
+	if streamed {
+		collector := protocol.NewCollector(route.model)
+		err := upstream.DecodeStream(body, func(event protocol.Event) bool {
+			collector.Add(event)
+			return true
+		})
+		if err != nil {
+			return nil, err
+		}
+		return collector.Response(), nil
+	}
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return nil, errors.New("upstream read failed")
+	}
+	return upstream.DecodeResponse(data)
+}
+
+// relayVerbatim copies the upstream status code, headers and body to the client
+// without any transformation. When flush is true, every chunk is written out as
+// soon as it arrives so that SSE clients receive the events in real time.
+func (c *ApiController) relayVerbatim(upstreamResp *http.Response, body io.Reader, flush bool) {
 	copyResponseHeaders(c.Ctx.ResponseWriter.Header(), upstreamResp.Header)
 	if flush {
 		c.Ctx.ResponseWriter.Header().Set("Cache-Control", "no-cache")
@@ -588,10 +744,15 @@ func isHopByHopHeader(name string) bool {
 // stream=true was asked for, and relaying that as text/event-stream would
 // leave the client waiting for events that never come.
 func isEventStream(upstreamResp *http.Response) bool {
-	if upstreamResp.StatusCode < 200 || upstreamResp.StatusCode > 299 {
+	if !isSuccessStatus(upstreamResp.StatusCode) {
 		return false
 	}
 	return strings.Contains(strings.ToLower(upstreamResp.Header.Get("Content-Type")), "text/event-stream")
+}
+
+// isSuccessStatus reports whether the upstream answered rather than refused.
+func isSuccessStatus(statusCode int) bool {
+	return statusCode >= 200 && statusCode < 300
 }
 
 // isRetryableStatus reports whether another provider is worth trying. A rate
@@ -602,13 +763,11 @@ func isRetryableStatus(statusCode int) bool {
 }
 
 // providerUnusableReason reports why the proxy cannot forward to a provider, or
-// an empty string when it can.
-func (c *ApiController) providerUnusableReason(provider *object.Provider, protocol string) string {
+// an empty string when it can. The wire format the provider speaks is not one
+// of the reasons: a request in another one is translated for it.
+func (c *ApiController) providerUnusableReason(provider *object.Provider) string {
 	if !object.IsProviderTypeSupported(provider) {
 		return fmt.Sprintf("the %s provider type is not supported", provider.Type)
-	}
-	if object.ProviderProtocol(provider) != protocol {
-		return fmt.Sprintf("provider %s does not speak the %s API", provider.GetId(), protocol)
 	}
 	if provider.BaseUrl == "" {
 		return "provider base URL is not configured"
@@ -651,18 +810,26 @@ func (r *idleTimeoutReader) Stop() {
 }
 
 // writeProxyError writes a JSON error response in the format the client that
-// made the request expects.
-func (c *ApiController) writeProxyError(protocol string, statusCode int, errType, message string) {
-	detail := proxyErrorDetail{Message: message, Type: errType}
+// made the request reads failures in.
+func (c *ApiController) writeProxyError(codec protocol.Codec, statusCode int, kind string, message string) {
+	c.writeProxyBody(statusCode, codec.EncodeError(kind, message))
+}
 
-	var resp any = openaiErrorResponse{Error: detail}
-	if protocol == object.ProtocolAnthropic {
-		resp = anthropicErrorResponse{Type: "error", Error: detail}
-	}
-
+// writeProxyBody writes an answer of the gateway's own making, which carries
+// none of the upstream headers: the body relayed under them is gone.
+func (c *ApiController) writeProxyBody(statusCode int, body []byte) {
 	c.Ctx.ResponseWriter.Header().Set("Content-Type", "application/json")
 	c.Ctx.ResponseWriter.WriteHeader(statusCode)
-	if err := json.NewEncoder(c.Ctx.ResponseWriter).Encode(resp); err != nil {
-		beego.Error("proxy error response write failed:", err)
+	if _, err := c.Ctx.ResponseWriter.Write(body); err != nil {
+		beego.Error("proxy response write failed:", err)
 	}
+}
+
+// startEventStream begins an SSE response of this gateway's own making.
+func (c *ApiController) startEventStream() io.Writer {
+	header := c.Ctx.ResponseWriter.Header()
+	header.Set("Content-Type", "text/event-stream")
+	header.Set("Cache-Control", "no-cache")
+	c.Ctx.ResponseWriter.WriteHeader(http.StatusOK)
+	return c.Ctx.ResponseWriter
 }

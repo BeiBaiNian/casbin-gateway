@@ -260,8 +260,11 @@ func writerFor(target Target, endpoint Endpoint) (writer, error) {
 	if !ok {
 		return nil, fmt.Errorf("%s: %w", target.AgentId, ErrNotSupported)
 	}
-	if value.Protocol() != endpoint.Protocol {
-		return nil, fmt.Errorf("%s speaks the %s API, but provider %s speaks %s: bind a provider that speaks %s instead",
+	// Through the gateway the two need not speak the same API: the proxy
+	// translates. Written into the agent config the provider is reached
+	// directly, so there they do.
+	if endpoint.Mode == ModeDirect && value.Protocol() != endpoint.Protocol {
+		return nil, fmt.Errorf("%s speaks the %s API, but provider %s speaks %s: bind a provider that speaks %s, or route this agent through the gateway",
 			target.AgentId, value.Protocol(), endpoint.Provider, endpoint.Protocol, value.Protocol())
 	}
 	return value, nil

@@ -199,26 +199,23 @@ export function ProviderCard({
   const healthOf = (id: string) => health.find(item => item.provider === id);
   const boundHealth = healthOf(agent.provider);
 
-  // The agent's client speaks one wire format and the proxy relays a request as
-  // it arrived, so a provider serving the other API can never answer it. A
-  // backend that does not report the format yet filters nothing out.
+  // The agent's client speaks one wire format. Through the gateway that does not
+  // narrow the choice, since the proxy translates between the APIs; a direct
+  // binding writes the provider's own URL into the agent config, and there the
+  // two have to speak the same one. A backend that does not report the format
+  // yet filters nothing out.
   const protocol = providerConfig.protocol ?? "";
   const speaksAgentApi = (provider: Provider) =>
-    protocol === "" || providerProtocol(provider.type) === protocol;
-  // A provider bound before this was checked stays in the list, so the select
-  // shows what the agent is on rather than an empty box.
+    mode !== directMode || protocol === "" || providerProtocol(provider.type) === protocol;
+  // A provider bound before the mode was switched stays in the list, so the
+  // select shows what the agent is on rather than an empty box.
   const options = providers.filter(
     provider => speaksAgentApi(provider) || providerIdOf(provider) === agent.provider,
   );
   const mismatched = bound !== undefined && !speaksAgentApi(bound);
 
-  // A provider can only take over for one that speaks the same wire format: the
-  // proxy relays the request as it arrived.
   const candidates = providers.filter(
-    provider =>
-      providerIdOf(provider) !== agent.provider &&
-      speaksAgentApi(provider) &&
-      (bound === undefined || providerProtocol(provider.type) === providerProtocol(bound.type)),
+    provider => providerIdOf(provider) !== agent.provider && speaksAgentApi(provider),
   );
 
   // Codex reads nothing but the Responses API, which Gateway serves by
@@ -256,7 +253,7 @@ export function ProviderCard({
               <SelectItem key={providerIdOf(provider)} value={providerIdOf(provider)}>
                 <ProviderIcon icon={provider.icon} baseUrl={provider.baseUrl} size={16} />
                 {provider.displayName || provider.name}
-                {/* The type is the wire format, which has to match the one the agent speaks. */}
+                {/* The type is the wire format the provider serves. */}
                 <span className="ml-2 text-xs text-muted-foreground">{provider.type}</span>
               </SelectItem>
             ))}

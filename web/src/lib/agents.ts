@@ -83,11 +83,15 @@ export function agentProtocol(agent: Agent) {
 }
 
 /**
- * Whether an agent can be pointed at a provider serving this wire format. The
- * proxy relays a request in the format it arrived in, so the two have to speak
- * the same API.
+ * Whether an agent can be pointed at a provider serving this wire format.
+ * Through the gateway any provider will do: the proxy translates between the
+ * APIs. A direct binding writes the provider's own URL into the agent config,
+ * so there the two have to speak the same one.
  */
 export function agentSpeaks(agent: Agent, protocol: string) {
+  if ((agent.mode || gatewayMode) !== directMode) {
+    return true;
+  }
   const spoken = agentProtocol(agent);
   return spoken === "" || spoken === protocol;
 }

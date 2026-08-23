@@ -336,6 +336,9 @@ func describeLlmRequest(record *LlmRecord, value any) {
 	record.SystemBytes = len(llmSystemText(body))
 	if messages, ok := body["messages"].([]any); ok {
 		record.MessageCount = len(messages)
+	} else if input, ok := body["input"].([]any); ok {
+		// The Responses API calls the conversation "input".
+		record.MessageCount = len(input)
 	}
 	if tools, ok := body["tools"].([]any); ok {
 		record.ToolCount = len(tools)
@@ -346,6 +349,10 @@ func describeLlmRequest(record *LlmRecord, value any) {
 // field for Anthropic, the first messages for OpenAI.
 func llmSystemText(body map[string]any) string {
 	if text := llmMessageText(body["system"]); text != "" {
+		return text
+	}
+	// The Responses API calls it "instructions".
+	if text := llmMessageText(body["instructions"]); text != "" {
 		return text
 	}
 

@@ -115,7 +115,7 @@ func (c *ApiController) UpdateAgentRouting() {
 		return
 	}
 
-	if err := checkAgentProtocol(form.AgentId, append([]string{form.Provider}, form.Fallbacks...)); err != nil {
+	if err := checkAgentProtocol(form.AgentId, form.Mode, append([]string{form.Provider}, form.Fallbacks...)); err != nil {
 		c.ResponseError(err.Error())
 		return
 	}

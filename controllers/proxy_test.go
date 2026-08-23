@@ -15,6 +15,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,8 +24,20 @@ import (
 	"time"
 
 	"github.com/apache/casbin-gateway/object"
+	"github.com/apache/casbin-gateway/protocol"
 	beegoContext "github.com/beego/beego/context"
 )
+
+// newProxyRoute is the route one request would be relayed on, as readProxyRoute
+// builds it.
+func newProxyRoute(target proxyTarget, body []byte, stream bool) *proxyRoute {
+	var fields routingFields
+	_ = json.Unmarshal(body, &fields)
+	return &proxyRoute{
+		target: target, codec: protocol.Of(target.protocol),
+		body: body, model: fields.Model, stream: stream,
+	}
+}
 
 func newTestApiController() (*ApiController, *httptest.ResponseRecorder) {
 	recorder := httptest.NewRecorder()
@@ -73,33 +86,24 @@ func TestIsRetryableStatus(t *testing.T) {
 }
 
 func TestProviderUnusableReason(t *testing.T) {
-	openAi := object.ProtocolOpenAi
-	anthropic := object.ProtocolAnthropic
-
 	c, _ := newTestApiController()
 	providerUnusableReason := c.providerUnusableReason
 
-	if reason := providerUnusableReason(&object.Provider{Type: "claude", BaseUrl: "https://example.com"}, openAi); !strings.Contains(reason, "not supported") {
+	if reason := providerUnusableReason(&object.Provider{Type: "claude", BaseUrl: "https://example.com"}); !strings.Contains(reason, "not supported") {
 		t.Errorf("the claude provider type should be rejected, got: %s", reason)
 	}
-	if reason := providerUnusableReason(&object.Provider{Type: "openai", BaseUrl: ""}, openAi); !strings.Contains(reason, "base URL") {
+	if reason := providerUnusableReason(&object.Provider{Type: "openai", BaseUrl: ""}); !strings.Contains(reason, "base URL") {
 		t.Errorf("an empty base URL should be rejected, got: %s", reason)
 	}
-	if reason := providerUnusableReason(&object.Provider{Type: "custom", BaseUrl: "https://example.com"}, openAi); reason != "" {
+	if reason := providerUnusableReason(&object.Provider{Type: "custom", BaseUrl: "https://example.com"}); reason != "" {
 		t.Errorf("the custom provider type should be usable, got: %s", reason)
 	}
 
-	// An OpenAI body cannot be forwarded to an Anthropic upstream, or the other
-	// way around, however healthy the provider is.
-	mismatched := &object.Provider{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: "https://api.anthropic.com"}
-	if reason := providerUnusableReason(mismatched, openAi); !strings.Contains(reason, "does not speak") {
-		t.Errorf("an anthropic provider should be rejected for an openai request, got: %s", reason)
-	}
-	if reason := providerUnusableReason(mismatched, anthropic); reason != "" {
-		t.Errorf("an anthropic provider should be usable for an anthropic request, got: %s", reason)
-	}
-	if reason := providerUnusableReason(&object.Provider{Owner: "admin", Name: "gpt", Type: "openai", BaseUrl: "https://api.openai.com/v1"}, anthropic); !strings.Contains(reason, "does not speak") {
-		t.Errorf("an openai provider should be rejected for an anthropic request, got: %s", reason)
+	// The wire format is no longer a reason: a request that arrived in the other
+	// one is translated for the provider.
+	other := &object.Provider{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: "https://api.anthropic.com"}
+	if reason := providerUnusableReason(other); reason != "" {
+		t.Errorf("an anthropic provider should be usable, got: %s", reason)
 	}
 
 	passthrough := &object.Provider{
@@ -109,11 +113,11 @@ func TestProviderUnusableReason(t *testing.T) {
 		BaseUrl:  "https://api.openai.com/v1",
 		AuthMode: object.ProviderAuthClient,
 	}
-	if reason := providerUnusableReason(passthrough, openAi); !strings.Contains(reason, "carries none") {
+	if reason := providerUnusableReason(passthrough); !strings.Contains(reason, "carries none") {
 		t.Errorf("a client-auth provider should be rejected without a credential, got: %s", reason)
 	}
 	c.Ctx.Request.Header.Set("Authorization", "Bearer token")
-	if reason := providerUnusableReason(passthrough, openAi); reason != "" {
+	if reason := providerUnusableReason(passthrough); reason != "" {
 		t.Errorf("a client-auth provider should be usable with a credential, got: %s", reason)
 	}
 }
@@ -129,7 +133,7 @@ func TestRelayResponse(t *testing.T) {
 			"X-Ratelimit-Remaining": {"0"},
 		},
 	}
-	c.relayResponse(&proxyRoute{target: openAiChat}, upstreamResp, strings.NewReader(`{"error":{"message":"slow down"}}`), false)
+	c.relayVerbatim(upstreamResp, strings.NewReader(`{"error":{"message":"slow down"}}`), false)
 
 	if recorder.Code != 429 {
 		t.Errorf("status code = %d, expected 429", recorder.Code)
@@ -158,7 +162,7 @@ func TestRelayResponseStream(t *testing.T) {
 			"Connection":   {"keep-alive"},
 		},
 	}
-	c.relayResponse(&proxyRoute{target: openAiChat}, upstreamResp, strings.NewReader("data: a\n\ndata: [DONE]\n\n"), true)
+	c.relayVerbatim(upstreamResp, strings.NewReader("data: a\n\ndata: [DONE]\n\n"), true)
 
 	if header := recorder.Header().Get("Content-Type"); header != "text/event-stream" {
 		t.Errorf("Content-Type = %s, expected text/event-stream", header)
@@ -256,7 +260,7 @@ func TestForwardToProvider(t *testing.T) {
 	healthyProvider := &object.Provider{Owner: "admin", Name: "healthy", Type: "openai", BaseUrl: healthyServer.URL + "/", ApiKey: "sk-good"}
 	rawBody := []byte(`{"model":"gpt-4","messages":[]}`)
 
-	route := &proxyRoute{target: openAiChat, body: rawBody}
+	route := newProxyRoute(openAiChat, rawBody, false)
 
 	// A retryable status fails over instead of reaching the client.
 	c, recorder := newTestApiController()
@@ -289,7 +293,7 @@ func TestForwardToProvider(t *testing.T) {
 	// stream=true, but the upstream rejected the request: the JSON error must
 	// not be dressed up as an SSE stream.
 	c, recorder = newTestApiController()
-	c.forwardToProvider(overloadedProvider, &proxyRoute{target: openAiChat, body: rawBody, stream: true}, true)
+	c.forwardToProvider(overloadedProvider, newProxyRoute(openAiChat, rawBody, true), true)
 	if header := recorder.Header().Get("Content-Type"); header != "application/json" {
 		t.Errorf("Content-Type = %s, expected application/json", header)
 	}
@@ -312,7 +316,7 @@ func TestForwardToProviderAnthropic(t *testing.T) {
 	defer server.Close()
 
 	provider := &object.Provider{Owner: "admin", Name: "claude", Type: "anthropic", BaseUrl: server.URL, ApiKey: "sk-ant-test"}
-	route := &proxyRoute{target: anthropicMessages, body: []byte(`{"model":"claude-opus-5","messages":[]}`)}
+	route := newProxyRoute(anthropicMessages, []byte(`{"model":"claude-opus-5","messages":[]}`), false)
 
 	c, recorder := newTestApiController()
 	c.Ctx.Request.Header.Add("Anthropic-Beta", "fine-grained-tool-streaming-2025-05-14")
@@ -342,13 +346,13 @@ func TestForwardToProviderAnthropic(t *testing.T) {
 
 func TestWriteProxyError(t *testing.T) {
 	c, recorder := newTestApiController()
-	c.writeProxyError(object.ProtocolOpenAi, http.StatusBadRequest, "invalid_request_error", "nope")
+	c.writeProxyError(protocol.Of(protocol.OpenAi), http.StatusBadRequest, "invalid_request_error", "nope")
 	if body := recorder.Body.String(); !strings.Contains(body, `"error":{"message":"nope"`) || strings.Contains(body, `"type":"error"`) {
 		t.Errorf("openai error body = %s", body)
 	}
 
 	c, recorder = newTestApiController()
-	c.writeProxyError(object.ProtocolAnthropic, http.StatusBadRequest, "invalid_request_error", "nope")
+	c.writeProxyError(protocol.Of(protocol.Anthropic), http.StatusBadRequest, "invalid_request_error", "nope")
 	if body := recorder.Body.String(); !strings.Contains(body, `"type":"error"`) {
 		t.Errorf("anthropic error body = %s", body)
 	}

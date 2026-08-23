@@ -100,12 +100,17 @@ func (c *ApiController) GetProviderHealth() {
 	c.ResponseOk(object.GetProviderHealth())
 }
 
-// checkAgentProtocol rejects providers the agent could never talk to. The proxy
-// relays a request in the wire format it arrived in, so an agent speaking one
-// API cannot be served by a provider speaking the other.
-func checkAgentProtocol(agentId string, providerIds []string) error {
-	protocol := agentprovider.ProtocolOf(agentId)
-	if protocol == "" {
+// checkAgentProtocol rejects providers the agent could never talk to. Only a
+// direct binding can be wrong: it writes the provider's own URL into the agent
+// configuration, and the two then have to speak the same API. Through the
+// gateway any provider will do, since the proxy translates.
+func checkAgentProtocol(agentId string, mode string, providerIds []string) error {
+	if mode != object.ModeDirect {
+		return nil
+	}
+
+	spokenByAgent := agentprovider.ProtocolOf(agentId)
+	if spokenByAgent == "" {
 		return nil
 	}
 
@@ -121,9 +126,9 @@ func checkAgentProtocol(agentId string, providerIds []string) error {
 		if provider == nil {
 			continue
 		}
-		if spoken := object.ProviderProtocol(provider); spoken != protocol {
-			return fmt.Errorf("%s speaks the %s API, but provider %s speaks %s: bind a provider that speaks %s instead",
-				agentId, protocol, id, spoken, protocol)
+		if spoken := object.ProviderProtocol(provider); spoken != spokenByAgent {
+			return fmt.Errorf("%s speaks the %s API, but provider %s speaks %s: bind a provider that speaks %s, or route this agent through the gateway",
+				agentId, spokenByAgent, id, spoken, spokenByAgent)
 		}
 	}
 	return nil
@@ -173,8 +178,8 @@ func agentEndpoint(agentId string) (agentprovider.Endpoint, error) {
 }
 
 // gatewayAgentUrl is the loopback base URL an agent reaches its own provider at.
-// One URL serves both wire formats: an OpenAI client appends /chat/completions
-// to it, an Anthropic one appends /v1/messages.
+// One URL serves every wire format: an OpenAI client appends /chat/completions
+// to it, Codex appends /responses, and an Anthropic one appends /v1/messages.
 func gatewayAgentUrl(agentId string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d/v1/agents/%s", conf.GetHttpPort(), agentId)
 }

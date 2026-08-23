@@ -98,8 +98,9 @@ export function ProviderGridCard({
   const protocol = providerProtocol(provider.type);
   const models = provider.models ?? [];
   const users = agents.filter(agent => agent.provider === id);
-  // An agent whose client speaks the other wire format could never read this
-  // provider's answers, so it is not offered.
+  // An agent bound directly to a provider reads its answers itself, so only one
+  // serving the API that agent speaks is offered; through the gateway they all
+  // are, since the proxy translates.
   const others = agents.filter(agent => agent.provider !== id && agentSpeaks(agent, protocol));
 
   return (
