@@ -74,18 +74,18 @@ export default function AgentSessionsPage({account}: {account: Account}) {
       key: "session",
       render: (_value, session) => (
         <div className="flex min-w-0 flex-col">
-          {/* A session read off disk has no monitoring records behind it, so
-              there is nothing for the link to open. */}
-          {session.historical ? (
-            <span className="truncate font-medium">{session.title || session.sessionKey}</span>
-          ) : (
-            <Link
-              to={`/agent-records?agent=${encodeURIComponent(session.agent)}&session=${encodeURIComponent(session.sessionKey)}`}
-              className="text-primary truncate font-medium hover:underline"
-            >
-              {session.title || session.sessionKey}
-            </Link>
-          )}
+          {/* A session read off disk has no monitoring records behind it, so it
+              opens its own transcript rather than the Activity page. */}
+          <Link
+            to={
+              session.historical
+                ? `/agent-sessions/${encodeURIComponent(session.sessionKey)}?agent=${encodeURIComponent(session.agent)}`
+                : `/agent-records?agent=${encodeURIComponent(session.agent)}&session=${encodeURIComponent(session.sessionKey)}`
+            }
+            className="text-primary truncate font-medium hover:underline"
+          >
+            {session.title || session.sessionKey}
+          </Link>
           <span className="text-muted-foreground truncate text-xs">
             {session.cwd || session.sessionKey}
           </span>

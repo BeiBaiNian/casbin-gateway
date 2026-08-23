@@ -21,6 +21,8 @@ package agenthistory
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -49,9 +51,11 @@ const (
 	// maxTranscripts bounds a scan: a heavy user has thousands of these, and the
 	// newest are the ones worth reading.
 	maxTranscripts = 500
-	// maxLineBytes skips a line longer than this rather than holding it in memory.
-	// A single tool result can be megabytes.
+	// maxLineBytes is the longest line eachLine reads. A single tool result can
+	// be megabytes, and one of those is passed over rather than held in memory.
 	maxLineBytes = 1 << 20
+	// readBufferBytes is how much of a line is read at a time.
+	readBufferBytes = 64 << 10
 	// maxTitleRunes keeps a title to something a table cell can show.
 	maxTitleRunes = 120
 )
@@ -192,13 +196,55 @@ type line struct {
 	} `json:"payload"`
 }
 
-func parse(agent string, file transcript) (Session, bool) {
-	handle, err := os.Open(file.path)
+// eachLine visits every line of a JSONL transcript and reports how many were
+// passed over for being longer than maxLineBytes. bufio.Scanner is not used
+// here because it ends the whole read at the first such line, which would turn
+// one huge tool result into a session that looks four messages long.
+//
+// The bytes handed to visit are reused for the next line, so a caller that
+// keeps them has to copy them first.
+func eachLine(path string, visit func(data []byte)) (int, error) {
+	handle, err := os.Open(path)
 	if err != nil {
-		return Session{}, false
+		return 0, err
 	}
 	defer handle.Close()
 
+	reader := bufio.NewReaderSize(handle, readBufferBytes)
+	buffer := []byte{}
+	skipping := false
+	skipped := 0
+	for {
+		chunk, err := reader.ReadSlice('\n')
+		partial := errors.Is(err, bufio.ErrBufferFull)
+		if err != nil && !partial && !errors.Is(err, io.EOF) {
+			return skipped, err
+		}
+
+		if !skipping {
+			buffer = append(buffer, chunk...)
+			if len(buffer) > maxLineBytes {
+				buffer, skipping = buffer[:0], true
+				skipped++
+			}
+		}
+
+		if partial {
+			continue
+		}
+
+		if !skipping && len(buffer) > 0 {
+			visit(buffer)
+		}
+		buffer, skipping = buffer[:0], false
+
+		if errors.Is(err, io.EOF) {
+			return skipped, nil
+		}
+	}
+}
+
+func parse(agent string, file transcript) (Session, bool) {
 	session := Session{
 		Agent:      agent,
 		Path:       file.path,
@@ -209,12 +255,10 @@ func parse(agent string, file transcript) (Session, bool) {
 	// the transcript itself overrides this when it names one.
 	session.SessionKey = sessionKeyFromName(file.info.Name())
 
-	scanner := bufio.NewScanner(handle)
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
-	for scanner.Scan() {
+	if _, err := eachLine(file.path, func(data []byte) {
 		var entry line
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-			continue
+		if err := json.Unmarshal(data, &entry); err != nil {
+			return
 		}
 
 		if entry.SessionId != "" {
@@ -239,6 +283,8 @@ func parse(agent string, file transcript) (Session, bool) {
 				session.Title = usableTitle(content)
 			}
 		}
+	}); err != nil {
+		return Session{}, false
 	}
 
 	if session.SessionKey == "" {

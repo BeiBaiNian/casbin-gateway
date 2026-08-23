@@ -225,6 +225,39 @@ func (c *ApiController) GetAgentSessions() {
 	c.ResponseOk(sessions)
 }
 
+// GetAgentSession reads one transcript in full, so that a session listed off
+// disk can be opened and read instead of only counted. The session is looked up
+// by key among the ones a scan found, which is what keeps a request from naming
+// a file of its own.
+func (c *ApiController) GetAgentSession() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	agentId := c.Input().Get("agent")
+	sessionKey := c.Input().Get("session")
+	if sessionKey == "" {
+		c.ResponseError("session is required")
+		return
+	}
+
+	for _, session := range historicalSessions(agentId) {
+		if session.SessionKey != sessionKey {
+			continue
+		}
+
+		transcript, err := agenthistory.ReadTranscript(session)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+		c.ResponseOk(transcript)
+		return
+	}
+
+	c.ResponseError("no transcript on disk for this session")
+}
+
 // sessionSeenKey identifies one session across the two sources, so a session
 // that monitoring already reported is not listed twice.
 func sessionSeenKey(agentId string, sessionKey string) string {

@@ -32,6 +32,7 @@ import AgentConfigsPage from "@/pages/AgentConfigsPage";
 import AgentDashboardPage from "@/pages/AgentDashboardPage";
 import AgentDetailPage from "@/pages/AgentDetailPage";
 import AgentRecordsPage from "@/pages/AgentRecordsPage";
+import AgentSessionPage from "@/pages/AgentSessionPage";
 import AgentSessionsPage from "@/pages/AgentSessionsPage";
 import AgentsPage from "@/pages/AgentsPage";
 import AuthCallback from "@/pages/AuthCallback";
@@ -296,6 +297,10 @@ export default function App() {
                 <Route
                   path="/agent-sessions"
                   element={requireSignin(user => <AgentSessionsPage account={user} />)}
+                />
+                <Route
+                  path="/agent-sessions/:sessionKey"
+                  element={requireSignin(user => <AgentSessionPage account={user} />)}
                 />
                 <Route path="/nodes" element={requireSignin(user => <NodeListPage account={user} />)} />
                 <Route path="/nodes/:owner/:nodeName" element={requireSignin(() => <NodeEditPage />)} />

@@ -305,6 +305,28 @@ export interface AgentSession {
   historical?: boolean;
 }
 
+/** One part of a transcript message: prose, thinking, a tool call or its result. */
+export interface AgentMessageBlock {
+  kind: "text" | "thinking" | "toolUse" | "toolResult" | "image";
+  text?: string;
+  tool?: string;
+  isError?: boolean;
+}
+
+export interface AgentMessage {
+  role: string;
+  time?: string;
+  blocks: AgentMessageBlock[];
+}
+
+/** One session read in full out of the agent's own transcript file. */
+export interface AgentTranscript {
+  session: AgentSession;
+  messages: AgentMessage[];
+  /** True when the file holds more than what was read. */
+  truncated?: boolean;
+}
+
 export interface LlmRecord {
   id: number;
   createdTime: string;

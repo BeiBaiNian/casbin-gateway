@@ -20,6 +20,7 @@ import type {
   AgentRecord,
   AgentRuntime,
   AgentSession,
+  AgentTranscript,
 } from "@/types";
 
 export interface PatchTarget {
@@ -90,4 +91,9 @@ export function getAgentRecords(agent = "", eventType = "", outcome = "", sessio
 
 export function getAgentSessions(agent = "") {
   return request<AgentSession[]>(`/api/get-agent-sessions${query({agent: agent})}`);
+}
+
+/** The conversation inside one session, read from the agent's own transcript. */
+export function getAgentSession(agent: string, session: string) {
+  return request<AgentTranscript>(`/api/get-agent-session${query({agent: agent, session: session})}`);
 }
