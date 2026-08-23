@@ -80,6 +80,14 @@ jobs:
           set -euo pipefail
           mkdir -p dist
 
+          # Stamped into the binary so that a running Gateway can tell which
+          # nightly it is, and whether the published one is a different commit.
+          stamp="github.com/apache/casbin-gateway/version"
+          ldflags="-s -w"
+          ldflags="${ldflags} -X ${stamp}.buildVersion=nightly"
+          ldflags="${ldflags} -X ${stamp}.buildCommit=${GITHUB_SHA}"
+          ldflags="${ldflags} -X ${stamp}.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
           # goos goarch arch-name-used-in-the-file-name
           targets=(
             "linux   amd64 x86_64"
@@ -101,7 +109,7 @@ jobs:
 
             echo "Building ${name}"
             GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-              go build -tags embed -trimpath -ldflags "-s -w" -o "${binary}" .
+              go build -tags embed -trimpath -ldflags "${ldflags}" -o "${binary}" .
 
             cp LICENSE NOTICE DISCLAIMER README.md "${stage}/"
 

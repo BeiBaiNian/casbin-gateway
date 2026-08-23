@@ -40,6 +40,9 @@ func initAPI() {
 	beego.Router("/api/get-casdoor-providers", &controllers.ApiController{}, "GET:GetCasdoorProviders")
 	beego.Router("/api/get-gateway-status", &controllers.ApiController{}, "GET:GetGatewayStatus")
 	beego.Router("/api/get-relay-token", &controllers.ApiController{}, "GET:GetRelayToken")
+	beego.Router("/api/get-version", &controllers.ApiController{}, "GET:GetVersion")
+	beego.Router("/api/update-gateway", &controllers.ApiController{}, "POST:UpdateGateway")
+	beego.Router("/api/get-update-status", &controllers.ApiController{}, "GET:GetUpdateStatus")
 	beego.Router("/api/get-setting", &controllers.ApiController{}, "GET:GetSetting")
 	beego.Router("/api/update-setting", &controllers.ApiController{}, "POST:UpdateSetting")
 

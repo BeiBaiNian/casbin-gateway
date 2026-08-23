@@ -83,24 +83,8 @@ func startDetached(port int, logPath string) {
 		return
 	}
 
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
-		fmt.Printf("Casbin Gateway: cannot create %s: %v\n", filepath.Dir(logPath), err)
-		os.Exit(1)
-	}
-
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	process, err := StartDetached(executable, "", logPath)
 	if err != nil {
-		fmt.Printf("Casbin Gateway: cannot write %s: %v\n", logPath, err)
-		os.Exit(1)
-	}
-	defer logFile.Close()
-
-	cmd := exec.Command(executable)
-	cmd.Stdout, cmd.Stderr = logFile, logFile
-	cmd.Env = append(os.Environ(), EnvDaemonChildKey+"=1")
-	detach(cmd)
-
-	if err := cmd.Start(); err != nil {
 		fmt.Printf("Casbin Gateway: could not start in the background: %v\n", err)
 		os.Exit(1)
 	}
@@ -108,7 +92,7 @@ func startDetached(port int, logPath string) {
 	deadline := time.Now().Add(daemonStartTimeout)
 	for time.Now().Before(deadline) {
 		if isServing(port) {
-			fmt.Printf("Casbin Gateway is running in the background on http://localhost:%d (pid %d)\n", port, cmd.Process.Pid)
+			fmt.Printf("Casbin Gateway is running in the background on http://localhost:%d (pid %d)\n", port, process.Pid)
 			fmt.Printf("  Log: %s   Stop it with: casbin-gateway stop\n", logPath)
 			return
 		}
@@ -117,6 +101,34 @@ func startDetached(port int, logPath string) {
 
 	fmt.Printf("Casbin Gateway did not answer on port %d within %v. See %s\n", port, daemonStartTimeout, logPath)
 	os.Exit(1)
+}
+
+// StartDetached launches the executable at path with no terminal attached,
+// sending the console output nobody is watching to logPath. The child serves
+// instead of spawning another copy of itself. An empty dir keeps this process's
+// working directory, which is where Gateway's data lives.
+func StartDetached(path string, dir string, logPath string) (*os.Process, error) {
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		return nil, fmt.Errorf("cannot create %s: %w", filepath.Dir(logPath), err)
+	}
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("cannot write %s: %w", logPath, err)
+	}
+	defer logFile.Close()
+
+	cmd := exec.Command(path)
+	cmd.Dir = dir
+	cmd.Stdout, cmd.Stderr = logFile, logFile
+	cmd.Env = append(os.Environ(), EnvDaemonChildKey+"=1")
+	detach(cmd)
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	return cmd.Process, nil
 }
 
 func stopDaemon(port int) {

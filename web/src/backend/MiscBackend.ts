@@ -13,7 +13,14 @@
 // limitations under the License.
 
 import {query, request} from "@/backend/request";
-import type {Application, CasdoorProvider, GatewayStatus, MetricPoint} from "@/types";
+import type {
+  Application,
+  CasdoorProvider,
+  GatewayStatus,
+  MetricPoint,
+  UpdateStatus,
+  VersionInfo,
+} from "@/types";
 
 export function getCasdoorProviders() {
   return request<CasdoorProvider[]>("/api/get-casdoor-providers");
@@ -30,6 +37,20 @@ export function getGatewayStatus() {
 /** The token an agent has to send to the relay, and whether it is needed here. */
 export function getRelayToken() {
   return request<{relayToken: string; localOnly: boolean}>("/api/get-relay-token");
+}
+
+/** Which build this Gateway is, and which one is published. */
+export function getVersion(refresh = false) {
+  return request<VersionInfo>(`/api/get-version${query({refresh: refresh ? 1 : undefined})}`);
+}
+
+/** Starts the download; the work carries on after this answers. */
+export function updateGateway() {
+  return request<UpdateStatus>("/api/update-gateway", "POST");
+}
+
+export function getUpdateStatus() {
+  return request<UpdateStatus>("/api/get-update-status");
 }
 
 export function getMetric(type: string, rangeType: string, count: number, top?: number) {

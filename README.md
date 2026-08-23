@@ -61,6 +61,12 @@ That is the whole installation. Gateway keeps its data in a SQLite file inside i
 
 The password behind that account is `admin` / `123`, and it only matters if you open Gateway to the network — see [Serving other machines](#serving-other-machines).
 
+### Keeping it up to date
+
+The version Gateway is running sits in the top-right corner, with the date it was built, and it says **New** when the published build is a later one. Open it and press **Update now**: Gateway downloads the build for this machine, checks that it runs, puts it in place of itself and restarts into it. The page reloads on the new version when it comes back, and nothing else has to be touched — the data, the settings and the `casbin-gateway` command all stay where they are.
+
+Gateway installed some other way, or in a directory it cannot write to, says so and shows the install command to run by hand instead.
+
 ### What to do next
 
 | Page | What you get | What it needs |
@@ -102,7 +108,7 @@ Codex is the exception: its ChatGPT sign-in talks to an endpoint no provider sta
 
 - **Stop**: `casbin-gateway stop`. **Start again**: `casbin-gateway start`. **Check**: `casbin-gateway status`. All three work from any directory — the command is a wrapper that always starts Gateway in its install directory, where its data lives.
 - **Run in the foreground** instead, to watch it: `casbin-gateway`, stopped with `Ctrl-C`. In the background its console output goes to `logs/casbin-gateway.out`.
-- **Upgrade**: run the install command again. Your database and settings are untouched.
+- **Upgrade**: press the version in the top-right corner and then **Update now**, or run the install command again. Your database and settings are untouched either way.
 - **Remove**: delete `~/.local/share/casbin-gateway` and `~/.local/bin/casbin-gateway` (on Windows, `%LOCALAPPDATA%\casbin-gateway` and its PATH entry), plus the startup entry the installer names when it finishes.
 
 Set `INSTALL_DIR` to install somewhere else, `NO_START=1` to install without starting, or `NO_AUTOSTART=1` to install without starting at login.

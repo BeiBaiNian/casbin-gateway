@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {BreadcrumbBar} from "@/components/shared/breadcrumb-bar";
+import {VersionPanel} from "@/components/shared/version-panel";
 
 function ThemeToggle({
   themeAlgorithm,
@@ -158,6 +159,7 @@ export function AppHeader({
   onToggleSidebar,
   uri,
   account,
+  isAdmin,
   themeAlgorithm,
   onThemeChange,
   onSignout,
@@ -166,6 +168,7 @@ export function AppHeader({
   onToggleSidebar: () => void;
   uri: string;
   account: Account | null | undefined;
+  isAdmin: boolean;
   themeAlgorithm: ThemeAlgorithm;
   onThemeChange: (next: ThemeAlgorithm) => void;
   onSignout: () => void;
@@ -185,6 +188,7 @@ export function AppHeader({
       </div>
 
       <div className="flex items-center gap-0.5 pr-1">
+        <VersionPanel isAdmin={isAdmin} signedIn={account !== null && account !== undefined} />
         <ThemeToggle themeAlgorithm={themeAlgorithm} onChange={onThemeChange} />
         <LanguageSelect />
         <AccountMenu account={account} onSignout={onSignout} />

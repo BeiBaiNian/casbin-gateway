@@ -258,6 +258,7 @@ export default function App() {
             onToggleSidebar={toggleSidebar}
             uri={location.pathname}
             account={account}
+            isAdmin={Setting.isAdminUser(account)}
             themeAlgorithm={themeAlgorithm}
             onThemeChange={changeTheme}
             onSignout={signout}

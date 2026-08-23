@@ -32,6 +32,7 @@ import (
 	"github.com/apache/casbin-gateway/run"
 	"github.com/apache/casbin-gateway/service"
 	"github.com/apache/casbin-gateway/util"
+	"github.com/apache/casbin-gateway/version"
 	"github.com/beego/beego"
 	"github.com/beego/beego/plugins/cors"
 	_ "github.com/beego/beego/session/redis"
@@ -47,11 +48,22 @@ func main() {
 	agenthook.ServeIfInvoked()
 	mcpserver.ServeIfInvoked()
 
+	// "version" prints the build and exits. An update runs it on what it just
+	// downloaded, before that executable replaces this one.
+	if version.RunCommand(os.Args) {
+		return
+	}
+
 	// "start", "stop" and "status" manage a Gateway running in the background,
 	// so that using it does not mean keeping a terminal open.
 	if util.RunCommand(os.Args, conf.GetHttpPort(), daemonLogPath) {
 		return
 	}
+
+	// The executable an earlier update replaced is only removable once nothing
+	// is running from it, which is now.
+	version.CleanupBackup()
+	version.Configure(daemonLogPath)
 
 	object.InitFlag()
 	object.InitAdapter()
@@ -80,6 +92,13 @@ func main() {
 		beego.Error("agent monitor could not start:", err)
 	}
 	defer agentmonitor.Stop()
+
+	// An update ends this process without unwinding main, so what the deferred
+	// calls above would have flushed has to be flushed there instead.
+	version.BeforeRestart = func() {
+		agentmonitor.Stop()
+		object.StopLlmRecordWriter()
+	}
 
 	beego.InsertFilter("*", beego.BeforeRouter, cors.Allow(&cors.Options{
 		AllowOrigins:     []string{"*"},

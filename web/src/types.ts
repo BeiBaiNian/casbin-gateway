@@ -597,3 +597,54 @@ export interface AgentConfigPlanItem {
   reason?: string;
   path?: string;
 }
+
+/** What this Gateway executable knows about itself. */
+export interface VersionBuild {
+  version: string;
+  commit: string;
+  shortCommit: string;
+  buildTime: string;
+  /** Built from a checkout with uncommitted changes, which no commit identifies. */
+  modified: boolean;
+  os: string;
+  arch: string;
+  goVersion: string;
+}
+
+/** The published build this Gateway can move to. */
+export interface VersionRelease {
+  tag: string;
+  name: string;
+  commit: string;
+  shortCommit: string;
+  publishedAt: string;
+  pageUrl: string;
+  assetName: string;
+  assetUrl: string;
+  assetSize: number;
+}
+
+export type UpdateStage = "idle" | "downloading" | "installing" | "restarting" | "failed";
+
+export interface UpdateStatus {
+  stage: UpdateStage;
+  percent: number;
+  downloaded: number;
+  total: number;
+  target: string;
+  error: string;
+}
+
+export interface VersionInfo {
+  current: VersionBuild;
+  latest: VersionRelease | null;
+  updateAvailable: boolean;
+  canUpdate: boolean;
+  /** "unsupported-platform", "read-only" or "no-executable" when it cannot update itself. */
+  blocked: string;
+  /** A failed lookup, which leaves the current version worth showing anyway. */
+  checkError: string;
+  update: UpdateStatus;
+  releaseUrl: string;
+  installCommand: string;
+}

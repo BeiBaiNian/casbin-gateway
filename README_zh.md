@@ -59,6 +59,12 @@ irm https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/insta
 
 安装到此为止。Gateway 把数据存在自己目录下的一个 SQLite 文件里，登录也走它自己的用户表。
 
+### 保持最新
+
+当前运行的版本号显示在右上角，后面跟着它的构建日期，有新版本时会标上**新**。点开它按**立即升级**：Gateway 会下载适配本机的构建产物，先确认它能跑起来，再替换掉自己并重启。新版本起来后页面会自动刷新，其他什么都不用动 —— 数据、设置和 `casbin-gateway` 命令都留在原处。
+
+如果 Gateway 不是这样装的，或者所在目录不可写，页面会直接说明，并给出手动升级的命令。
+
 ### 接下来做什么
 
 | 页面 | 你能得到什么 | 需要什么 |
@@ -100,7 +106,7 @@ Codex 是例外：它的 ChatGPT 登录走的是没有任何 Provider 能替代�
 
 - **停止**：`casbin-gateway stop`。**再次启动**：`casbin-gateway start`。**查看状态**：`casbin-gateway status`。三条命令在任意目录都能用 —— 这个命令是一个包装脚本，总是在安装目录（数据所在的地方）里启动 Gateway。
 - **前台运行**（想盯着它跑的时候）：`casbin-gateway`，用 `Ctrl-C` 停止。后台运行时控制台输出写在 `logs/casbin-gateway.out`。
-- **升级**：再跑一遍安装命令。数据库和设置不受影响。
+- **升级**：点右上角的版本号，再点**立即升级**，或者再跑一遍安装命令。两种方式都不影响数据库和设置。
 - **卸载**：删除 `~/.local/share/casbin-gateway` 和 `~/.local/bin/casbin-gateway`（Windows 上是 `%LOCALAPPDATA%\casbin-gateway` 及其 PATH 条目），以及安装脚本结束时告诉你的那个自启动条目。
 
 设置 `INSTALL_DIR` 可以装到别的位置，`NO_START=1` 只安装不启动，`NO_AUTOSTART=1` 则不设置登录自启。
