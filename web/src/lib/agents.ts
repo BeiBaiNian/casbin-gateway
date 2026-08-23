@@ -65,6 +65,15 @@ export function agentSetupNoteKey(agentId: string) {
   }
 }
 
+/**
+ * Mirrors the check in agentprovider's Codex writer: Codex speaks only the
+ * OpenAI Responses API, so it reaches a chat completions provider through
+ * Gateway, which translates, or not at all.
+ */
+export function agentNeedsResponsesApi(agentId: string) {
+  return agentId.startsWith("codex");
+}
+
 /** The detail page route for one installation, disambiguated by its path. */
 export function agentDetailPath(agent: Agent) {
   return `/agents/${encodeURIComponent(agent.agentId)}?path=${encodeURIComponent(agent.path)}`;

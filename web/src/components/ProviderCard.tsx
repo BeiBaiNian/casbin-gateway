@@ -41,8 +41,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {Switch} from "@/components/ui/switch";
-import {agentProxyBaseUrl, agentSetupNoteKey, directMode, gatewayMode} from "@/lib/agents";
-import {providerProtocol, shellForPath, usesClientAuth} from "@/lib/providers";
+import {
+  agentNeedsResponsesApi,
+  agentProxyBaseUrl,
+  agentSetupNoteKey,
+  directMode,
+  gatewayMode,
+} from "@/lib/agents";
+import {providerProtocol, servesResponsesApi, shellForPath, usesClientAuth} from "@/lib/providers";
 import {cn} from "@/lib/utils";
 import type {Agent, AgentProviderFile, Provider, ProviderHealth} from "@/types";
 
@@ -200,6 +206,11 @@ export function ProviderCard({
       (bound === undefined || providerProtocol(provider.type) === providerProtocol(bound.type)),
   );
 
+  // Codex reads nothing but the Responses API, which Gateway serves by
+  // translating it: a provider stopping at chat completions is out of its reach
+  // directly, so the choice is not offered rather than failing on the write.
+  const gatewayOnly = agentNeedsResponsesApi(agent.agentId) && !servesResponsesApi(bound);
+
   const toggleFallback = (id: string) => {
     onRouting({
       fallbacks: fallbacks.includes(id)
@@ -273,7 +284,7 @@ export function ProviderCard({
               <Switch
                 className="mt-0.5"
                 checked={mode === gatewayMode}
-                disabled={busy}
+                disabled={busy || gatewayOnly}
                 onCheckedChange={checked =>
                   onRouting({mode: checked ? gatewayMode : directMode})
                 }
@@ -281,9 +292,11 @@ export function ProviderCard({
               <span>
                 {i18next.t("agent:Route through Gateway")}
                 <span className="block text-muted-foreground">
-                  {mode === gatewayMode
-                    ? i18next.t("agent:Gateway mode hint")
-                    : i18next.t("agent:Direct mode hint")}
+                  {gatewayOnly
+                    ? i18next.t("agent:Gateway only hint")
+                    : mode === gatewayMode
+                      ? i18next.t("agent:Gateway mode hint")
+                      : i18next.t("agent:Direct mode hint")}
                 </span>
               </span>
             </label>

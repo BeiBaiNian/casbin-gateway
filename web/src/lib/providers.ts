@@ -24,6 +24,11 @@ export function providerProtocol(type: string) {
 export const authProvider = "provider";
 export const authClient = "client";
 
+/** Mirrors object.ServesResponsesApi: only OpenAI itself serves that API. */
+export function servesResponsesApi(provider: {type?: string} | undefined) {
+  return provider?.type === "openai";
+}
+
 /** Mirrors object.UsesClientAuth: whose credentials reach the upstream. */
 export function usesClientAuth(provider: {authMode?: string} | undefined) {
   return provider?.authMode === authClient;
