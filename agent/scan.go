@@ -86,7 +86,7 @@ func scanWithTimeout() ([]Installation, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("agent scan timed out after %s: %w", scanTimeout, err)
 		}
-		return installations, nil
+		return dropUnlaunchableTrees(installations), nil
 	case <-ctx.Done():
 		return nil, fmt.Errorf("agent scan timed out after %s: %w", scanTimeout, ctx.Err())
 	}

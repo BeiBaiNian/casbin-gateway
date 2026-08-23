@@ -55,16 +55,23 @@ func executableOf(path, execName string) string {
 		return ""
 	}
 
-	root := nodeModulesRoot(path)
-	if root == "" {
-		return ""
-	}
-	for _, candidate := range npmShims(root, execName) {
-		if isFile(candidate) {
-			return candidate
+	if root := nodeModulesRoot(path); root != "" {
+		for _, candidate := range npmShims(root, execName) {
+			if isFile(candidate) {
+				return candidate
+			}
+		}
+		for _, dir := range managerBinDirs(root) {
+			for _, candidate := range shimNames(dir, execName) {
+				if isFile(candidate) {
+					return candidate
+				}
+			}
 		}
 	}
-	return ""
+	// Last, the program the shim would have run: an upgraded or half-removed
+	// package manager leaves the tree without its shim.
+	return packagedExecutable(path, execName)
 }
 
 func isFile(path string) bool {
@@ -104,4 +111,82 @@ func npmShims(root, execName string) []string {
 		prefix = filepath.Dir(root)
 	}
 	return []string{filepath.Join(prefix, "bin", execName), local}
+}
+
+// managerBinDirs are the shim directories of the package managers that keep one
+// for every global package instead of writing beside the tree: pnpm's home and
+// Volta's bin, both recognisable from the package path itself.
+func managerBinDirs(root string) []string {
+	var dirs []string
+	for dir := filepath.Clean(root); ; {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return dirs
+		}
+		switch strings.ToLower(filepath.Base(dir)) {
+		case "pnpm":
+			dirs = append(dirs, dir)
+		case "volta":
+			dirs = append(dirs, filepath.Join(dir, "bin"))
+		}
+		dir = parent
+	}
+}
+
+// shimNames are the launcher file names one directory may hold for an agent.
+func shimNames(dir, execName string) []string {
+	if runtime.GOOS == "windows" {
+		return []string{
+			filepath.Join(dir, execName+".cmd"),
+			filepath.Join(dir, execName+".exe"),
+			filepath.Join(dir, execName+".bat"),
+		}
+	}
+	return []string{filepath.Join(dir, execName)}
+}
+
+// packagedExecutable finds the program inside a package tree: npm packages of an
+// agent written in a compiled language carry one build per platform, either
+// beside the entry script or under a vendor directory.
+func packagedExecutable(path, execName string) string {
+	var patterns []string
+	for _, dir := range []string{path, filepath.Join(path, "bin"),
+		filepath.Join(path, "vendor", "*"), filepath.Join(path, "vendor", "*", "*")} {
+		patterns = append(patterns, filepath.Join(dir, execName+"*"))
+	}
+
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(pattern)
+		for _, candidate := range matches {
+			if isRunnable(candidate, execName) {
+				return candidate
+			}
+		}
+	}
+	return ""
+}
+
+// isRunnable reports whether a file inside a package tree is the agent itself
+// rather than one of the scripts or data files sitting beside it.
+func isRunnable(path, execName string) bool {
+	name := filepath.Base(path)
+	extension := filepath.Ext(name)
+	stem := strings.ToLower(strings.TrimSuffix(name, extension))
+	if stem != strings.ToLower(execName) && !strings.HasPrefix(stem, strings.ToLower(execName)+"-") {
+		return false
+	}
+
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	extension = strings.ToLower(extension)
+	if runtime.GOOS == "windows" {
+		return extension == ".exe" || extension == ".cmd" || extension == ".bat"
+	}
+	switch extension {
+	case ".js", ".mjs", ".cjs", ".ts", ".json", ".md":
+		return false
+	}
+	return info.Mode()&0o111 != 0
 }

@@ -192,6 +192,30 @@ func dedupeInstallations(installations []Installation) []Installation {
 	return result
 }
 
+// dropUnlaunchableTrees removes an installation nothing can start when the same
+// agent is installed elsewhere with a launcher. A package manager that upgrades
+// or half-removes itself leaves the package directory behind without the shim
+// that ran it, and that leftover is not an installation the user can use.
+func dropUnlaunchableTrees(installations []Installation) []Installation {
+	launchable := map[string]bool{}
+	resolved := make([]bool, len(installations))
+	for i, installation := range installations {
+		resolved[i] = LaunchOf(installation).Executable != ""
+		if resolved[i] {
+			launchable[installation.AgentId] = true
+		}
+	}
+
+	result := make([]Installation, 0, len(installations))
+	for i, installation := range installations {
+		if !resolved[i] && launchable[installation.AgentId] {
+			continue
+		}
+		result = append(result, installation)
+	}
+	return result
+}
+
 func canonicalPath(path string) string {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		return resolved
