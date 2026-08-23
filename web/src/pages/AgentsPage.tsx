@@ -63,7 +63,7 @@ export default function AgentsPage({account}: {account: Account}) {
       key: "name",
       dataIndex: "name",
       render: (value: string, record) => (
-        <Link to={agentDetailPath(record)} className="hover:text-primary flex items-center gap-2">
+        <Link to={agentDetailPath(record, agents)} className="hover:text-primary flex items-center gap-2">
           <AgentIcon agent={record.agentId || value} fallback={<Bot className="text-muted-foreground size-4" />} />
           <span className="font-medium hover:underline">{value}</span>
         </Link>

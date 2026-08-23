@@ -65,6 +65,7 @@ function CardRow({label, children}: {label: string; children: React.ReactNode}) 
 
 function AgentCard({
   agent,
+  detailTo,
   busy,
   activity,
   status,
@@ -73,6 +74,7 @@ function AgentCard({
   onRun,
 }: {
   agent: Agent;
+  detailTo: string;
   busy: boolean;
   activity?: {sessionCount: number; recordCount: number; lastTime: string};
   status?: AgentRuntime;
@@ -103,7 +105,7 @@ function AgentCard({
           fallback={<Bot className="text-muted-foreground size-10" />}
         />
         <div className="min-w-0 flex-1">
-          <Link to={agentDetailPath(agent)} className="hover:text-primary block truncate font-semibold hover:underline">
+          <Link to={detailTo} className="hover:text-primary block truncate font-semibold hover:underline">
             {agent.name}
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -168,7 +170,7 @@ function AgentCard({
           <div className="flex items-center justify-between gap-2">
             <RunButton agent={agent} status={status} busy={runBusy} onToggle={onRun} />
             <Link
-              to={agentDetailPath(agent)}
+              to={detailTo}
               className="text-primary inline-flex shrink-0 items-center text-xs hover:underline"
             >
               {i18next.t("agent:Details")}
@@ -195,7 +197,7 @@ function SetupGuide({hasProvider, agents}: {hasProvider: boolean; agents: Agent[
       title: i18next.t("agent:Bind the provider"),
       hint: i18next.t("agent:Bind the provider hint"),
       // With nothing scanned there is no agent to open, only the list saying so.
-      to: agents.length > 0 ? agentDetailPath(agents[0]) : "/agents",
+      to: agents.length > 0 ? agentDetailPath(agents[0], agents) : "/agents",
     },
   ];
 
@@ -333,6 +335,7 @@ export default function AgentDashboardPage({account}: {account: Account}) {
             <AgentCard
               key={agentKey(agent)}
               agent={agent}
+              detailTo={agentDetailPath(agent, agents)}
               busy={busyKey === agentKey(agent)}
               activity={activityOf(activity, agent)}
               status={runtimeOf(runtime, agent)}

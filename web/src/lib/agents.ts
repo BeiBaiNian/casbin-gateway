@@ -74,9 +74,15 @@ export function agentNeedsResponsesApi(agentId: string) {
   return agentId.startsWith("codex");
 }
 
-/** The detail page route for one installation, disambiguated by its path. */
-export function agentDetailPath(agent: Agent) {
-  return `/agents/${encodeURIComponent(agent.agentId)}?path=${encodeURIComponent(agent.path)}`;
+/**
+ * The detail page route for one installation. The path is only spelled out when
+ * the same agent is installed more than once, which is what makes the id alone
+ * ambiguous; otherwise the URL stays short.
+ */
+export function agentDetailPath(agent: Agent, agents: Agent[] = []) {
+  const url = `/agents/${encodeURIComponent(agent.agentId)}`;
+  const duplicated = agents.filter(candidate => candidate.agentId === agent.agentId).length > 1;
+  return duplicated ? `${url}?path=${encodeURIComponent(agent.path)}` : url;
 }
 
 /**
