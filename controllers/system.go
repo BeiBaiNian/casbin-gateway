@@ -35,3 +35,16 @@ func (c *ApiController) GetGatewayStatus() {
 		"httpsPort":      conf.GetGatewayHttpsPort(),
 	})
 }
+
+// GetRelayToken hands the web UI the token an agent has to send to the relay,
+// so the snippets it shows can be pasted as they are.
+func (c *ApiController) GetRelayToken() {
+	if c.RequireSignedIn() {
+		return
+	}
+
+	c.ResponseOk(map[string]interface{}{
+		"relayToken": conf.GetRelayToken(),
+		"localOnly":  conf.IsHttpAddrLoopback(),
+	})
+}

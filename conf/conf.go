@@ -17,6 +17,7 @@ package conf
 import (
 	_ "embed"
 	"fmt"
+	"net"
 	"os"
 	"runtime"
 	"strconv"
@@ -38,7 +39,7 @@ func init() {
 // is reloaded afterwards — beego.LoadAppConfig() builds a new config from the
 // file alone, so anything set here would otherwise be lost.
 func ApplyEnvOverrides() {
-	presetConfigItems := []string{"httpport", "appname"}
+	presetConfigItems := []string{"httpport", "httpaddr", "appname"}
 	for _, key := range presetConfigItems {
 		if value, ok := os.LookupEnv(key); ok {
 			err := beego.AppConfig.Set(key, value)
@@ -134,6 +135,36 @@ func GetConfigIntDefault(key string, defaultValue int) int {
 // GetHttpPort is the port serving the management UI and the REST API.
 func GetHttpPort() int {
 	return GetConfigIntDefault("httpport", 17000)
+}
+
+// GetHttpAddr is the interface the management UI and the REST API bind to. It
+// defaults to loopback: the UI signs the local admin in without a password and
+// the relay hands out the provider keys, so reaching those from the network is
+// opt-in rather than the default.
+func GetHttpAddr() string {
+	addr := strings.Trim(GetConfigString("httpaddr"), `"' `)
+	if addr == "" {
+		return "127.0.0.1"
+	}
+	return addr
+}
+
+// IsHttpAddrLoopback reports whether the management port is reachable only from
+// this machine, which is what lets the local admin skip the sign-in form.
+func IsHttpAddrLoopback() bool {
+	addr := GetHttpAddr()
+	if addr == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(addr)
+	return ip != nil && ip.IsLoopback()
+}
+
+// GetRelayToken is the token an agent sends to the local relay. It is generated
+// on first start and stored with the settings, so it survives restarts and can
+// be rotated from the Settings page.
+func GetRelayToken() string {
+	return strings.Trim(GetConfigString("relayToken"), `"' `)
 }
 
 // IsGatewayEnabled reports whether the reverse-proxy gateway should bind the

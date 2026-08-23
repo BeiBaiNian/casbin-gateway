@@ -311,6 +311,13 @@ export function ProviderCard({
                   </code>
                 ))}
 
+                {/* Once the file belongs to Gateway, picking another provider
+                    above rewrites it on the spot, so the button stops being the
+                    thing to click and only stays for a manual rewrite. */}
+                {providerConfig.applied ? (
+                  <p className="text-sm text-muted-foreground">{i18next.t("agent:Switch takes effect at once")}</p>
+                ) : null}
+
                 <div className="flex flex-wrap gap-2">
                   <ConfirmDialog
                     title={i18next.t("agent:Write the configuration of {agent}?").replace("{agent}", agent.name)}
@@ -318,7 +325,7 @@ export function ProviderCard({
                     confirmText={i18next.t("agent:Write configuration")}
                     onConfirm={() => onWrite(false)}
                   >
-                    <Button disabled={busy}>
+                    <Button variant={providerConfig.applied ? "outline" : "default"} disabled={busy}>
                       {providerConfig.applied
                         ? i18next.t("agent:Rewrite configuration")
                         : i18next.t("agent:Write configuration")}

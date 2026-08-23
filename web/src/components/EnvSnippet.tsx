@@ -22,6 +22,7 @@ import {Button} from "@/components/ui/button";
 import {SimpleTooltip} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import {envSnippet, shells, type Shell} from "@/lib/providers";
+import {useRelayToken} from "@/lib/relayToken";
 
 /**
  * The environment variables that point a client at one Gateway endpoint, ready
@@ -39,7 +40,8 @@ export function EnvSnippet({
   includeToken?: boolean;
 }) {
   const [shell, setShell] = React.useState<Shell>(defaultShell);
-  const snippet = envSnippet(protocol, baseUrl, shell, includeToken);
+  const token = useRelayToken();
+  const snippet = envSnippet(protocol, baseUrl, shell, includeToken, token);
 
   return (
     <div className="space-y-2">

@@ -46,7 +46,7 @@ func (c *ApiController) GetSigninOptions() {
 	c.ResponseOk(map[string]interface{}{
 		"casdoorAvailable": casdoorAvailable,
 		"signinAvailable":  signinEnabled,
-		"autoSignin":       signinEnabled && object.IsAdminUsingDefaultPassword(),
+		"autoSignin":       signinEnabled && object.IsAdminUsingDefaultPassword() && util.IsLoopbackRequest(c.Ctx.Request),
 		"authConfig": map[string]string{
 			"serverUrl":        getUnquotedConfig("casdoorEndpoint"),
 			"clientId":         getUnquotedConfig("clientId"),
@@ -138,7 +138,9 @@ func (c *ApiController) Signout() {
 }
 
 // autoLoginAdmin signs the built-in admin in while the seeded password is still
-// in use, so that a fresh deployment is usable without any configuration.
+// in use, so that a fresh install is usable without any configuration. Only a
+// request from this machine is let through: the convenience is for the person
+// sitting at the keyboard, and the seeded password is public.
 // It returns false when the response has already been written.
 func (c *ApiController) autoLoginAdmin() bool {
 	user, ok, err := object.VerifyUser("admin", "123")
@@ -158,7 +160,7 @@ func (c *ApiController) autoLoginAdmin() bool {
 func (c *ApiController) GetAccount() {
 	if c.GetSessionUser() == nil {
 		fromPath := c.Input().Get("fromPath")
-		if object.IsSigninEnabled() && fromPath != "/signin" && object.IsAdminUsingDefaultPassword() {
+		if object.IsSigninEnabled() && fromPath != "/signin" && object.IsAdminUsingDefaultPassword() && util.IsLoopbackRequest(c.Ctx.Request) {
 			if !c.autoLoginAdmin() {
 				return
 			}

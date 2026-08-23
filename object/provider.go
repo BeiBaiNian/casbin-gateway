@@ -497,6 +497,17 @@ func AddProvider(provider *Provider) (bool, error) {
 		return false, err
 	}
 
+	name, suffix, err := freeProviderName(provider.Owner, provider.Name)
+	if err != nil {
+		return false, err
+	}
+	provider.Name = name
+	// The name the user sees follows the one that was free, so two accounts with
+	// the same vendor are told apart in the list rather than only in the URL.
+	if suffix > 1 && provider.DisplayName != "" {
+		provider.DisplayName = fmt.Sprintf("%s %d", provider.DisplayName, suffix)
+	}
+
 	now := util.GetCurrentTime()
 	if provider.CreatedTime == "" {
 		provider.CreatedTime = now
@@ -512,6 +523,28 @@ func AddProvider(provider *Provider) (bool, error) {
 
 	affected, err := ormer.Engine.Insert(provider)
 	return affected != 0, err
+}
+
+// freeProviderName keeps the readable name the user asked for and appends a
+// number only when it is taken, so a second DeepSeek account becomes "deepseek-2"
+// rather than something nobody can read.
+func freeProviderName(owner string, name string) (string, int, error) {
+	for suffix := 1; suffix < 1000; suffix++ {
+		candidate := name
+		if suffix > 1 {
+			candidate = fmt.Sprintf("%s-%d", name, suffix)
+		}
+
+		existing, err := getProvider(owner, candidate)
+		if err != nil {
+			return "", 0, err
+		}
+		if existing == nil {
+			return candidate, suffix, nil
+		}
+	}
+
+	return "", 0, fmt.Errorf("too many providers named %s", name)
 }
 
 func UpdateProvider(id string, provider *Provider) (bool, error) {

@@ -36,8 +36,9 @@ const protocolEnv: Record<string, {baseUrl: string; token: string}> = {
 };
 
 /**
- * A stand-in for the key a client refuses to start without. Gateway authenticates
- * upstream with the provider's own key, so this value is never used for anything.
+ * What a client sends the relay while its own key stays here. Gateway issues it
+ * on first start; this is only the fallback for a page that has not been told
+ * the real one yet.
  */
 const placeholderToken = "casbin-gateway";
 
@@ -49,11 +50,17 @@ export type Shell = (typeof shells)[number];
  * provider forwards the client's own credentials, so the token is left out
  * there: setting it would replace the sign-in the client already has.
  */
-export function envSnippet(protocol: string, baseUrl: string, shell: Shell, includeToken = true) {
+export function envSnippet(
+  protocol: string,
+  baseUrl: string,
+  shell: Shell,
+  includeToken = true,
+  token = placeholderToken,
+) {
   const env = protocolEnv[protocol] ?? protocolEnv.openai;
   const variables: [string, string][] = [[env.baseUrl, baseUrl]];
   if (includeToken) {
-    variables.push([env.token, placeholderToken]);
+    variables.push([env.token, token || placeholderToken]);
   }
 
   return variables
@@ -81,6 +88,21 @@ export function shellForPath(path: string): Shell {
 /** The shell the browser's own machine is driven from. */
 export function localShell(): Shell {
   return navigator.userAgent.includes("Windows") ? "PowerShell" : "bash";
+}
+
+/**
+ * The identifier stored for a provider, derived from the name the user sees so
+ * that it stays readable. The server appends a number when it is already taken,
+ * which is why nothing random is needed here.
+ */
+export function providerSlug(label: string) {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+  return slug === "" ? "provider" : slug;
 }
 
 /**

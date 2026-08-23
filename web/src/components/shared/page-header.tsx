@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import * as React from "react";
+import {ChevronDown} from "lucide-react";
 
 import {cn} from "@/lib/utils";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
@@ -52,23 +53,41 @@ export function Section({
   description,
   columns = 3,
   className,
+  collapsible = false,
   children,
 }: {
   title?: React.ReactNode;
   description?: React.ReactNode;
   columns?: 1 | 2 | 3;
   className?: string;
+  /** Starts folded, for a section most people never open. */
+  collapsible?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = React.useState(!collapsible);
+
   return (
     <Card className={cn("gap-4 py-5", className)}>
       {title || description ? (
         <CardHeader className="px-5">
-          {title ? <CardTitle className="text-[15px]">{title}</CardTitle> : null}
+          {title ? (
+            collapsible ? (
+              <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                className="flex w-full items-center gap-1.5 text-left"
+              >
+                <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
+                <CardTitle className="text-[15px]">{title}</CardTitle>
+              </button>
+            ) : (
+              <CardTitle className="text-[15px]">{title}</CardTitle>
+            )
+          ) : null}
           {description ? <CardDescription>{description}</CardDescription> : null}
         </CardHeader>
       ) : null}
-      <CardContent className="px-5">
+      <CardContent className={cn("px-5", !open && "hidden")}>
         <div
           className={cn(
             "grid gap-4",

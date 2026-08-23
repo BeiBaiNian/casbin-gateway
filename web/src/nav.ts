@@ -45,6 +45,8 @@ export interface NavGroup {
   icon?: LucideIcon;
   path?: string;
   adminOnly?: boolean;
+  /** Hidden until the reverse proxy is turned on, since nothing under it works before that. */
+  gatewayOnly?: boolean;
   children?: NavLeaf[];
 }
 
@@ -81,6 +83,7 @@ export const navGroups: NavGroup[] = [
   {
     key: "/advanced",
     label: "general:Advanced",
+    gatewayOnly: true,
     icon: SlidersHorizontal,
     children: [
       {key: "/sites", label: "general:Sites", path: "/sites", icon: Globe},

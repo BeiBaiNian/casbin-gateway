@@ -53,11 +53,13 @@ On Windows, in PowerShell:
 irm https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/install.ps1 | iex
 ```
 
-Either one downloads the build for this machine, unpacks it into `~/.local/share/casbin-gateway` (`%LOCALAPPDATA%\casbin-gateway` on Windows), puts a `casbin-gateway` command on your PATH, and starts it. Then open:
+Either one downloads the build for this machine, unpacks it into `~/.local/share/casbin-gateway` (`%LOCALAPPDATA%\casbin-gateway` on Windows), puts a `casbin-gateway` command on your PATH, starts it in the background, and arranges for it to start again when you log in. The terminal you installed from is yours again straight away. Then open:
 
-**http://localhost:17000** — sign in as `admin` with the password `123`, and change it from **My Account**.
+**http://localhost:17000** — no sign-in: Gateway serves this machine only and signs the local admin in on sight.
 
-That is the whole installation. Gateway keeps its data in a SQLite file inside its own directory, and signs you in against its own user table.
+That is the whole installation. Gateway keeps its data in a SQLite file inside its own directory.
+
+The password behind that account is `admin` / `123`, and it only matters if you open Gateway to the network — see [Serving other machines](#serving-other-machines).
 
 ### What to do next
 
@@ -76,15 +78,15 @@ Agents are found by reading the user accounts, home directories and install path
 This is what fills **LLM Records**, and what lets Gateway keep the vendor key instead of the agent.
 
 1. **Providers** → **Add**: pick the type (OpenAI- or Anthropic-compatible), paste the vendor base URL and API key, and list the models it serves.
-2. **Agents** → open an agent → pick that provider.
-3. Copy the environment snippet the page shows, and start the agent from a shell that has it:
+2. **Agents** → open an agent → pick that provider. For an agent whose configuration format Gateway knows, **Write configuration** puts it in the agent's own file — **Preview** shows exactly what that will be first, and **Restore** undoes it. Picking a different provider afterwards rewrites the file on the spot, so switching from then on is one click, from either page.
+3. For any other agent, copy the environment snippet the page shows and start the agent from a shell that has it:
 
 ```bash
 export ANTHROPIC_BASE_URL="http://localhost:17000/v1/agents/claude-code"
-export ANTHROPIC_AUTH_TOKEN="casbin-gateway"
+export ANTHROPIC_AUTH_TOKEN="cg-..."
 ```
 
-The token is a placeholder — the agent refuses to start without one, and Gateway authenticates upstream with the provider's own key.
+The token is Gateway's own relay token, not a vendor key: the agent refuses to start without something in that variable, and Gateway authenticates upstream with the provider's key instead. The snippet on the page already has the real value filled in.
 
 ### No API key: keep the sign-in the agent already has
 
@@ -96,11 +98,21 @@ Codex is the exception: its ChatGPT sign-in talks to a different API than the ch
 
 ### Stopping, upgrading, removing
 
-- **Stop**: `Ctrl-C`. **Start again**: `casbin-gateway`, from any directory — the command is a wrapper that always starts Gateway in its install directory, where its data lives.
+- **Stop**: `casbin-gateway stop`. **Start again**: `casbin-gateway start`. **Check**: `casbin-gateway status`. All three work from any directory — the command is a wrapper that always starts Gateway in its install directory, where its data lives.
+- **Run in the foreground** instead, to watch it: `casbin-gateway`, stopped with `Ctrl-C`. In the background its console output goes to `logs/casbin-gateway.out`.
 - **Upgrade**: run the install command again. Your database and settings are untouched.
-- **Remove**: delete `~/.local/share/casbin-gateway` and `~/.local/bin/casbin-gateway` (on Windows, `%LOCALAPPDATA%\casbin-gateway` and its PATH entry).
+- **Remove**: delete `~/.local/share/casbin-gateway` and `~/.local/bin/casbin-gateway` (on Windows, `%LOCALAPPDATA%\casbin-gateway` and its PATH entry), plus the startup entry the installer names when it finishes.
 
-Set `INSTALL_DIR` to install somewhere else, or `NO_START=1` to install without starting.
+Set `INSTALL_DIR` to install somewhere else, `NO_START=1` to install without starting, or `NO_AUTOSTART=1` to install without starting at login.
+
+### Serving other machines
+
+Gateway binds `127.0.0.1` by default, because two things are wide open to whoever can reach the port: the UI signs the local admin in without asking, and `/v1` relays with the API keys stored here. Both are exactly what you want from a local tool and neither should be offered to a network.
+
+To serve other machines anyway, set `httpaddr = 0.0.0.0` in `conf/app.conf`, and then:
+
+1. **Change the admin password** from **My Account**. The auto sign-in stops at the first request that is not from this machine, so from then on the password is the only thing in the way.
+2. **Send the relay token** with every request to `/v1`. Gateway generates one on first start and shows it under **Settings → Security**; the environment snippets on the Providers and Agents pages already carry it, and it is what Gateway writes into the configuration of an agent it switches. Requests from this machine never need it.
 
 **These are nightly builds**, rebuilt from `master` on every push and published as the [`nightly`](https://github.com/apache/casbin-gateway/releases/tag/nightly) pre-release. They exist so that Gateway can be tried without a Go and Node toolchain; anything else should be built from a source release.
 
@@ -140,6 +152,7 @@ Everything is optional. Settings are changed on the **Settings** page of the web
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `httpport` | `17000` | Port of the web UI and the REST API |
+| `httpaddr` | `127.0.0.1` | Interface the web UI binds to — see [Serving other machines](#serving-other-machines) |
 | `driverName` / `dataSourceName` | `sqlite` / `./data/casbin-gateway.db` | Where data is stored |
 | `gatewayEnabled` | `false` | Turns the reverse-proxy WAF on |
 | `gatewayHttpPort` / `gatewayHttpsPort` | `80` / `443` | Ports the proxy listens on |
@@ -150,19 +163,20 @@ Everything is optional. Settings are changed on the **Settings** page of the web
 Gateway prints what it is actually doing when it starts, so the result can be checked instead of the file:
 
 ```
-+----------------------------------------------------------------------------+
-| Casbin Gateway                                                              |
-+----------------+-----------------------------------------------------------+
-| Management UI  | http://localhost:17000                                     |
-| Settings       | Settings page, seeded from conf/app.conf                   |
-| Web UI files   | web/build                                                  |
-| Reverse proxy  | enabled                                                    |
-| Gateway HTTP   | :8080                                                      |
-| Gateway HTTPS  | :8443                                                      |
-| Database       | sqlite, file "./data/casbin-gateway.db" (connected)        |
-| Sign-in        | built-in user table, Casdoor is not configured             |
-| App dir        | ./data/apps                                                |
-+----------------+-----------------------------------------------------------+
++---------------------------------------------------------------------+
+| Casbin Gateway                                                      |
++---------------------------------------------------------------------+
+| Management UI | http://localhost:17000 (this machine only)          |
+| Settings      | Settings page, seeded from conf/app.conf            |
+| Web UI files  | web/build                                           |
+| Reverse proxy | enabled                                             |
+| Gateway HTTP  | :8080                                               |
+| Gateway HTTPS | :8443                                               |
+| Database      | sqlite, file "./data/casbin-gateway.db" (connected) |
+| Sign-in       | built-in user table, Casdoor is not configured      |
+| Relay auth    | this machine only, no token needed                  |
+| App dir       | ./data/apps                                         |
++---------------------------------------------------------------------+
 ```
 
 If a port is taken, Gateway says which process holds it and stops, rather than starting half-configured.
@@ -221,7 +235,7 @@ cd web && yarn install && yarn build
 go run main.go
 ```
 
-Then open http://localhost:17000 and sign in as `admin` with the password `123`, same as an installed Gateway. The SQLite database is created on first start; there is no database server to install.
+Then open http://localhost:17000, where you are signed in as the local admin, same as an installed Gateway. The SQLite database is created on first start; there is no database server to install.
 
 ### Frontend development
 

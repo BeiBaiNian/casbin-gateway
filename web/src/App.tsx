@@ -18,6 +18,7 @@ import {useTranslation} from "react-i18next";
 import i18next from "i18next";
 
 import * as AccountBackend from "@/backend/AccountBackend";
+import * as MiscBackend from "@/backend/MiscBackend";
 import * as Conf from "@/Conf";
 import * as Setting from "@/Setting";
 import {findGroupOf, selectedKeyOf} from "@/nav";
@@ -65,6 +66,9 @@ export default function App() {
   useTranslation();
   // undefined while the account request is in flight, null when signed out.
   const [account, setAccount] = React.useState<Account | null | undefined>(undefined);
+  // The reverse-proxy pages are hidden until the proxy is on, so this decides
+  // whether the sidebar shows them at all.
+  const [gatewayEnabled, setGatewayEnabled] = React.useState(false);
   const [themeAlgorithm, setThemeAlgorithm] = React.useState<ThemeAlgorithm>(() => {
     const stored = Setting.readThemeAlgorithm();
     // Applied before the first paint so a dark-mode reload never flashes the
@@ -168,6 +172,15 @@ export default function App() {
       .catch(() => getAccount());
   }, [getAccount]);
 
+  React.useEffect(() => {
+    if (!account) {
+      return;
+    }
+    MiscBackend.getGatewayStatus()
+      .then(res => setGatewayEnabled(res.status === "ok" && (res.data?.gatewayEnabled ?? false)))
+      .catch(() => setGatewayEnabled(false));
+  }, [account]);
+
   const signout = () => {
     AccountBackend.signout().then(res => {
       if (res.status === "ok") {
@@ -220,6 +233,7 @@ export default function App() {
           openKeys={openKeys}
           onOpenKeysChange={setOpenKeys}
           isAdmin={Setting.isAdminUser(account)}
+          gatewayEnabled={gatewayEnabled}
         />
 
         <div

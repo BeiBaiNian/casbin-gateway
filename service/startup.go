@@ -35,7 +35,7 @@ type summaryRow struct {
 // been a silent failure for someone starting Gateway for the first time.
 func PrintStartupSummary() {
 	rows := []summaryRow{
-		{"Management UI", fmt.Sprintf("http://localhost:%d", conf.GetHttpPort())},
+		{"Management UI", describeManagementUrl()},
 		{"Settings", describeConf()},
 		{"Web UI files", describeWebBuild()},
 		{"Reverse proxy", describeGateway()},
@@ -43,10 +43,33 @@ func PrintStartupSummary() {
 		{"Gateway HTTPS", describeGatewayPort(conf.GetGatewayHttpsPort())},
 		{"Database", describeDatabase()},
 		{"Sign-in", describeSignin()},
+		{"Relay auth", describeRelayAuth()},
 		{"App dir", describeAppDir()},
 	}
 
 	printSummaryTable("Casbin Gateway", rows)
+}
+
+// describeManagementUrl says both where the UI is and who can reach it, since
+// the bind address decides whether the local admin is signed in automatically.
+func describeManagementUrl() string {
+	url := fmt.Sprintf("http://localhost:%d", conf.GetHttpPort())
+	if conf.IsHttpAddrLoopback() {
+		return url + " (this machine only)"
+	}
+
+	return fmt.Sprintf("%s, bound to %s", url, conf.GetHttpAddr())
+}
+
+// describeRelayAuth explains what an agent has to send to /v1. A request off
+// this machine needs the token, which is also what Gateway writes into the
+// configuration of an agent it switches.
+func describeRelayAuth() string {
+	if conf.IsHttpAddrLoopback() {
+		return "this machine only, no token needed"
+	}
+
+	return "token required off this machine, see Settings"
 }
 
 // describeConf names where the settings were seeded from. They live in the

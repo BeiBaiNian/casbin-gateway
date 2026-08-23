@@ -142,6 +142,16 @@ func generateRandomString(length int) (string, error) {
 	return string(b), nil
 }
 
+// GenerateToken returns a random opaque token, used where a value has to be
+// unguessable but is never a password anyone types.
+func GenerateToken(length int) string {
+	token, err := generateRandomString(length)
+	if err != nil {
+		panic(err)
+	}
+	return token
+}
+
 func GenerateTwoUniqueRandomStrings() (string, string, error) {
 	len1 := 16 + int(big.NewInt(17).Int64())
 	len2 := 16 + int(big.NewInt(17).Int64())

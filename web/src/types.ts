@@ -434,6 +434,7 @@ export interface Setting {
   casdoorApplication: string;
 
   apiKeyEncryptionKey: string;
+  relayToken: string;
 
   httpProxy: string;
   acmeEmail: string;

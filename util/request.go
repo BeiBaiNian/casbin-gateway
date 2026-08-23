@@ -38,3 +38,16 @@ func GetClientIp(r *http.Request) string {
 	}
 	return ip
 }
+
+// IsLoopbackRequest reports whether the request came from this machine, judged
+// by the socket alone. X-Forwarded-For and X-Real-IP are deliberately ignored:
+// they are set by the client and so cannot be trusted to grant anything.
+func IsLoopbackRequest(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
+}

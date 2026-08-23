@@ -13,6 +13,7 @@
 #   BIN_DIR       where the "casbin-gateway" command is placed
 #                 (default: $HOME/.local/bin)
 #   NO_START      set to any value to install without starting Gateway
+#   NO_AUTOSTART  set to any value to skip the login-time startup entry
 
 set -euo pipefail
 
@@ -23,6 +24,7 @@ BASENAME="casbin-gateway-nightly"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/share/casbin-gateway}"
 BIN_DIR="${BIN_DIR:-${HOME}/.local/bin}"
 NO_START="${NO_START:-}"
+NO_AUTOSTART="${NO_AUTOSTART:-}"
 
 info() { printf '%s\n' "$*"; }
 die() { printf 'casbin-gateway: %s\n' "$*" >&2; exit 1; }
@@ -122,17 +124,75 @@ EOF
 	esac
 fi
 
+# ── start at login ────────────────────────────────────────────────────────────
+# A user-level unit on Linux and a LaunchAgent on macOS: neither needs root, and
+# both are undone by deleting one file.
+autostartNote=""
+install_autostart() {
+	if [[ -n "${NO_AUTOSTART}" ]]; then
+		return
+	fi
+
+	if [[ "${osName}" == "darwin" ]]; then
+		plist="${HOME}/Library/LaunchAgents/org.apache.casbin-gateway.plist"
+		mkdir -p "$(dirname "${plist}")" || return
+		cat > "${plist}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>org.apache.casbin-gateway</string>
+	<key>ProgramArguments</key>
+	<array><string>${INSTALL_DIR}/casbin-gateway</string></array>
+	<key>WorkingDirectory</key><string>${INSTALL_DIR}</string>
+	<key>RunAtLoad</key><true/>
+	<key>KeepAlive</key><true/>
+</dict>
+</plist>
+EOF
+		launchctl unload "${plist}" >/dev/null 2>&1 || true
+		autostartNote="${plist}"
+		return
+	fi
+
+	command -v systemctl >/dev/null 2>&1 || return
+	unit="${HOME}/.config/systemd/user/casbin-gateway.service"
+	mkdir -p "$(dirname "${unit}")" || return
+	cat > "${unit}" <<EOF
+[Unit]
+Description=Casbin Gateway
+
+[Service]
+Type=simple
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/casbin-gateway
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+	systemctl --user daemon-reload >/dev/null 2>&1 || true
+	systemctl --user enable casbin-gateway.service >/dev/null 2>&1 || true
+	autostartNote="${unit}"
+}
+
+install_autostart
+
 info ""
 info "Casbin Gateway is installed in ${INSTALL_DIR}"
 info "Its database, logs and temporary files stay in that directory."
-info "Sign in as \"admin\" with the password \"123\", and change it right away."
+info "It serves this machine only, and signs you in there as admin without a password."
+info "Stop it with \"casbin-gateway stop\", check on it with \"casbin-gateway status\"."
+if [[ -n "${autostartNote}" ]]; then
+	info "It will start when you log in; remove ${autostartNote} to undo that."
+fi
 info ""
 
 if [[ -n "${NO_START}" ]]; then
-	info "Start it with: casbin-gateway"
+	info "Start it with: casbin-gateway start"
 	exit 0
 fi
 
-info "Starting Casbin Gateway, press Ctrl-C to stop it..."
+# "start" detaches and returns, so installing does not occupy this terminal.
 cd "${INSTALL_DIR}"
-exec "${INSTALL_DIR}/casbin-gateway"
+exec "${INSTALL_DIR}/casbin-gateway" start

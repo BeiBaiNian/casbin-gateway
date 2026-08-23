@@ -97,18 +97,21 @@ export function AppSidebar({
   openKeys,
   onOpenKeysChange,
   isAdmin,
+  gatewayEnabled,
 }: {
   collapsed: boolean;
   selectedKey: string;
   openKeys: string[];
   onOpenKeysChange: (keys: string[]) => void;
   isAdmin: boolean;
+  gatewayEnabled: boolean;
 }) {
   const toggleGroup = (key: string) => {
     onOpenKeysChange(openKeys.includes(key) ? openKeys.filter(item => item !== key) : [...openKeys, key]);
   };
 
-  const visible = (entry: {adminOnly?: boolean}) => !entry.adminOnly || isAdmin;
+  const visible = (entry: {adminOnly?: boolean; gatewayOnly?: boolean}) =>
+    (!entry.adminOnly || isAdmin) && (!entry.gatewayOnly || gatewayEnabled);
   const groups: NavGroup[] = navGroups
     .filter(visible)
     .map(group => (group.children ? {...group, children: group.children.filter(visible)} : group))

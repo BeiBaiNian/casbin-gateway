@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/apache/casbin-gateway/agenthook"
@@ -35,11 +36,21 @@ import (
 	_ "github.com/beego/beego/session/redis"
 )
 
+// daemonLogPath is where a background Gateway sends the console output nobody
+// is watching.
+const daemonLogPath = "./logs/casbin-gateway.out"
+
 func main() {
 	// Hooks and MCP servers are launched by an agent as a short-lived child
 	// process. They must exit before Gateway initializes its own services.
 	agenthook.ServeIfInvoked()
 	mcpserver.ServeIfInvoked()
+
+	// "start", "stop" and "status" manage a Gateway running in the background,
+	// so that using it does not mean keeping a terminal open.
+	if util.RunCommand(os.Args, conf.GetHttpPort(), daemonLogPath) {
+		return
+	}
 
 	util.InitSelfGuard()
 	object.InitFlag()
@@ -93,6 +104,7 @@ func main() {
 	beego.BConfig.WebConfig.Session.SessionGCMaxLifetime = 3600 * 24 * 365
 
 	port := conf.GetHttpPort()
+	addr := conf.GetHttpAddr()
 
 	// A previous run still holding one of these ports would keep this one from
 	// starting, so it is stopped first. The gateway ports come before the
@@ -117,11 +129,11 @@ func main() {
 	// and before the gateway below binds anything. The gap between probe and
 	// bind is unavoidable but harmless: losing the race just puts us back to
 	// beego's own error.
-	if err := util.CheckPortAvailable(port); err != nil {
+	if err := util.CheckPortAvailableOn(addr, port); err != nil {
 		util.FatalListenError(port, `change "httpport" in conf/app.conf`, err)
 	}
 
 	service.Start()
 
-	beego.Run(fmt.Sprintf(":%v", port))
+	beego.Run(fmt.Sprintf("%s:%v", addr, port))
 }

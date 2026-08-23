@@ -13,32 +13,27 @@
 // limitations under the License.
 
 import * as React from "react";
-import {Link, useNavigate} from "react-router-dom";
+import {useNavigate} from "react-router-dom";
 import {
   ChevronDown,
-  CircleCheck,
-  CircleX,
   ExternalLink,
-  Pencil,
   Plug,
   Plus,
   RefreshCw,
-  Trash2,
   Wallet,
 } from "lucide-react";
 import i18next from "i18next";
 
+import * as AgentBackend from "@/backend/AgentBackend";
 import * as ProviderBackend from "@/backend/ProviderBackend";
 import * as Setting from "@/Setting";
-import {ProviderIcon, ProviderIconField} from "@/components/ProviderIcon";
+import {ProviderIconField} from "@/components/ProviderIcon";
+import {ProviderGridCard, providerIdOf} from "@/components/ProviderGridCard";
 import {ProviderModelsField} from "@/components/ProviderModelsField";
-import {QuotaBadge} from "@/components/ProviderQuota";
 import {ProviderSourcePicker, sourceTitle} from "@/components/ProviderSourcePicker";
 import {ProviderTestField, useProviderTest} from "@/components/ProviderTestField";
-import {ConfirmDialog} from "@/components/shared/confirm-dialog";
-import {DataTable, type Column, type SortOrder} from "@/components/shared/data-table";
+import {type SortOrder} from "@/components/shared/data-table";
 import {Field, FormDialog} from "@/components/shared/form-dialog";
-import {CodeText} from "@/components/shared/misc";
 import {PageContainer, PageHeader} from "@/components/shared/page-header";
 import {PasswordInput} from "@/components/shared/password-input";
 import {SearchSelect, SimpleSelect} from "@/components/shared/simple-select";
@@ -47,25 +42,26 @@ import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
-import {SimpleTooltip} from "@/components/ui/tooltip";
 import {
   authProvider,
   authClient,
   baseUrlPlaceholder,
   baseUrlPresets,
   customSource,
+  providerSlug,
   usesClientAuth,
   type ProviderSource,
 } from "@/lib/providers";
 import {cn} from "@/lib/utils";
-import type {Account, Provider, ProviderHealth, ProviderQuota} from "@/types";
+import type {Account, Agent, Provider, ProviderHealth, ProviderQuota} from "@/types";
 
 function newProvider(owner: string, label = "New Provider"): Provider {
-  const randomName = Setting.getRandomName();
   return {
     owner: owner,
-    name: `provider_${randomName}`,
-    displayName: `${label} - ${randomName}`,
+    // The server appends a number when this is taken, so a second account with
+    // the same vendor keeps a name someone can read.
+    name: providerSlug(label),
+    displayName: label,
     type: "openai",
     status: "enabled",
     models: [],
@@ -127,6 +123,8 @@ export default function ProviderListPage({account}: {account: Account}) {
   const [health, setHealth] = React.useState<ProviderHealth[]>([]);
   const [quotas, setQuotas] = React.useState<ProviderQuota[]>([]);
   const [refreshingQuotas, setRefreshingQuotas] = React.useState(false);
+  const [agents, setAgents] = React.useState<Agent[]>([]);
+  const [binding, setBinding] = React.useState("");
   const test = useProviderTest(form);
 
   const fetchProviders = React.useCallback(
@@ -190,6 +188,22 @@ export default function ProviderListPage({account}: {account: Account}) {
       .then(() => setRefreshingQuotas(false));
   }, []);
 
+  // Which agent a provider answers for is the thing this page is really about,
+  // so the agents are loaded next to them. A non-admin cannot list them, and the
+  // card simply leaves that line out.
+  const loadAgents = React.useCallback(() => {
+    if (!Setting.isAdminUser(account)) {
+      return;
+    }
+    AgentBackend.getAgents()
+      .then(res => setAgents(res.status === "ok" ? (res.data ?? []) : []))
+      .catch(() => setAgents([]));
+  }, [account]);
+
+  React.useEffect(() => {
+    loadAgents();
+  }, [loadAgents]);
+
   React.useEffect(() => {
     ProviderBackend.getProviderQuotas()
       .then(res => setQuotas(res.status === "ok" ? (res.data ?? []) : []))
@@ -217,7 +231,7 @@ export default function ProviderListPage({account}: {account: Account}) {
   // The upstream is probed before the provider is stored, so a key that was
   // pasted wrong is caught here rather than by the first agent that uses it.
   const submitProvider = () => {
-    if (form.name.trim() === "") {
+    if (form.displayName.trim() === "") {
       setNameError(i18next.t("general:Name cannot be empty"));
       return;
     }
@@ -225,9 +239,9 @@ export default function ProviderListPage({account}: {account: Account}) {
   };
 
   const addProvider = () => {
-    const name = form.name.trim();
+    const displayName = form.displayName.trim();
     setAdding(true);
-    ProviderBackend.addProvider({...form, name: name})
+    ProviderBackend.addProvider({...form, displayName: displayName, name: providerSlug(displayName)})
       .then(res => {
         setAdding(false);
         if (res.status === "error") {
@@ -244,6 +258,31 @@ export default function ProviderListPage({account}: {account: Account}) {
       });
   };
 
+  // Switching is one call: the server rewrites the configuration of an agent it
+  // already switched, so nothing else has to be clicked afterwards.
+  const bindAgent = (agent: Agent, provider: Provider) => {
+    setBinding(agent.agentId);
+    AgentBackend.updateAgentRouting(agent.agentId, {
+      provider: providerIdOf(provider),
+      fallbacks: [],
+      mode: agent.mode || "gateway",
+    })
+      .then(res => {
+        if (res.status === "ok") {
+          Setting.showMessage(
+            "success",
+            `${i18next.t("provider:Switched")}: ${agent.name} → ${provider.displayName || provider.name}`,
+          );
+          loadAgents();
+        } else {
+          Setting.showMessage("error", res.msg || i18next.t("agent:Failed to update agent provider"));
+          loadAgents();
+        }
+      })
+      .catch(error => Setting.showMessage("error", `${error}`))
+      .then(() => setBinding(""));
+  };
+
   const deleteProvider = (provider: Provider) => {
     ProviderBackend.deleteProvider(provider)
       .then(res => {
@@ -258,189 +297,6 @@ export default function ProviderListPage({account}: {account: Account}) {
         Setting.showMessage("error", `${i18next.t("provider:Failed to delete")}: ${error}`),
       );
   };
-
-  const columns: Column<Provider>[] = [
-    {
-      title: i18next.t("general:Name"),
-      key: "name",
-      dataIndex: "name",
-      width: "160px",
-      // The server sorts and paginates, so sorting locally would only reorder
-      // the current page.
-      sorter: true,
-      render: (text: string, record) => (
-        <div className="flex min-w-0 items-center gap-2">
-          <ProviderIcon icon={record.icon} baseUrl={record.baseUrl} alt={text} size={18} />
-          <SimpleTooltip title={text}>
-            <Link
-              to={`/providers/${record.owner}/${record.name}`}
-              className="text-primary block truncate font-medium hover:underline"
-            >
-              {text}
-            </Link>
-          </SimpleTooltip>
-        </div>
-      ),
-    },
-    {
-      title: i18next.t("general:Display name"),
-      key: "displayName",
-      dataIndex: "displayName",
-      width: "200px",
-      sorter: true,
-      render: (text: string) => (text ? <span className="block truncate">{text}</span> : "-"),
-    },
-    {
-      title: i18next.t("provider:Notes"),
-      key: "notes",
-      dataIndex: "notes",
-      width: "180px",
-      ellipsis: true,
-      render: (text: string) =>
-        text ? (
-          <SimpleTooltip title={text}>
-            <span className="text-muted-foreground block truncate">{text}</span>
-          </SimpleTooltip>
-        ) : (
-          "-"
-        ),
-    },
-    {
-      title: i18next.t("provider:Type"),
-      key: "type",
-      dataIndex: "type",
-      width: "110px",
-      render: (text: string) => <Badge variant={text === "openai" ? "success" : "info"}>{text}</Badge>,
-    },
-    {
-      title: i18next.t("provider:Base URL"),
-      key: "baseUrl",
-      dataIndex: "baseUrl",
-      width: "220px",
-      ellipsis: true,
-      render: (text: string) =>
-        text ? (
-          <SimpleTooltip title={text}>
-            <span className="inline-flex max-w-full">
-              <CodeText>{text}</CodeText>
-            </span>
-          </SimpleTooltip>
-        ) : (
-          "-"
-        ),
-    },
-    {
-      title: i18next.t("provider:Models"),
-      key: "models",
-      dataIndex: "models",
-      width: "220px",
-      render: (models: string[], record) =>
-        !models || models.length === 0 ? (
-          usesClientAuth(record) ? <Badge variant="muted">{i18next.t("provider:Any model")}</Badge> : "-"
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {models.map(model => (
-              <Badge key={model} variant="muted">
-                {model}
-              </Badge>
-            ))}
-          </div>
-        ),
-    },
-    {
-      title: i18next.t("provider:Priority"),
-      key: "priority",
-      dataIndex: "priority",
-      width: "100px",
-      sorter: true,
-    },
-    {
-      title: i18next.t("provider:Status"),
-      key: "status",
-      dataIndex: "status",
-      width: "120px",
-      render: (text: string) =>
-        text === "enabled" ? (
-          <Badge variant="success">
-            <CircleCheck />
-            {i18next.t("provider:Enabled")}
-          </Badge>
-        ) : (
-          <Badge variant="muted">
-            <CircleX />
-            {i18next.t("provider:Disabled")}
-          </Badge>
-        ),
-    },
-    {
-      title: i18next.t("provider:Balance"),
-      key: "quota",
-      width: "140px",
-      render: (_text, record) => (
-        <QuotaBadge quota={quotas.find(item => item.provider === `${record.owner}/${record.name}`)} />
-      ),
-    },
-    {
-      title: i18next.t("provider:Health"),
-      key: "health",
-      width: "150px",
-      render: (_text, record) => {
-        const item = health.find(entry => entry.provider === `${record.owner}/${record.name}`);
-        if (!item) {
-          return <span className="text-muted-foreground">{i18next.t("provider:Not used yet")}</span>;
-        }
-        // A provider that is out of its cooldown but whose last attempts failed
-        // is back in rotation without having proven anything yet.
-        const badge = !item.healthy ? (
-          <Badge variant="warning">
-            <CircleX />
-            {i18next.t("provider:Cooling down")}
-          </Badge>
-        ) : item.consecutive > 0 ? (
-          <Badge variant="muted">{i18next.t("provider:Recovering")}</Badge>
-        ) : (
-          <Badge variant="success">
-            <CircleCheck />
-            {i18next.t("provider:Healthy")}
-          </Badge>
-        );
-        return (
-          <SimpleTooltip
-            title={
-              item.healthy
-                ? `${item.successes} / ${item.successes + item.failures}`
-                : `${item.lastError} · ${i18next.t("provider:Retried at")} ${item.retryTime}`
-            }
-          >
-            {badge}
-          </SimpleTooltip>
-        );
-      },
-    },
-    {
-      title: i18next.t("general:Action"),
-      key: "action",
-      width: "190px",
-      render: (_text, record) => (
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => navigate(`/providers/${record.owner}/${record.name}`)}>
-            <Pencil />
-            {i18next.t("general:Edit")}
-          </Button>
-          <ConfirmDialog
-            title={i18next.t("general:Sure to delete {name} ?").replace("{name}", record.name)}
-            confirmText={i18next.t("general:Delete")}
-            onConfirm={() => deleteProvider(record)}
-          >
-            <Button size="sm" variant="outline" className="text-destructive">
-              <Trash2 />
-              {i18next.t("general:Delete")}
-            </Button>
-          </ConfirmDialog>
-        </div>
-      ),
-    },
-  ];
 
   return (
     <PageContainer>
@@ -469,30 +325,13 @@ export default function ProviderListPage({account}: {account: Account}) {
           </CardContent>
         </Card>
       ) : (
-        <DataTable
-          columns={columns}
-          dataSource={data}
-          // An admin sees providers across owners, where names may collide.
-          rowKey={record => `${record.owner}/${record.name}`}
-          loading={loading}
-          onSort={(field, order) => fetchProviders(1, pageSize, {field: field, order: order})}
-          serverPagination={{
-            page: page,
-            pageSize: pageSize,
-            total: total,
-            onChange: (nextPage, nextPageSize) => fetchProviders(nextPage, nextPageSize),
-          }}
-          title={i18next.t("provider:Providers")}
-          description={`${total} ${i18next.t("provider:Providers")}`}
-          emptyIcon={Plug}
-          toolbar={
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadQuotas(true)}
-                loading={refreshingQuotas}
-              >
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-muted-foreground text-sm">
+              {`${total} ${i18next.t("provider:Providers")}`}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => loadQuotas(true)} loading={refreshingQuotas}>
                 <Wallet />
                 {i18next.t("provider:Refresh balances")}
               </Button>
@@ -500,9 +339,46 @@ export default function ProviderListPage({account}: {account: Account}) {
                 <RefreshCw />
                 {i18next.t("general:Refresh")}
               </Button>
-            </>
-          }
-        />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {data.map(provider => (
+              <ProviderGridCard
+                key={providerIdOf(provider)}
+                provider={provider}
+                agents={agents}
+                health={health.find(item => item.provider === providerIdOf(provider))}
+                quota={quotas.find(item => item.provider === providerIdOf(provider))}
+                busy={binding !== ""}
+                onEdit={() => navigate(`/providers/${provider.owner}/${provider.name}`)}
+                onDelete={() => deleteProvider(provider)}
+                onBind={agent => bindAgent(agent, provider)}
+              />
+            ))}
+          </div>
+
+          {total > pageSize ? (
+            <div className="flex justify-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => fetchProviders(page - 1)}
+              >
+                {i18next.t("general:Previous")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page * pageSize >= total}
+                onClick={() => fetchProviders(page + 1)}
+              >
+                {i18next.t("general:Next")}
+              </Button>
+            </div>
+          ) : null}
+        </div>
       )}
 
       <FormDialog
@@ -539,21 +415,26 @@ export default function ProviderListPage({account}: {account: Account}) {
                 </Button>
               </div>
             </Field>
-            <Field label={i18next.t("general:Name")} htmlFor="provider-name" required error={nameError}>
-              <Input
-                id="provider-name"
-                value={form.name}
-                onChange={event => {
-                  setFormField("name", event.target.value);
-                  setNameError("");
-                }}
-              />
-            </Field>
-            <Field label={i18next.t("general:Display name")} htmlFor="provider-display-name">
+            <Field
+              label={i18next.t("general:Name")}
+              htmlFor="provider-display-name"
+              required
+              error={nameError}
+              hint={i18next.t("provider:Name hint")}
+            >
               <Input
                 id="provider-display-name"
                 value={form.displayName}
-                onChange={event => setFormField("displayName", event.target.value)}
+                onChange={event => {
+                  // One field, because two names to invent is one too many. The
+                  // identifier follows what was typed until it is edited by hand.
+                  setForm(prev => ({
+                    ...prev,
+                    displayName: event.target.value,
+                    name: providerSlug(event.target.value),
+                  }));
+                  setNameError("");
+                }}
               />
             </Field>
             {usesClientAuth(form) ? null : (

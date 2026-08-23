@@ -34,14 +34,25 @@ const portLookupTimeout = 2 * time.Second
 // keep the listener and serve on it, so a port that was reported free cannot be
 // taken by someone else in between the check and the bind.
 func ListenTcp(port int) (net.Listener, error) {
-	return net.Listen("tcp", fmt.Sprintf(":%d", port))
+	return ListenTcpAddr("", port)
+}
+
+// ListenTcpAddr binds one interface rather than all of them. An empty addr
+// means every interface, which is what the reverse proxy wants.
+func ListenTcpAddr(addr string, port int) (net.Listener, error) {
+	return net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
 }
 
 // CheckPortAvailable binds the port and immediately releases it. Use it only
 // where the port has to be handed to a server that insists on binding itself,
 // such as beego.Run().
 func CheckPortAvailable(port int) error {
-	listener, err := ListenTcp(port)
+	return CheckPortAvailableOn("", port)
+}
+
+// CheckPortAvailableOn is CheckPortAvailable for one interface.
+func CheckPortAvailableOn(addr string, port int) error {
+	listener, err := ListenTcpAddr(addr, port)
 	if err != nil {
 		return err
 	}

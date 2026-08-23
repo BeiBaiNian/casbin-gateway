@@ -169,7 +169,7 @@ export default function SettingPage({account}: {account: Account}) {
         {numberField("agentMonitorPollSeconds", i18next.t("setting:Agent poll seconds"), undefined, 1)}
       </Section>
 
-      <Section columns={2} title={i18next.t("setting:Sign-in")} description={i18next.t("setting:Sign-in description")}>
+      <Section columns={2} collapsible title={i18next.t("setting:Sign-in")} description={i18next.t("setting:Sign-in description")}>
         {textField("casdoorEndpoint", i18next.t("setting:Casdoor endpoint"))}
         {textField("clientId", i18next.t("setting:Client ID"))}
         {secretField("clientSecret", i18next.t("setting:Client secret"))}
@@ -179,9 +179,10 @@ export default function SettingPage({account}: {account: Account}) {
 
       <Section columns={2} title={i18next.t("setting:Security")}>
         {secretField("apiKeyEncryptionKey", i18next.t("setting:API key encryption key"), i18next.t("setting:API key encryption key hint"))}
+        {textField("relayToken", i18next.t("setting:Relay token"), i18next.t("setting:Relay token hint"))}
       </Section>
 
-      <Section columns={2} title={i18next.t("setting:Network and certificates")}>
+      <Section columns={2} collapsible title={i18next.t("setting:Network and certificates")}>
         {textField("httpProxy", i18next.t("setting:Outbound SOCKS5 proxy"), i18next.t("setting:Outbound SOCKS5 proxy hint"))}
         {textField("acmeEmail", i18next.t("setting:ACME email"), i18next.t("setting:ACME email hint"))}
         <Field label={i18next.t("setting:ACME private key")} htmlFor="setting-acmePrivateKey" className="md:col-span-2">
@@ -196,6 +197,7 @@ export default function SettingPage({account}: {account: Account}) {
 
       <Section
         columns={2}
+        collapsible
         title={i18next.t("setting:Application deployment")}
         description={i18next.t("setting:Application deployment description")}
       >

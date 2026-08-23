@@ -55,6 +55,9 @@ type Setting struct {
 	CasdoorApplication  string `xorm:"varchar(100)" json:"casdoorApplication"`
 
 	ApiKeyEncryptionKey string `xorm:"varchar(200)" json:"apiKeyEncryptionKey"`
+	// RelayToken is what an agent sends to the local relay. It is generated on
+	// first start; clearing it on the Settings page issues a new one.
+	RelayToken string `xorm:"varchar(200)" json:"relayToken"`
 
 	HttpProxy      string `xorm:"varchar(200)" json:"httpProxy"`
 	AcmeEmail      string `xorm:"varchar(200)" json:"acmeEmail"`
@@ -104,6 +107,7 @@ func SyncSettingToConf(setting *Setting) {
 		"casdoorApplication":  setting.CasdoorApplication,
 
 		"apiKeyEncryptionKey": setting.ApiKeyEncryptionKey,
+		"relayToken":          setting.RelayToken,
 
 		"httpProxy":      setting.HttpProxy,
 		"acmeEmail":      setting.AcmeEmail,
@@ -122,6 +126,14 @@ func SyncSettingToConf(setting *Setting) {
 		"dbUser":             setting.DbUser,
 		"dbPass":             setting.DbPass,
 	})
+}
+
+// relayTokenLength is long enough that the token cannot be guessed and short
+// enough to stay readable in a shell snippet.
+const relayTokenLength = 32
+
+func newRelayToken() string {
+	return "cg-" + util.GenerateToken(relayTokenLength)
 }
 
 func getSetting(owner string, name string) (*Setting, error) {
@@ -155,6 +167,11 @@ func UpdateSetting(id string, setting *Setting) (bool, error) {
 	}
 
 	setting.Owner, setting.Name = owner, name
+	// An empty token would leave the relay open, so clearing the field is taken
+	// as "issue a new one" rather than "turn the check off".
+	if setting.RelayToken == "" {
+		setting.RelayToken = newRelayToken()
+	}
 	_, err := ormer.Engine.ID(core.PK{owner, name}).AllCols().Update(setting)
 	if err != nil {
 		return false, err
@@ -177,6 +194,15 @@ func InitBuiltInSetting() {
 	if setting == nil {
 		setting = newSettingFromConf()
 		if _, err = ormer.Engine.Insert(setting); err != nil {
+			panic(err)
+		}
+	}
+
+	// An installation that predates the relay token has an empty column, so the
+	// token is issued here rather than only when the row is created.
+	if setting.RelayToken == "" {
+		setting.RelayToken = newRelayToken()
+		if _, err = ormer.Engine.ID(core.PK{setting.Owner, setting.Name}).Cols("relay_token").Update(setting); err != nil {
 			panic(err)
 		}
 	}
@@ -216,6 +242,7 @@ func newSettingFromConf() *Setting {
 		CasdoorApplication:  conf.GetConfigStringUnquoted("casdoorApplication"),
 
 		ApiKeyEncryptionKey: conf.GetConfigStringUnquoted("apiKeyEncryptionKey"),
+		RelayToken:          newRelayToken(),
 
 		HttpProxy:      conf.GetConfigStringUnquoted("httpProxy"),
 		AcmeEmail:      conf.GetConfigStringUnquoted("acmeEmail"),

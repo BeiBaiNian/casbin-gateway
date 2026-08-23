@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/object"
 	"github.com/apache/casbin-gateway/proxy"
 	"github.com/apache/casbin-gateway/util"
@@ -231,6 +232,12 @@ func (c *ApiController) proxyByAgent(target proxyTarget) {
 }
 
 func (c *ApiController) readProxyRoute(target proxyTarget) (*proxyRoute, bool) {
+	if !c.allowRelay() {
+		c.writeProxyError(target.protocol, http.StatusUnauthorized, "authentication_error",
+			"this relay is reachable from the network, so it needs the token shown next to the provider in Casbin Gateway")
+		return nil, false
+	}
+
 	rawBody := c.Ctx.Input.RequestBody
 
 	var fields routingFields
@@ -398,6 +405,32 @@ func reportProviderStatus(provider *object.Provider, statusCode int) {
 	default:
 		object.ReportProviderSuccess(provider.GetId())
 	}
+}
+
+// allowRelay decides whether a request may use the providers stored here. A
+// request from this machine always may — that is the whole point of a local
+// gateway, and a client-auth provider carries the caller's own vendor
+// credential in the same header a token would use. Anything off-box has to
+// present the relay token instead.
+func (c *ApiController) allowRelay() bool {
+	if util.IsLoopbackRequest(c.Ctx.Request) {
+		return true
+	}
+
+	token := conf.GetRelayToken()
+	return token != "" && c.relayCredential() == token
+}
+
+// relayCredential is the token the client sent, in either of the two headers
+// the OpenAI and Anthropic clients use.
+func (c *ApiController) relayCredential() string {
+	header := c.Ctx.Request.Header
+	if key := strings.TrimSpace(header.Get("X-Api-Key")); key != "" {
+		return key
+	}
+
+	authorization := strings.TrimSpace(header.Get("Authorization"))
+	return strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
 }
 
 // clientAuthHeaders are forwarded verbatim by a provider that authenticates with

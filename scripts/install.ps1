@@ -100,17 +100,40 @@ if ($UserPath -notlike "*$BinDir*") {
     Write-Info "Added $BinDir to your PATH, which takes effect in your next terminal"
 }
 
+# -- start with Windows -------------------------------------------------------
+# A shortcut in the Startup folder rather than a service: it needs no elevation,
+# shows up in Task Manager's Startup tab, and is undone by deleting the file.
+$StartupDir = [System.Environment]::GetFolderPath('Startup')
+$StartupLink = Join-Path $StartupDir 'Casbin Gateway.lnk'
+if (-not $env:NO_AUTOSTART) {
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($StartupLink)
+        $shortcut.TargetPath = Join-Path $InstallDir 'casbin-gateway.exe'
+        $shortcut.Arguments = 'start'
+        $shortcut.WorkingDirectory = $InstallDir
+        $shortcut.Description = 'Casbin Gateway'
+        $shortcut.Save()
+        Write-Info 'Casbin Gateway will start with Windows.'
+    }
+    catch {
+        Write-Info "Could not add the startup shortcut: $_"
+    }
+}
+
 Write-Info ''
 Write-Info "Casbin Gateway is installed in $InstallDir"
 Write-Info 'Its database, logs and temporary files stay in that directory.'
-Write-Info 'Sign in as "admin" with the password "123", and change it right away.'
+Write-Info 'It serves this machine only, and signs you in there as admin without a password.'
+Write-Info 'Stop it with "casbin-gateway stop", check on it with "casbin-gateway status".'
+Write-Info "Remove the startup entry by deleting $StartupLink"
 Write-Info ''
 
 if ($env:NO_START) {
-    Write-Info 'Start it with: casbin-gateway'
+    Write-Info 'Start it with: casbin-gateway start'
     return
 }
 
-Write-Info 'Starting Casbin Gateway, press Ctrl-C to stop it...'
+# "start" detaches and returns, so installing does not occupy this terminal.
 Set-Location $InstallDir
-& (Join-Path $InstallDir 'casbin-gateway.exe')
+& (Join-Path $InstallDir 'casbin-gateway.exe') start

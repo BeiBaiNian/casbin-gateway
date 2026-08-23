@@ -53,9 +53,9 @@ Windows，在 PowerShell 中：
 irm https://raw.githubusercontent.com/apache/casbin-gateway/master/scripts/install.ps1 | iex
 ```
 
-两者都会下载适配本机的构建产物，解压到 `~/.local/share/casbin-gateway`（Windows 上是 `%LOCALAPPDATA%\casbin-gateway`），把 `casbin-gateway` 命令加入 PATH，然后启动它。接着打开：
+两者都会下载适配本机的构建产物，解压到 `~/.local/share/casbin-gateway`（Windows 上是 `%LOCALAPPDATA%\casbin-gateway`），把 `casbin-gateway` 命令加入 PATH，在后台启动它，并设置成开机（登录）自启。安装用的那个终端窗口立刻就还给你。接着打开：
 
-**http://localhost:17000** —— 用 `admin` 和密码 `123` 登录，然后在 **My Account** 里改掉它。
+**http://localhost:17000** —— 不用登录：Gateway 只服务本机，本机访问会直接以管理员身份进入。
 
 安装到此为止。Gateway 把数据存在自己目录下的一个 SQLite 文件里，登录也走它自己的用户表。
 
@@ -76,15 +76,15 @@ Agent 是通过读取 **Gateway 所在机器**的用户账户、home 目录和�
 这是 **LLM Records** 的数据来源，也是让 Gateway 而不是 Agent 持有厂商 Key 的方式。
 
 1. **Providers** → **Add**：选类型（OpenAI 兼容或 Anthropic 兼容），填厂商的 base URL 和 API Key，并列出它提供的模型。
-2. **Agents** → 打开一个 Agent → 选中该 Provider。
-3. 复制页面显示的环境变量片段，在设置了这些变量的 shell 里启动 Agent：
+2. **Agents** → 打开一个 Agent → 选中该 Provider。如果这个 Agent 的配置格式 Gateway 认识，点 **Write configuration** 就会写进它自己的配置文件 —— **Preview** 会先原样列出将要写入的内容，**Restore** 可以还原。写过一次之后再换 Provider，文件会立即被改写，所以之后切换只需要点一下，两个页面上都可以。
+3. 其他 Agent 则复制页面显示的环境变量片段，在设置了这些变量的 shell 里启动：
 
 ```bash
 export ANTHROPIC_BASE_URL="http://localhost:17000/v1/agents/claude-code"
-export ANTHROPIC_AUTH_TOKEN="casbin-gateway"
+export ANTHROPIC_AUTH_TOKEN="cg-..."
 ```
 
-这个 token 只是占位符 —— Agent 没有它就拒绝启动，而 Gateway 会用 Provider 自己的 Key 去认证上游。
+这个 token 是 Gateway 自己的中继令牌，不是厂商的 Key：Agent 没有它就拒绝启动，而 Gateway 会用 Provider 自己的 Key 去认证上游。页面上的片段里已经填好了真实的值。
 
 ### 没有 API Key：沿用 Agent 已有的登录
 
@@ -96,11 +96,21 @@ Codex 是例外：它的 ChatGPT 登录走的是另一套 API，不是 Gateway �
 
 ### 停止、升级、卸载
 
-- **停止**：`Ctrl-C`。**再次启动**：在任意目录执行 `casbin-gateway` —— 这个命令是一个包装脚本，总是在安装目录（数据所在的地方）里启动 Gateway。
+- **停止**：`casbin-gateway stop`。**再次启动**：`casbin-gateway start`。**查看状态**：`casbin-gateway status`。三条命令在任意目录都能用 —— 这个命令是一个包装脚本，总是在安装目录（数据所在的地方）里启动 Gateway。
+- **前台运行**（想盯着它跑的时候）：`casbin-gateway`，用 `Ctrl-C` 停止。后台运行时控制台输出写在 `logs/casbin-gateway.out`。
 - **升级**：再跑一遍安装命令。数据库和设置不受影响。
-- **卸载**：删除 `~/.local/share/casbin-gateway` 和 `~/.local/bin/casbin-gateway`（Windows 上是 `%LOCALAPPDATA%\casbin-gateway` 及其 PATH 条目）。
+- **卸载**：删除 `~/.local/share/casbin-gateway` 和 `~/.local/bin/casbin-gateway`（Windows 上是 `%LOCALAPPDATA%\casbin-gateway` 及其 PATH 条目），以及安装脚本结束时告诉你的那个自启动条目。
 
-设置 `INSTALL_DIR` 可以装到别的位置，`NO_START=1` 则只安装不启动。
+设置 `INSTALL_DIR` 可以装到别的位置，`NO_START=1` 只安装不启动，`NO_AUTOSTART=1` 则不设置登录自启。
+
+### 让其他机器也能访问
+
+Gateway 默认只监听 `127.0.0.1`，因为有两样东西对能连上这个端口的人是完全敞开的：Web UI 会直接把本机管理员登进去，`/v1` 会用这里存的 API Key 去转发。这两点正是本地工具该有的样子，但都不该暴露给网络。
+
+如果确实要让其他机器访问，在 `conf/app.conf` 里把 `httpaddr` 设成 `0.0.0.0`，然后：
+
+1. **改掉管理员密码**（**My Account** 里）。自动登录在遇到第一个非本机请求时就停止，从那以后密码是唯一的门槛。
+2. **每个发往 `/v1` 的请求都要带上中继令牌**。Gateway 在首次启动时生成它，显示在 **Settings → Security** 里；Providers 和 Agents 页面上的环境变量片段已经填好了它，Gateway 为 Agent 写配置时写进去的也是它。来自本机的请求永远不需要它。
 
 **这些是 nightly 构建**，每次推送都从 `master` 重新构建，并作为 [`nightly`](https://github.com/apache/casbin-gateway/releases/tag/nightly) 预发布版本发布。它们的用途是让人不装 Go 和 Node 工具链就能试用 Gateway；其他场景都应该从源码发布版构建。
 
@@ -140,6 +150,7 @@ podman compose up -d
 | 配置项 | 默认值 | 作用 |
 | --- | --- | --- |
 | `httpport` | `17000` | Web UI 和 REST API 的端口 |
+| `httpaddr` | `127.0.0.1` | Web UI 监听的网卡 —— 见[让其他机器也能访问](#让其他机器也能访问) |
 | `driverName` / `dataSourceName` | `sqlite` / `./data/casbin-gateway.db` | 数据存放位置 |
 | `gatewayEnabled` | `false` | 打开反向代理 WAF |
 | `gatewayHttpPort` / `gatewayHttpsPort` | `80` / `443` | 代理监听的端口 |
@@ -150,19 +161,20 @@ podman compose up -d
 Gateway 启动时会打印它实际在做什么，所以可以直接看结果而不用去查配置文件：
 
 ```
-+----------------------------------------------------------------------------+
-| Casbin Gateway                                                              |
-+----------------+-----------------------------------------------------------+
-| Management UI  | http://localhost:17000                                     |
-| Settings       | Settings page, seeded from conf/app.conf                   |
-| Web UI files   | web/build                                                  |
-| Reverse proxy  | enabled                                                    |
-| Gateway HTTP   | :8080                                                      |
-| Gateway HTTPS  | :8443                                                      |
-| Database       | sqlite, file "./data/casbin-gateway.db" (connected)        |
-| Sign-in        | built-in user table, Casdoor is not configured             |
-| App dir        | ./data/apps                                                |
-+----------------+-----------------------------------------------------------+
++---------------------------------------------------------------------+
+| Casbin Gateway                                                      |
++---------------------------------------------------------------------+
+| Management UI | http://localhost:17000 (this machine only)          |
+| Settings      | Settings page, seeded from conf/app.conf            |
+| Web UI files  | web/build                                           |
+| Reverse proxy | enabled                                             |
+| Gateway HTTP  | :8080                                               |
+| Gateway HTTPS | :8443                                               |
+| Database      | sqlite, file "./data/casbin-gateway.db" (connected) |
+| Sign-in       | built-in user table, Casdoor is not configured      |
+| Relay auth    | this machine only, no token needed                  |
+| App dir       | ./data/apps                                         |
++---------------------------------------------------------------------+
 ```
 
 如果端口被占用，Gateway 会指出是哪个进程占着它并停止启动，而不是半配置地跑起来。
@@ -221,7 +233,7 @@ cd web && yarn install && yarn build
 go run main.go
 ```
 
-然后打开 http://localhost:17000，用 `admin` 和密码 `123` 登录，和安装版一样。SQLite 数据库在首次启动时创建，不需要安装数据库服务。
+然后打开 http://localhost:17000，本机访问会直接以管理员身份进入，和安装版一样。SQLite 数据库在首次启动时创建，不需要安装数据库服务。
 
 ### 前端开发
 

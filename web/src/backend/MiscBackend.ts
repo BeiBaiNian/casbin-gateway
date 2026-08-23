@@ -27,6 +27,11 @@ export function getGatewayStatus() {
   return request<GatewayStatus>("/api/get-gateway-status");
 }
 
+/** The token an agent has to send to the relay, and whether it is needed here. */
+export function getRelayToken() {
+  return request<{relayToken: string; localOnly: boolean}>("/api/get-relay-token");
+}
+
 export function getMetric(type: string, rangeType: string, count: number, top?: number) {
   return request<MetricPoint[]>(
     `/api/get-metrics${query({type: type, rangeType: rangeType, count: count, top: top})}`,

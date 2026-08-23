@@ -25,10 +25,6 @@ import (
 	"github.com/apache/casbin-gateway/object"
 )
 
-// gatewayToken is what an agent sends to the local proxy. The proxy authenticates
-// upstream with the provider's own key, so this value is never used for anything.
-const gatewayToken = "casbin-gateway"
-
 // PlanAgentProvider renders what a switch would write, without touching a file.
 func (c *ApiController) PlanAgentProvider() {
 	if c.RequireAdmin() {
@@ -140,7 +136,7 @@ func agentEndpoint(agentId string) (agentprovider.Endpoint, error) {
 	// sending its own credentials: a placeholder token written into the agent's
 	// configuration would replace the sign-in it already has.
 	if !object.UsesClientAuth(provider) {
-		endpoint.ApiKey = gatewayToken
+		endpoint.ApiKey = conf.GetRelayToken()
 	}
 	return endpoint, nil
 }
