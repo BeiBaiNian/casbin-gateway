@@ -83,44 +83,247 @@ export function localShell(): Shell {
   return navigator.userAgent.includes("Windows") ? "PowerShell" : "bash";
 }
 
+/**
+ * Who a vendor is, which is the thing worth knowing when picking one: the maker
+ * of the models, a platform that hosts models it did not make, or a site that
+ * resells many vendors behind one key.
+ */
+export const vendorCategories = ["official", "platform", "aggregator"] as const;
+export type VendorCategory = (typeof vendorCategories)[number];
+
 /** A vendor the provider forms can fill themselves in from. */
 export interface ProviderPreset {
   label: string;
   type: string;
   baseUrl: string;
   models: string[];
+  category: VendorCategory;
+  /** Where the vendor hands out API keys, so the form can point at it. */
+  website: string;
 }
 
+/**
+ * Every base URL below was checked against the live API rather than assumed.
+ * Models are listed only where a short list is the whole catalogue: a platform
+ * serving hundreds is left empty for the Fetch models button, which asks the
+ * upstream itself and so never goes stale.
+ */
 export const providerPresets: ProviderPreset[] = [
   {
     label: "OpenAI",
     type: "openai",
     baseUrl: "https://api.openai.com/v1",
     models: ["gpt-5.5", "gpt-5", "gpt-5-mini", "o3", "o4-mini"],
+    category: "official",
+    website: "https://platform.openai.com/api-keys",
   },
   {
     label: "Anthropic",
     type: "anthropic",
     baseUrl: "https://api.anthropic.com",
     models: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
+    category: "official",
+    website: "https://console.anthropic.com/settings/keys",
+  },
+  {
+    label: "Google Gemini",
+    type: "custom",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    models: [],
+    category: "official",
+    website: "https://aistudio.google.com/apikey",
+  },
+  {
+    label: "xAI",
+    type: "custom",
+    baseUrl: "https://api.x.ai/v1",
+    models: [],
+    category: "official",
+    website: "https://console.x.ai",
+  },
+  {
+    label: "Mistral",
+    type: "custom",
+    baseUrl: "https://api.mistral.ai/v1",
+    models: [],
+    category: "official",
+    website: "https://console.mistral.ai/api-keys",
+  },
+  {
+    label: "Cohere",
+    type: "custom",
+    baseUrl: "https://api.cohere.ai/compatibility/v1",
+    models: [],
+    category: "official",
+    website: "https://dashboard.cohere.com/api-keys",
   },
   {
     label: "DeepSeek",
     type: "custom",
     baseUrl: "https://api.deepseek.com/v1",
     models: ["deepseek-chat", "deepseek-reasoner"],
+    category: "official",
+    website: "https://platform.deepseek.com/api_keys",
   },
   {
     label: "Moonshot",
     type: "custom",
     baseUrl: "https://api.moonshot.cn/v1",
-    models: ["moonshot-v1-8k", "moonshot-v1-32k"],
+    models: [],
+    category: "official",
+    website: "https://platform.moonshot.cn/console/api-keys",
+  },
+  {
+    label: "Zhipu GLM",
+    type: "custom",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    models: [],
+    category: "official",
+    website: "https://open.bigmodel.cn/usercenter/apikeys",
   },
   {
     label: "Qwen",
     type: "custom",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     models: ["qwen-max", "qwen-plus"],
+    category: "official",
+    website: "https://bailian.console.aliyun.com",
+  },
+  {
+    label: "MiniMax",
+    type: "custom",
+    baseUrl: "https://api.minimaxi.com/v1",
+    models: [],
+    category: "official",
+    website: "https://platform.minimaxi.com",
+  },
+  {
+    label: "Baichuan",
+    type: "custom",
+    baseUrl: "https://api.baichuan-ai.com/v1",
+    models: [],
+    category: "official",
+    website: "https://platform.baichuan-ai.com/console/apikey",
+  },
+  {
+    label: "StepFun",
+    type: "custom",
+    baseUrl: "https://api.stepfun.com/v1",
+    models: [],
+    category: "official",
+    website: "https://platform.stepfun.com/interface-key",
+  },
+  {
+    label: "Volcengine Ark",
+    type: "custom",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    models: [],
+    category: "official",
+    website: "https://console.volcengine.com/ark",
+  },
+  {
+    label: "Tencent Hunyuan",
+    type: "custom",
+    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
+    models: [],
+    category: "official",
+    website: "https://console.cloud.tencent.com/hunyuan/api-key",
+  },
+  {
+    label: "01.AI",
+    type: "custom",
+    baseUrl: "https://api.lingyiwanwu.com/v1",
+    models: [],
+    category: "official",
+    website: "https://platform.lingyiwanwu.com/apikeys",
+  },
+  {
+    label: "SiliconFlow",
+    type: "custom",
+    baseUrl: "https://api.siliconflow.cn/v1",
+    models: [],
+    category: "platform",
+    website: "https://cloud.siliconflow.cn/account/ak",
+  },
+  {
+    label: "Groq",
+    type: "custom",
+    baseUrl: "https://api.groq.com/openai/v1",
+    models: [],
+    category: "platform",
+    website: "https://console.groq.com/keys",
+  },
+  {
+    label: "Together AI",
+    type: "custom",
+    baseUrl: "https://api.together.xyz/v1",
+    models: [],
+    category: "platform",
+    website: "https://api.together.xyz/settings/api-keys",
+  },
+  {
+    label: "Fireworks AI",
+    type: "custom",
+    baseUrl: "https://api.fireworks.ai/inference/v1",
+    models: [],
+    category: "platform",
+    website: "https://fireworks.ai",
+  },
+  {
+    label: "Novita AI",
+    type: "custom",
+    baseUrl: "https://api.novita.ai/v3/openai",
+    models: [],
+    category: "platform",
+    website: "https://novita.ai/settings/key-management",
+  },
+  {
+    label: "DeepInfra",
+    type: "custom",
+    baseUrl: "https://api.deepinfra.com/v1/openai",
+    models: [],
+    category: "platform",
+    website: "https://deepinfra.com/dash/api_keys",
+  },
+  {
+    label: "ModelScope",
+    type: "custom",
+    baseUrl: "https://api-inference.modelscope.cn/v1",
+    models: [],
+    category: "platform",
+    website: "https://modelscope.cn/my/myaccesstoken",
+  },
+  {
+    label: "PPIO",
+    type: "custom",
+    baseUrl: "https://api.ppinfra.com/v3/openai",
+    models: [],
+    category: "platform",
+    website: "https://ppinfra.com/settings/key-management",
+  },
+  {
+    label: "OpenRouter",
+    type: "custom",
+    baseUrl: "https://openrouter.ai/api/v1",
+    models: [],
+    category: "aggregator",
+    website: "https://openrouter.ai/keys",
+  },
+  {
+    label: "AiHubMix",
+    type: "custom",
+    baseUrl: "https://aihubmix.com/v1",
+    models: [],
+    category: "aggregator",
+    website: "https://aihubmix.com/token",
+  },
+  {
+    label: "302.AI",
+    type: "custom",
+    baseUrl: "https://api.302.ai/v1",
+    models: [],
+    category: "aggregator",
+    website: "https://dash.302.ai",
   },
 ];
 
@@ -130,6 +333,10 @@ export interface ProviderSource {
   key: string;
   /** The vendor's own name, empty when the picker titles the card itself. */
   label: string;
+  /** Absent on the two cards that are not a vendor, which lead the picker. */
+  category?: VendorCategory;
+  /** Where the vendor hands out API keys. */
+  website?: string;
   /** What the form starts from once the card is picked. */
   provider: Partial<Provider>;
 }
@@ -141,7 +348,8 @@ export const customSource = "custom";
  * The sign-in comes first: it is the only source that needs nothing filled in,
  * and the one people with a subscription and no API key are here for. Anthropic
  * is the vendor of the clients that mode works with; Codex signs in against an
- * API Gateway does not relay.
+ * API Gateway does not relay. Custom follows it, because the two of them are
+ * the answers for a vendor that is not on the list at all.
  */
 export const providerSources: ProviderSource[] = [
   {
@@ -155,9 +363,16 @@ export const providerSources: ProviderSource[] = [
       authMode: authClient,
     },
   },
+  {
+    key: customSource,
+    label: "",
+    provider: {type: "custom", baseUrl: "", models: [], authMode: authProvider},
+  },
   ...providerPresets.map(preset => ({
-    key: preset.label.toLowerCase(),
+    key: preset.label.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
     label: preset.label,
+    category: preset.category,
+    website: preset.website,
     provider: {
       type: preset.type,
       baseUrl: preset.baseUrl,
@@ -165,12 +380,12 @@ export const providerSources: ProviderSource[] = [
       authMode: authProvider,
     },
   })),
-  {
-    key: customSource,
-    label: "",
-    provider: {type: "custom", baseUrl: "", models: [], authMode: authProvider},
-  },
 ];
+
+/** The vendor a source came from, for the fields a picked card does not carry. */
+export function presetOfSource(source: ProviderSource) {
+  return providerPresets.find(preset => preset.label === source.label);
+}
 
 /** The base URLs and models offered for a provider type, from the vendors of it. */
 export function baseUrlPresets(type: string) {

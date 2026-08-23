@@ -14,7 +14,18 @@
 
 import * as React from "react";
 import {Link, useNavigate} from "react-router-dom";
-import {ChevronDown, CircleCheck, CircleX, Pencil, Plug, Plus, RefreshCw, Trash2, Wallet} from "lucide-react";
+import {
+  ChevronDown,
+  CircleCheck,
+  CircleX,
+  ExternalLink,
+  Pencil,
+  Plug,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Wallet,
+} from "lucide-react";
 import i18next from "i18next";
 
 import * as ProviderBackend from "@/backend/ProviderBackend";
@@ -547,7 +558,23 @@ export default function ProviderListPage({account}: {account: Account}) {
             </Field>
             {usesClientAuth(form) ? null : (
               <Field
-                label={i18next.t("provider:API Key")}
+                label={
+                  <span className="flex flex-wrap items-center gap-2">
+                    {i18next.t("provider:API Key")}
+                    {/* The form is asking for a key, so it says where to get one. */}
+                    {source.website ? (
+                      <a
+                        href={source.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary inline-flex items-center gap-1 text-xs font-normal hover:underline"
+                      >
+                        <ExternalLink className="size-3" />
+                        {i18next.t("provider:Get a key from {vendor}").replace("{vendor}", source.label)}
+                      </a>
+                    ) : null}
+                  </span>
+                }
                 htmlFor="provider-api-key"
                 hint={i18next.t("provider:API Key ownership hint")}
               >

@@ -45,6 +45,11 @@ import {
 } from "@/lib/providers";
 import type {Provider, QuotaConfig} from "@/types";
 
+// Mirrors object.namesApiVersion on the server.
+function namesApiVersion(path: string) {
+  return path.split("/").some(segment => /^v[0-9]/.test(segment));
+}
+
 // Mirrors object.BuildOpenAiUrl on the server.
 function buildOpenAiUrl(baseUrl: string, endpoint: string) {
   let url: URL;
@@ -61,7 +66,7 @@ function buildOpenAiUrl(baseUrl: string, endpoint: string) {
   if (path.endsWith(endpoint)) {
     path = path.slice(0, path.length - endpoint.length);
   }
-  if (!path.endsWith("/v1")) {
+  if (!namesApiVersion(path)) {
     path += "/v1";
   }
 

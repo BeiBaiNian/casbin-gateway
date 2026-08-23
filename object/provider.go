@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -387,9 +388,31 @@ func validateBaseUrl(baseUrl string) error {
 	return nil
 }
 
+// apiVersionSegment matches a path segment that names an API version, which is
+// how a base URL says it is already the root of the API: v1, v3, v1beta.
+var apiVersionSegment = regexp.MustCompile(`^v[0-9]`)
+
+// namesApiVersion reports whether any segment of the path is a version. The
+// version is not always last: an OpenAI-compatible API served beside a native
+// one lives at /v1beta/openai or /v3/openai.
+func namesApiVersion(path string) bool {
+	for _, segment := range strings.Split(path, "/") {
+		if apiVersionSegment.MatchString(segment) {
+			return true
+		}
+	}
+	return false
+}
+
 // BuildOpenAiUrl joins an OpenAI-compatible endpoint onto a provider base URL.
-// The base URL may be bare, already carry the /v1 prefix or already end with
-// the endpoint itself; none of those forms are doubled.
+// The base URL may be bare, already carry the version prefix or already end
+// with the endpoint itself; none of those forms are doubled.
+//
+// The /v1 is only supplied for a base URL that names no version of its own,
+// because plenty of vendors do not serve their OpenAI-compatible API under
+// /v1: Gemini uses /v1beta/openai, Zhipu /api/paas/v4, DeepInfra /v1/openai.
+// A path that names no version at all still gets one, so a relay configured as
+// https://relay.example.com/openai keeps working.
 func BuildOpenAiUrl(baseUrl string, endpoint string) (string, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
@@ -397,7 +420,7 @@ func BuildOpenAiUrl(baseUrl string, endpoint string) (string, error) {
 	}
 
 	path := strings.TrimSuffix(strings.TrimRight(u.Path, "/"), endpoint)
-	if !strings.HasSuffix(path, "/v1") {
+	if !namesApiVersion(path) {
 		path += "/v1"
 	}
 

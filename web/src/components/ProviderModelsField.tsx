@@ -111,6 +111,12 @@ export function ProviderModelsField({
         suggestions={fetched ?? modelPresets(provider.type)}
         onChange={onChange}
       />
+      {/* An empty list only means "any model" for a provider that forwards the
+          caller's login. Anywhere else it means the router will never pick this
+          provider, which is worth saying before the form is submitted. */}
+      {models.length === 0 && !usesClientAuth(provider) ? (
+        <p className="text-warning text-xs">{i18next.t("provider:No models hint")}</p>
+      ) : null}
       {fetched === null ? null : (
         <div className="grid gap-2 rounded-md border p-2">
           <div className="flex items-center justify-between gap-2">
