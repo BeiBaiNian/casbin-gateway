@@ -75,6 +75,24 @@ export function agentNeedsResponsesApi(agentId: string) {
 }
 
 /**
+ * The wire format an agent's client speaks, as the server reports it. Empty for
+ * an agent Gateway does not know, which is then not filtered on.
+ */
+export function agentProtocol(agent: Agent) {
+  return agent.providerConfig?.protocol ?? "";
+}
+
+/**
+ * Whether an agent can be pointed at a provider serving this wire format. The
+ * proxy relays a request in the format it arrived in, so the two have to speak
+ * the same API.
+ */
+export function agentSpeaks(agent: Agent, protocol: string) {
+  const spoken = agentProtocol(agent);
+  return spoken === "" || spoken === protocol;
+}
+
+/**
  * The detail page route for one installation. The path is only spelled out when
  * the same agent is installed more than once, which is what makes the id alone
  * ambiguous; otherwise the URL stays short.

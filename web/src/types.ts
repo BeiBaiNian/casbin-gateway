@@ -210,6 +210,8 @@ export interface AgentProviderFile {
 /** The state of the agent's own configuration file, written by the orchestrator. */
 export interface AgentProviderConfig {
   supported: boolean;
+  /** The wire format the agent's client speaks, empty when Gateway cannot tell. */
+  protocol: string;
   applied: boolean;
   provider: string;
   mode: string;

@@ -186,6 +186,7 @@ export function ProviderCard({
   // still has to render for the parts that do not depend on it.
   const providerConfig = agent.providerConfig ?? {
     supported: false,
+    protocol: "",
     applied: false,
     provider: "",
     mode: "",
@@ -198,11 +199,25 @@ export function ProviderCard({
   const healthOf = (id: string) => health.find(item => item.provider === id);
   const boundHealth = healthOf(agent.provider);
 
+  // The agent's client speaks one wire format and the proxy relays a request as
+  // it arrived, so a provider serving the other API can never answer it. A
+  // backend that does not report the format yet filters nothing out.
+  const protocol = providerConfig.protocol ?? "";
+  const speaksAgentApi = (provider: Provider) =>
+    protocol === "" || providerProtocol(provider.type) === protocol;
+  // A provider bound before this was checked stays in the list, so the select
+  // shows what the agent is on rather than an empty box.
+  const options = providers.filter(
+    provider => speaksAgentApi(provider) || providerIdOf(provider) === agent.provider,
+  );
+  const mismatched = bound !== undefined && !speaksAgentApi(bound);
+
   // A provider can only take over for one that speaks the same wire format: the
   // proxy relays the request as it arrived.
   const candidates = providers.filter(
     provider =>
       providerIdOf(provider) !== agent.provider &&
+      speaksAgentApi(provider) &&
       (bound === undefined || providerProtocol(provider.type) === providerProtocol(bound.type)),
   );
 
@@ -237,7 +252,7 @@ export function ProviderCard({
             <SelectItem value={noProvider}>
               <span className="text-muted-foreground">{i18next.t("agent:No provider")}</span>
             </SelectItem>
-            {providers.map(provider => (
+            {options.map(provider => (
               <SelectItem key={providerIdOf(provider)} value={providerIdOf(provider)}>
                 <ProviderIcon icon={provider.icon} baseUrl={provider.baseUrl} size={16} />
                 {provider.displayName || provider.name}
@@ -247,6 +262,12 @@ export function ProviderCard({
             ))}
           </SelectContent>
         </Select>
+
+        {mismatched ? (
+          <p className="text-sm text-warning">
+            {i18next.t("agent:Provider speaks another API").replace("{protocol}", protocol)}
+          </p>
+        ) : null}
 
         {boundHealth && !boundHealth.healthy ? (
           <p className="text-sm text-warning">
@@ -338,14 +359,17 @@ export function ProviderCard({
                     confirmText={i18next.t("agent:Write configuration")}
                     onConfirm={() => onWrite(false)}
                   >
-                    <Button variant={providerConfig.applied ? "outline" : "default"} disabled={busy}>
+                    <Button
+                      variant={providerConfig.applied ? "outline" : "default"}
+                      disabled={busy || mismatched}
+                    >
                       {providerConfig.applied
                         ? i18next.t("agent:Rewrite configuration")
                         : i18next.t("agent:Write configuration")}
                     </Button>
                   </ConfirmDialog>
 
-                  <Button variant="outline" disabled={busy} onClick={() => setPreview(true)}>
+                  <Button variant="outline" disabled={busy || mismatched} onClick={() => setPreview(true)}>
                     {i18next.t("agent:Preview")}
                   </Button>
 

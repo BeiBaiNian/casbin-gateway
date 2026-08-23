@@ -70,14 +70,17 @@ type File struct {
 // Status is what the UI shows beside an installation: whether Gateway owns its
 // provider configuration, and which one it points at.
 type Status struct {
-	Supported bool     `json:"supported"`
-	Applied   bool     `json:"applied"`
-	Provider  string   `json:"provider"`
-	Mode      string   `json:"mode"`
-	BaseUrl   string   `json:"baseUrl"`
-	Time      string   `json:"time"`
-	Files     []string `json:"files"`
-	Detail    string   `json:"detail"`
+	Supported bool `json:"supported"`
+	// Protocol is the wire format this agent's client speaks, empty for an
+	// agent Gateway does not know.
+	Protocol string   `json:"protocol"`
+	Applied  bool     `json:"applied"`
+	Provider string   `json:"provider"`
+	Mode     string   `json:"mode"`
+	BaseUrl  string   `json:"baseUrl"`
+	Time     string   `json:"time"`
+	Files    []string `json:"files"`
+	Detail   string   `json:"detail"`
 }
 
 type writer interface {
@@ -193,7 +196,7 @@ func StatusOf(target Target) Status {
 		}
 	}
 
-	status := Status{Supported: true, Files: []string{}}
+	status := Status{Supported: true, Protocol: value.Protocol(), Files: []string{}}
 	saved, err := loadState(target)
 	if err != nil {
 		status.Detail = err.Error()
@@ -232,6 +235,16 @@ func StatusOf(target Target) Status {
 	return status
 }
 
+// ProtocolOf is the wire format one agent's client speaks, empty for an agent
+// Gateway has no writer for.
+func ProtocolOf(agentId string) string {
+	value, ok := writers[agentId]
+	if !ok {
+		return ""
+	}
+	return value.Protocol()
+}
+
 func writerFor(target Target, endpoint Endpoint) (writer, error) {
 	if target.AgentId == "" {
 		return nil, errors.New("agentId is required")
@@ -248,8 +261,8 @@ func writerFor(target Target, endpoint Endpoint) (writer, error) {
 		return nil, fmt.Errorf("%s: %w", target.AgentId, ErrNotSupported)
 	}
 	if value.Protocol() != endpoint.Protocol {
-		return nil, fmt.Errorf("%s speaks the %s API, but provider %s speaks %s",
-			target.AgentId, value.Protocol(), endpoint.Provider, endpoint.Protocol)
+		return nil, fmt.Errorf("%s speaks the %s API, but provider %s speaks %s: bind a provider that speaks %s instead",
+			target.AgentId, value.Protocol(), endpoint.Provider, endpoint.Protocol, value.Protocol())
 	}
 	return value, nil
 }

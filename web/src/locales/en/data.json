@@ -106,6 +106,7 @@
     "Provider cleared": "Provider cleared",
     "Provider hint": "With no provider selected, this agent still talks to its own upstream and Gateway only watches it.",
     "Provider saved": "Provider saved",
+    "Provider speaks another API": "This agent speaks the {protocol} API, which the bound provider does not. Pick a provider that speaks it, or the agent configuration cannot be written.",
     "Records": "Records",
     "Records are kept in memory only and are lost when Gateway restarts": "Records are kept in memory only and are lost when Gateway restarts",
     "Reported from": "Reported from",

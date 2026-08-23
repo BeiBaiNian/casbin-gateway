@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {SimpleTooltip} from "@/components/ui/tooltip";
+import {agentSpeaks} from "@/lib/agents";
 import {providerProtocol, usesClientAuth} from "@/lib/providers";
 import {cn} from "@/lib/utils";
 import type {Agent, Provider, ProviderHealth, ProviderQuota} from "@/types";
@@ -97,7 +98,9 @@ export function ProviderGridCard({
   const protocol = providerProtocol(provider.type);
   const models = provider.models ?? [];
   const users = agents.filter(agent => agent.provider === id);
-  const others = agents.filter(agent => agent.provider !== id);
+  // An agent whose client speaks the other wire format could never read this
+  // provider's answers, so it is not offered.
+  const others = agents.filter(agent => agent.provider !== id && agentSpeaks(agent, protocol));
 
   return (
     <Card className="gap-0 py-0">

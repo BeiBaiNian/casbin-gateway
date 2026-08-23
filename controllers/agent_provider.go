@@ -100,6 +100,35 @@ func (c *ApiController) GetProviderHealth() {
 	c.ResponseOk(object.GetProviderHealth())
 }
 
+// checkAgentProtocol rejects providers the agent could never talk to. The proxy
+// relays a request in the wire format it arrived in, so an agent speaking one
+// API cannot be served by a provider speaking the other.
+func checkAgentProtocol(agentId string, providerIds []string) error {
+	protocol := agentprovider.ProtocolOf(agentId)
+	if protocol == "" {
+		return nil
+	}
+
+	for _, id := range providerIds {
+		if id == "" {
+			continue
+		}
+		provider, err := object.GetProvider(id)
+		if err != nil {
+			return err
+		}
+		// A provider that does not exist is reported by the routing itself.
+		if provider == nil {
+			continue
+		}
+		if spoken := object.ProviderProtocol(provider); spoken != protocol {
+			return fmt.Errorf("%s speaks the %s API, but provider %s speaks %s: bind a provider that speaks %s instead",
+				agentId, protocol, id, spoken, protocol)
+		}
+	}
+	return nil
+}
+
 // agentEndpoint resolves where one agent should be pointed. In gateway mode
 // that is the local proxy, which is what makes a later switch take effect
 // without rewriting a file; in direct mode it is the provider's own upstream.
