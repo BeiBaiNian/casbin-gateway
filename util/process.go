@@ -29,37 +29,49 @@ const (
 	portReleasePollInterval = 100 * time.Millisecond
 )
 
-// StopOldInstance kills whatever process is listening on the port, so that a
-// restart never has to wait for the previous run to be shut down by hand.
+// ForeignPortError reports a port held by a process that is not Casbin Gateway.
+// That process keeps running: the port may well be its own, and taking it by
+// force would stop something the rest of the machine depends on.
+type ForeignPortError struct {
+	Port   int
+	Holder string
+}
+
+func (e *ForeignPortError) Error() string {
+	return fmt.Sprintf("port %d is held by %s, which is not Casbin Gateway", e.Port, e.Holder)
+}
+
+// StopOldInstance stops a previous Casbin Gateway still listening on the port,
+// so that a restart never has to wait for it to be shut down by hand.
 //
-// This takes the port for Casbin Gateway unconditionally: an unrelated program
-// that happens to be listening there is killed just the same, so the ports in
-// conf/app.conf have to be ones this machine really is allowed to hand over.
+// Only another copy of this executable is ever stopped. A port held by anything
+// else belongs to that program - an nginx on 443, a dev server on 17000 - so it
+// is left alone and returned as a ForeignPortError; the caller reports the
+// conflict instead of taking the port by force.
+//
 // Only sockets in the LISTEN state count, so a process that merely holds a
 // connection to a remote port with the same number is never touched.
 func StopOldInstance(port int) error {
-	pid := findListenerPid(port)
-	if pid <= 0 || pid == os.Getpid() {
+	holder := LookupPortHolder(port)
+	if holder == nil || holder.Pid == os.Getpid() {
 		return nil
 	}
 
-	process, err := os.FindProcess(pid)
+	if !holder.Ours {
+		return &ForeignPortError{Port: port, Holder: holder.String()}
+	}
+
+	process, err := os.FindProcess(holder.Pid)
 	if err != nil {
 		return err
 	}
-
-	name := findProcessName(pid)
 
 	err = process.Kill()
 	if err != nil {
 		return err
 	}
 
-	if name == "" {
-		fmt.Printf("Casbin Gateway: stopped pid %d, which was holding port %d\n", pid, port)
-	} else {
-		fmt.Printf("Casbin Gateway: stopped %s (pid %d), which was holding port %d\n", name, pid, port)
-	}
+	fmt.Printf("Casbin Gateway: stopped the previous Gateway (%s), which was holding port %d\n", holder, port)
 
 	return waitForPortRelease(port)
 }

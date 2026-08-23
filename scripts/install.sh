@@ -167,6 +167,7 @@ Type=simple
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${INSTALL_DIR}/casbin-gateway
 Restart=on-failure
+RestartPreventExitStatus=78
 
 [Install]
 WantedBy=default.target

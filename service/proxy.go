@@ -469,8 +469,8 @@ func StopGateway() {
 }
 
 // serveGateway handles what a gateway server returned. StopGateway() closing it
-// is the normal way out; anything else is a failure worth crashing on, so the
-// supervisor restarts a proxy that died on its own.
+// is the normal way out; anything else means the proxy died on its own, which
+// is a failure worth crashing on rather than serving nothing in silence.
 func serveGateway(err error) {
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		panic(err)

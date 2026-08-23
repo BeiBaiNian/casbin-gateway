@@ -15,6 +15,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -124,24 +125,42 @@ func stopDaemon(port int) {
 		return
 	}
 
-	if err := StopOldInstance(port); err != nil {
-		fmt.Printf("Casbin Gateway: could not stop the process on port %d: %v\n", port, err)
-		os.Exit(1)
-	}
-	fmt.Println("Casbin Gateway stopped")
-}
-
-func printStatus(port int) {
-	if isServing(port) {
-		holder := DescribePortHolder(port)
-		if holder == "" {
-			holder = "running"
-		}
-		fmt.Printf("Casbin Gateway is running on http://localhost:%d (%s)\n", port, holder)
+	err := StopOldInstance(port)
+	if err == nil {
+		fmt.Println("Casbin Gateway stopped")
 		return
 	}
 
-	fmt.Printf("Casbin Gateway is not running on port %d\n", port)
+	// Answering on the port is not the same as being Gateway, so this is where
+	// "stop" finds out that the port belongs to something else entirely.
+	var foreign *ForeignPortError
+	if errors.As(err, &foreign) {
+		fmt.Printf("Port %d is held by %s, not by Casbin Gateway, so nothing was stopped\n", port, foreign.Holder)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Casbin Gateway: could not stop the process on port %d: %v\n", port, err)
+	os.Exit(1)
+}
+
+func printStatus(port int) {
+	if !isServing(port) {
+		fmt.Printf("Casbin Gateway is not running on port %d\n", port)
+		return
+	}
+
+	holder := LookupPortHolder(port)
+	if holder == nil {
+		fmt.Printf("Casbin Gateway is running on http://localhost:%d\n", port)
+		return
+	}
+
+	if !holder.Ours {
+		fmt.Printf("Port %d is held by %s, not by Casbin Gateway\n", port, holder)
+		return
+	}
+
+	fmt.Printf("Casbin Gateway is running on http://localhost:%d (%s)\n", port, holder)
 }
 
 // isServing reports whether something already answers on the port, which is the

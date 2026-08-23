@@ -20,15 +20,26 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// portLookupTimeout bounds the external "who owns this port" commands so a slow
-// lsof or netstat can never hold up startup.
-const portLookupTimeout = 2 * time.Second
+const (
+	// portLookupTimeout bounds the external "who owns this port" commands so a
+	// slow lsof or netstat can never hold up startup.
+	portLookupTimeout = 2 * time.Second
+	// procNameMaxLen is how much of another process's name Linux reports, from
+	// TASK_COMM_LEN. Anything longer comes back cut to this.
+	procNameMaxLen = 15
+	// ExitCodeFatalConfig marks an exit caused by configuration, such as a port
+	// that is already taken. Restarting cannot fix it, so a service manager has
+	// to be told not to try; the systemd unit the installer writes says so. The
+	// value is the conventional sysexits.h EX_CONFIG.
+	ExitCodeFatalConfig = 78
+)
 
 // ListenTcp binds a TCP listener on all interfaces for the given port. Callers
 // keep the listener and serve on it, so a port that was reported free cannot be
@@ -61,9 +72,9 @@ func CheckPortAvailableOn(addr string, port int) error {
 }
 
 // FatalListenError explains a failed bind in plain language and stops the
-// process without a stack trace. It exits with ExitCodeFatalConfig so the
-// supervisor knows this is a configuration problem and does not restart the
-// process straight back into the same conflict.
+// process without a stack trace. It exits with ExitCodeFatalConfig so that a
+// service manager knows this is a configuration problem and does not restart
+// the process straight back into the same conflict.
 //
 // "remedy" completes the sentence "Free the port, or ...", for example
 // `set "gatewayEnabled = false" in conf/app.conf`.
@@ -84,22 +95,84 @@ func FatalListenError(port int, remedy string, err error) {
 	os.Exit(ExitCodeFatalConfig)
 }
 
-// DescribePortHolder is a best-effort, read-only lookup of the process that is
-// listening on the port, used to turn "bind failed" into something actionable
-// such as "pid 1234, nginx". It only ever reads: a wrong guess costs an
-// inaccurate hint, never someone else's process.
-func DescribePortHolder(port int) string {
+// PortHolder is the process listening on a port: its pid, its executable name
+// when that could be read, and whether that executable is this same program.
+type PortHolder struct {
+	Pid  int
+	Name string
+	Ours bool
+}
+
+// String renders a holder as "pid 1234, nginx", or "pid 1234" when its name
+// could not be read.
+func (h *PortHolder) String() string {
+	if h.Name == "" {
+		return fmt.Sprintf("pid %d", h.Pid)
+	}
+
+	return fmt.Sprintf("pid %d, %s", h.Pid, h.Name)
+}
+
+// LookupPortHolder is a best-effort, read-only lookup of the process listening
+// on the port. It turns "bind failed" into something actionable such as
+// "pid 1234, nginx", and tells a previous Gateway apart from an unrelated
+// program. It returns nil when nothing is listening or the pid cannot be read.
+func LookupPortHolder(port int) *PortHolder {
 	pid := findListenerPid(port)
 	if pid <= 0 {
-		return ""
+		return nil
 	}
 
 	name := findProcessName(pid)
-	if name == "" {
-		return fmt.Sprintf("pid %d", pid)
+	return &PortHolder{Pid: pid, Name: name, Ours: isSelfExecutable(name)}
+}
+
+// DescribePortHolder names the process listening on the port, or "" when there
+// is none to name. It only ever reads: a wrong guess costs an inaccurate hint,
+// never someone else's process.
+func DescribePortHolder(port int) string {
+	holder := LookupPortHolder(port)
+	if holder == nil {
+		return ""
 	}
 
-	return fmt.Sprintf("pid %d, %s", pid, name)
+	return holder.String()
+}
+
+// isSelfExecutable reports whether an executable name is this program's own.
+// It is the check that keeps Gateway from stopping a process that is not a
+// previous Gateway, so it is deliberately conservative: a name that could not
+// be read is never a match.
+func isSelfExecutable(name string) bool {
+	self, err := os.Executable()
+	if err != nil {
+		return false
+	}
+
+	mine, other := executableBaseName(self), executableBaseName(name)
+	if mine == "" || other == "" {
+		return false
+	}
+
+	// Linux reports the name of another process cut to procNameMaxLen, so a
+	// name that long has to be compared as a prefix of this executable's.
+	if len(other) >= procNameMaxLen {
+		return strings.HasPrefix(mine, other)
+	}
+
+	return mine == other
+}
+
+// executableBaseName drops the directory and the ".exe" suffix and lowercases
+// the rest, so that "C:\Program Files\Casbin-Gateway.exe" and
+// "casbin-gateway" are recognised as the same program.
+func executableBaseName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	return strings.TrimSuffix(strings.ToLower(filepath.Base(value)), ".exe")
 }
 
 // findListenerPid returns the pid of a process listening on the port, or 0 when

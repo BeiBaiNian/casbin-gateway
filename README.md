@@ -179,7 +179,7 @@ Gateway prints what it is actually doing when it starts, so the result can be ch
 +---------------------------------------------------------------------+
 ```
 
-If a port is taken, Gateway says which process holds it and stops, rather than starting half-configured.
+A previous Gateway still holding one of these ports is stopped first, so a restart never waits on it. A port held by anything else stays with that program: Gateway names the process holding it and stops, rather than taking the port or starting half-configured.
 
 ### Recording prompts
 

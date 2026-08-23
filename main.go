@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -52,7 +53,6 @@ func main() {
 		return
 	}
 
-	util.InitSelfGuard()
 	object.InitFlag()
 	object.InitAdapter()
 	object.CreateTables()
@@ -106,8 +106,8 @@ func main() {
 	port := conf.GetHttpPort()
 	addr := conf.GetHttpAddr()
 
-	// A previous run still holding one of these ports would keep this one from
-	// starting, so it is stopped first. The gateway ports come before the
+	// A previous Gateway still holding one of these ports would keep this one
+	// from starting, so it is stopped first. The gateway ports come before the
 	// management port because service.Start() binds them first.
 	stopPorts := []int{}
 	if conf.IsGatewayEnabled() {
@@ -115,11 +115,22 @@ func main() {
 	}
 	stopPorts = append(stopPorts, port)
 	for _, stopPort := range stopPorts {
-		if err := util.StopOldInstance(stopPort); err != nil {
-			// The bind below reports the conflict in full, so a failed kill only
-			// needs a note here and never stops the startup by itself.
-			fmt.Printf("Casbin Gateway: could not free port %d: %v\n", stopPort, err)
+		err := util.StopOldInstance(stopPort)
+		if err == nil {
+			continue
 		}
+
+		// A port held by something that is not Gateway stays with it. Saying so
+		// here would only precede the bind below, which reports the same
+		// conflict along with the remedy for that particular port.
+		var foreign *util.ForeignPortError
+		if errors.As(err, &foreign) {
+			continue
+		}
+
+		// The bind below reports the conflict in full, so a failed kill only
+		// needs a note here and never stops the startup by itself.
+		fmt.Printf("Casbin Gateway: could not free port %d: %v\n", stopPort, err)
 	}
 
 	service.PrintStartupSummary()
