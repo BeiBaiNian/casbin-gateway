@@ -26,6 +26,7 @@ const agentSites: Record<string, string> = {
   "Cursor Agent": "cursor.com",
   Windsurf: "windsurf.com",
   OpenAgent: "openagentai.org",
+  "DeepSeek Harness": "deepseek.com",
 };
 
 const agentKey = (agent: unknown) =>

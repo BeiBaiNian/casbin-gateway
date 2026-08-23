@@ -235,8 +235,36 @@ func containsPath(command, path string) bool {
 		return false
 	}
 	path = filepath.Clean(path)
-	if runtime.GOOS == "windows" {
-		return strings.Contains(strings.ToLower(command), strings.ToLower(path))
+	if textContains(command, path) {
+		return true
 	}
-	return strings.Contains(command, path)
+	// A shim reaches its target through its own directory, so the command line
+	// spells the file with a relative hop the recorded installation has not.
+	for _, argument := range commandArguments(command) {
+		if textContains(filepath.Clean(argument), path) {
+			return true
+		}
+	}
+	return false
+}
+
+func textContains(text, path string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.Contains(strings.ToLower(text), strings.ToLower(path))
+	}
+	return strings.Contains(text, path)
+}
+
+// commandArguments splits a command line the way its quoting reads, so an
+// argument holding a path with spaces stays one string.
+func commandArguments(command string) []string {
+	var arguments []string
+	for i, part := range strings.Split(command, `"`) {
+		if i%2 == 1 {
+			arguments = append(arguments, part)
+			continue
+		}
+		arguments = append(arguments, strings.Fields(part)...)
+	}
+	return arguments
 }

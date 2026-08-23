@@ -69,6 +69,9 @@ func userNpmPatterns(fingerprint *Fingerprint, home string) []string {
 		filepath.Join(home, ".asdf", "installs", "nodejs", "*", "lib", "node_modules", pkg, "package.json"),
 		// pnpm groups its global packages under a store layout version.
 		filepath.Join(home, ".local", "share", "pnpm", "global", "*", "node_modules", pkg, "package.json"),
+		// An agent whose documented command is "npx <package>" is never
+		// installed globally; the copy npx keeps in npm's cache is the install.
+		filepath.Join(home, ".npm", "_npx", "*", "node_modules", pkg, "package.json"),
 	}
 	for _, dir := range fingerprint.ExtraUnixNpmDirs {
 		patterns = append(patterns, filepath.Join(home, filepath.FromSlash(dir), "node_modules", pkg, "package.json"))

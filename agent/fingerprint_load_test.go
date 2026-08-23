@@ -23,7 +23,7 @@ import (
 func TestFingerprintsLoad(t *testing.T) {
 	want := []string{
 		"claude-code", "claude-desktop", "codex-cli", "codex", "cursor-agent",
-		"cursor", "openagent", "openclaw", "windsurf",
+		"cursor", "dsh", "openagent", "openclaw", "windsurf",
 	}
 
 	loaded, err := loadFingerprints(fingerprintFS)

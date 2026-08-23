@@ -324,6 +324,9 @@ func scanWindowsNpm(ctx context.Context, fingerprint *Fingerprint, home homeDir)
 		filepath.Join(local, "Volta", "tools", "image", "packages", pkg, "lib", "node_modules", pkg, "package.json"),
 		// pnpm groups its global packages under a store layout version.
 		filepath.Join(local, "pnpm", "global", "*", "node_modules", pkg, "package.json"),
+		// An agent whose documented command is "npx <package>" is never
+		// installed globally; the copy npx keeps in npm's cache is the install.
+		filepath.Join(local, "npm-cache", "_npx", "*", "node_modules", pkg, "package.json"),
 	}
 	for _, dir := range fingerprint.ExtraWindowsNpmDirs {
 		patterns = append(patterns, filepath.Join(local, filepath.FromSlash(dir), "node_modules", pkg, "package.json"))

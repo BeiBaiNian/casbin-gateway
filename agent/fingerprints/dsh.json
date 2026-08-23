@@ -1,0 +1,6 @@
+{
+  "id": "dsh",
+  "displayName": "DeepSeek Harness",
+  "execName": "dsh",
+  "npmPackage": "@deepseek-ai/dsh"
+}
