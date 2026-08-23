@@ -306,7 +306,7 @@ export default function AgentConfigsPage({account}: {account: Account}) {
           <span className="text-muted-foreground text-xs">
             {counted(record.files ?? 0, "agentConfig:1 file", "agentConfig:{files} files", "{files}")}
             {record.bytes ? ` · ${formatBytes(record.bytes)}` : ""}
-            {record.modified ? (
+            {formatModified(record.modified) ? (
               <>
                 <br />
                 {`${i18next.t("agentConfig:Changed")} ${formatModified(record.modified)}`}
@@ -481,8 +481,8 @@ export default function AgentConfigsPage({account}: {account: Account}) {
             </Tabs>
 
             {location ? (
-              <span className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">{i18next.t("agentConfig:Read from")}</span>
+              <span className="flex min-w-0 items-center gap-2 text-xs">
+                <span className="text-muted-foreground shrink-0">{i18next.t("agentConfig:Read from")}</span>
                 <CodeText copyable>{location}</CodeText>
                 {kind === "skill" && (source.skillsDirs?.length ?? 0) > 1 ? (
                   <SimpleTooltip

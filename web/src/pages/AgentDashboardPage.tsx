@@ -289,7 +289,7 @@ export default function AgentDashboardPage({account}: {account: Account}) {
 
       {error ? <MessageAlert title={error} /> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label={i18next.t("agent:Installed")} value={agents.length} icon={Bot} />
         <StatCard label={i18next.t("agent:Monitored")} value={patchedCount} icon={ShieldCheck} tone="success" />
         <StatCard label={i18next.t("agent:Agent Sessions")} value={sessionCount} icon={MessageSquare} />
@@ -328,7 +328,7 @@ export default function AgentDashboardPage({account}: {account: Account}) {
           />
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {agents.map(agent => (
             <AgentCard
               key={agentKey(agent)}

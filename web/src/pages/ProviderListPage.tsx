@@ -49,6 +49,7 @@ import {
   baseUrlPresets,
   customSource,
   providerSlug,
+  providerSources,
   usesClientAuth,
   type ProviderSource,
 } from "@/lib/providers";
@@ -228,6 +229,24 @@ export default function ProviderListPage({account}: {account: Account}) {
     setSource(picked);
   };
 
+  // A vendor's link fills the same form a card would, and then stops: what it
+  // carries — a base URL and often a key — is shown before anything is stored.
+  const importLink = (link: string) => {
+    return ProviderBackend.parseProviderLink(link)
+      .then(res => {
+        if (res.status !== "ok") {
+          Setting.showMessage("error", res.msg || i18next.t("provider:This link cannot be read"));
+          return;
+        }
+        const parsed = res.data;
+        setForm({...newProvider(account.name, parsed.displayName), ...parsed, name: providerSlug(parsed.displayName)});
+        setNameError("");
+        setSource(providerSources.find(item => item.key === customSource) ?? null);
+        setAddOpen(true);
+      })
+      .catch(error => Setting.showMessage("error", `${error}`));
+  };
+
   // The upstream is probed before the provider is stored, so a key that was
   // pasted wrong is caught here rather than by the first agent that uses it.
   const submitProvider = () => {
@@ -321,7 +340,7 @@ export default function ProviderListPage({account}: {account: Account}) {
             <CardDescription>{i18next.t("provider:No providers yet detail")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <ProviderSourcePicker onPick={openAddDialog} />
+            <ProviderSourcePicker onPick={openAddDialog} onLink={importLink} />
           </CardContent>
         </Card>
       ) : (
@@ -342,7 +361,7 @@ export default function ProviderListPage({account}: {account: Account}) {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {data.map(provider => (
               <ProviderGridCard
                 key={providerIdOf(provider)}
@@ -401,7 +420,7 @@ export default function ProviderListPage({account}: {account: Account}) {
         }
       >
         {source === null ? (
-          <ProviderSourcePicker onPick={pickSource} />
+          <ProviderSourcePicker onPick={pickSource} onLink={importLink} />
         ) : (
           <>
             <Field label={i18next.t("provider:Source")}>

@@ -14,7 +14,7 @@
 
 import * as React from "react";
 import {Link} from "react-router-dom";
-import {Bot, MessageSquare, RefreshCw} from "lucide-react";
+import {Bot, FileText, MessageSquare, RefreshCw} from "lucide-react";
 import i18next from "i18next";
 
 import * as AgentBackend from "@/backend/AgentBackend";
@@ -23,6 +23,7 @@ import {AgentIcon} from "@/components/AgentIcon";
 import {DataTable, type Column} from "@/components/shared/data-table";
 import {UnauthorizedResult} from "@/components/shared/misc";
 import {PageContainer, PageHeader} from "@/components/shared/page-header";
+import {SimpleTooltip} from "@/components/ui/tooltip";
 import {MessageAlert} from "@/components/ui/alert";
 import {Badge} from "@/components/ui/badge";
 import {Button} from "@/components/ui/button";
@@ -73,13 +74,21 @@ export default function AgentSessionsPage({account}: {account: Account}) {
       key: "session",
       render: (_value, session) => (
         <div className="flex min-w-0 flex-col">
-          <Link
-            to={`/agent-records?agent=${encodeURIComponent(session.agent)}&session=${encodeURIComponent(session.sessionKey)}`}
-            className="text-primary truncate font-medium hover:underline"
-          >
-            {session.title || session.sessionKey}
-          </Link>
-          <span className="text-muted-foreground truncate text-xs">{session.sessionKey}</span>
+          {/* A session read off disk has no monitoring records behind it, so
+              there is nothing for the link to open. */}
+          {session.historical ? (
+            <span className="truncate font-medium">{session.title || session.sessionKey}</span>
+          ) : (
+            <Link
+              to={`/agent-records?agent=${encodeURIComponent(session.agent)}&session=${encodeURIComponent(session.sessionKey)}`}
+              className="text-primary truncate font-medium hover:underline"
+            >
+              {session.title || session.sessionKey}
+            </Link>
+          )}
+          <span className="text-muted-foreground truncate text-xs">
+            {session.cwd || session.sessionKey}
+          </span>
         </div>
       ),
     },
@@ -96,10 +105,26 @@ export default function AgentSessionsPage({account}: {account: Account}) {
       ),
     },
     {
+      title: i18next.t("agent:Source"),
+      key: "historical",
+      width: "150px",
+      render: (_value, session) =>
+        session.historical ? (
+          <SimpleTooltip title={session.path}>
+            <Badge variant="muted">
+              <FileText className="size-3" />
+              {i18next.t("agent:From the transcript")}
+            </Badge>
+          </SimpleTooltip>
+        ) : (
+          <Badge variant="success">{i18next.t("agent:Monitored")}</Badge>
+        ),
+    },
+    {
       title: i18next.t("agent:Records"),
       key: "recordCount",
       dataIndex: "recordCount",
-      width: "120px",
+      width: "110px",
     },
     {
       title: i18next.t("agent:First activity"),
@@ -133,7 +158,7 @@ export default function AgentSessionsPage({account}: {account: Account}) {
         pageSize={20}
         searchable
         emptyIcon={MessageSquare}
-        emptyText={i18next.t("agent:No agent sessions yet - patch an agent to start collecting them")}
+        emptyText={i18next.t("agent:No agent sessions yet")}
         toolbar={
           <Button variant="outline" size="sm" onClick={load} loading={loading}>
             <RefreshCw />

@@ -100,8 +100,8 @@ export function CodeText({
   copyable?: boolean;
 }) {
   return (
-    <span className={cn("inline-flex max-w-full items-center gap-1", className)}>
-      <code className="bg-muted truncate rounded px-1.5 py-0.5 font-mono text-xs">{children}</code>
+    <span className={cn("inline-flex min-w-0 max-w-full items-center gap-1", className)}>
+      <code className="bg-muted min-w-0 truncate rounded px-1.5 py-0.5 font-mono text-xs">{children}</code>
       {copyable ? <CopyButton value={children} /> : null}
     </span>
   );

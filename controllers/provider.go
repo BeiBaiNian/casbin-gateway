@@ -158,6 +158,30 @@ func (c *ApiController) AddProvider() {
 	c.ServeJSON()
 }
 
+// ParseProviderLink reads a vendor's "add this provider" link and answers with
+// what it would fill in, without storing anything: the link comes from a
+// website, so the person adding it sees the values first.
+func (c *ApiController) ParseProviderLink() {
+	if c.RequireSignedIn() {
+		return
+	}
+
+	var form struct {
+		Link string `json:"link"`
+	}
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &form); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	provider, err := object.ParseProviderLink(c.GetSessionUsername(), form.Link)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(provider)
+}
+
 // UpdateProvider updates an existing provider.
 func (c *ApiController) UpdateProvider() {
 	if c.RequireSignedIn() {

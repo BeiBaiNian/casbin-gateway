@@ -23,7 +23,7 @@ import * as Conf from "@/Conf";
 import * as Setting from "@/Setting";
 import {findGroupOf, selectedKeyOf} from "@/nav";
 import {AppHeader} from "@/components/shared/app-header";
-import {AppSidebar, persistOpenKeys, readSavedOpenKeys} from "@/components/shared/app-sidebar";
+import {AppSidebar, persistOpenKeys, readSavedOpenKeys, useIsDesktop} from "@/components/shared/app-sidebar";
 import {Loading} from "@/components/shared/loading";
 import {TooltipProvider} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
@@ -77,6 +77,10 @@ export default function App() {
     return stored;
   });
   const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem(collapsedKey) === "true");
+  // Below md the rail is a drawer, so the same header button opens it instead
+  // of narrowing a column that is not on screen.
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const isDesktop = useIsDesktop();
   const location = useLocation();
 
   const selectedKey = selectedKeyOf(location.pathname);
@@ -127,6 +131,10 @@ export default function App() {
   }, [openKeys, collapsed]);
 
   const toggleSidebar = () => {
+    if (!isDesktop) {
+      setMobileNavOpen(value => !value);
+      return;
+    }
     setCollapsed(value => {
       localStorage.setItem(collapsedKey, String(!value));
       return !value;
@@ -234,12 +242,14 @@ export default function App() {
           onOpenKeysChange={setOpenKeys}
           isAdmin={Setting.isAdminUser(account)}
           gatewayEnabled={gatewayEnabled}
+          mobileOpen={mobileNavOpen}
+          onMobileOpenChange={setMobileNavOpen}
         />
 
         <div
           className={cn(
-            "flex min-h-screen flex-col transition-[margin] duration-200",
-            collapsed ? "ml-16" : "ml-64",
+            "flex min-h-screen min-w-0 flex-col transition-[margin] duration-200",
+            collapsed ? "md:ml-16" : "md:ml-64",
           )}
         >
           <AppHeader
@@ -310,7 +320,7 @@ export default function App() {
                   path="/llm-records"
                   element={requireSignin(user => <LlmRecordsPage account={user} />)}
                 />
-                <Route path="/dashboard" element={requireSignin(() => <DashboardPage />)} />
+                <Route path="/proxy-analytics" element={requireSignin(() => <DashboardPage />)} />
               </Routes>
             </React.Suspense>
           </main>

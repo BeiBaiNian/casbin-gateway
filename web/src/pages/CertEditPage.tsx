@@ -148,7 +148,7 @@ export default function CertEditPage() {
         </Field>
       </Section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section
           title={i18next.t("cert:Certificate")}
           columns={1}

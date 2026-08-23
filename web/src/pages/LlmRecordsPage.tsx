@@ -528,7 +528,7 @@ export default function LlmRecordsPage({account}: {account: Account}) {
           title={i18next.t("llm:Recording is off")}
           description={i18next.t("llm:Recording is off detail")}
           action={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => setRecordMode("metadata")} loading={changingMode}>
                 <Play />
                 {i18next.t("llm:Record metadata")}
@@ -562,7 +562,7 @@ export default function LlmRecordsPage({account}: {account: Account}) {
       ) : null}
       {error ? <MessageAlert title={error} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label={i18next.t("llm:Requests")}
           value={(stats?.requests ?? 0).toLocaleString()}

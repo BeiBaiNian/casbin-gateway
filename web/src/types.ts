@@ -297,6 +297,12 @@ export interface AgentSession {
   recordCount: number;
   firstTime: string;
   lastTime: string;
+  /** Where the transcript is, for a session read off disk. */
+  path?: string;
+  /** The directory the agent was working in, when the transcript records one. */
+  cwd?: string;
+  /** True when the session comes from the agent's own transcript, not monitoring. */
+  historical?: boolean;
 }
 
 export interface LlmRecord {

@@ -1,0 +1,367 @@
+// Copyright 2026 The casbin Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package agenthistory reads the conversation transcripts agents already keep
+// on disk. Monitoring only ever sees what happens after it is turned on, while
+// these files are the sessions that already happened, so the Sessions page has
+// something to show on the first day.
+package agenthistory
+
+import (
+	"bufio"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+// Session is one transcript, described without its contents.
+type Session struct {
+	Agent       string `json:"agent"`
+	SessionKey  string `json:"sessionKey"`
+	Title       string `json:"title"`
+	RecordCount int    `json:"recordCount"`
+	FirstTime   string `json:"firstTime"`
+	LastTime    string `json:"lastTime"`
+	// Path is where the transcript is, so the page can say where it came from.
+	Path string `json:"path"`
+	// Cwd is the directory the agent worked in, when the transcript records one.
+	Cwd string `json:"cwd"`
+	// Historical marks a session read off disk rather than collected by monitoring.
+	Historical bool `json:"historical"`
+}
+
+const (
+	// maxTranscripts bounds a scan: a heavy user has thousands of these, and the
+	// newest are the ones worth reading.
+	maxTranscripts = 500
+	// maxLineBytes skips a line longer than this rather than holding it in memory.
+	// A single tool result can be megabytes.
+	maxLineBytes = 1 << 20
+	// maxTitleRunes keeps a title to something a table cell can show.
+	maxTitleRunes = 120
+)
+
+// transcriptDirs are where each agent keeps its own transcripts, relative to a
+// home directory. Both write one JSONL file per session.
+var transcriptDirs = []struct {
+	agent string
+	parts []string
+}{
+	{"claude-code", []string{".claude", "projects"}},
+	{"codex-cli", []string{".codex", "sessions"}},
+}
+
+type cacheKey struct {
+	path string
+	size int64
+	unix int64
+}
+
+var (
+	cacheMutex sync.Mutex
+	cache      = map[cacheKey]Session{}
+	scans      = map[string]scanResult{}
+)
+
+// scanTTL is how long a whole scan stands. The Sessions page polls for live
+// records, and walking thousands of files at that rate would be the most
+// expensive thing Gateway does.
+const scanTTL = 30 * time.Second
+
+type scanResult struct {
+	sessions []Session
+	at       time.Time
+}
+
+// Scan reads the transcripts under one home directory. Results are cached per
+// file until it changes, and the whole walk is cached briefly, so polling the
+// page re-reads nothing.
+func Scan(home string) []Session {
+	cacheMutex.Lock()
+	if previous, found := scans[home]; found && time.Since(previous.at) < scanTTL {
+		cacheMutex.Unlock()
+		return previous.sessions
+	}
+	cacheMutex.Unlock()
+
+	sessions := scan(home)
+
+	cacheMutex.Lock()
+	scans[home] = scanResult{sessions: sessions, at: time.Now()}
+	cacheMutex.Unlock()
+	return sessions
+}
+
+func scan(home string) []Session {
+	sessions := []Session{}
+	for _, source := range transcriptDirs {
+		root := filepath.Join(append([]string{home}, source.parts...)...)
+		for _, file := range newestTranscripts(root) {
+			if session, ok := read(source.agent, file); ok {
+				sessions = append(sessions, session)
+			}
+		}
+	}
+
+	sort.SliceStable(sessions, func(left, right int) bool {
+		return sessions[left].LastTime > sessions[right].LastTime
+	})
+	return sessions
+}
+
+type transcript struct {
+	path string
+	info os.FileInfo
+}
+
+// newestTranscripts finds the .jsonl files under root, newest first and capped.
+func newestTranscripts(root string) []transcript {
+	found := []transcript{}
+	// A missing directory means the agent was never installed here, which is not
+	// an error worth reporting from a page that lists whatever it finds.
+	filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil
+		}
+		found = append(found, transcript{path: path, info: info})
+		return nil
+	})
+
+	sort.SliceStable(found, func(left, right int) bool {
+		return found[left].info.ModTime().After(found[right].info.ModTime())
+	})
+	if len(found) > maxTranscripts {
+		found = found[:maxTranscripts]
+	}
+	return found
+}
+
+func read(agent string, file transcript) (Session, bool) {
+	key := cacheKey{path: file.path, size: file.info.Size(), unix: file.info.ModTime().UnixNano()}
+	cacheMutex.Lock()
+	cached, found := cache[key]
+	cacheMutex.Unlock()
+	if found {
+		return cached, true
+	}
+
+	session, ok := parse(agent, file)
+	if !ok {
+		return Session{}, false
+	}
+
+	cacheMutex.Lock()
+	cache[key] = session
+	cacheMutex.Unlock()
+	return session, true
+}
+
+// line is the union of the two formats: Claude Code writes the session id and
+// the message at the top level, Codex wraps everything in "payload".
+type line struct {
+	Type      string          `json:"type"`
+	Timestamp string          `json:"timestamp"`
+	SessionId string          `json:"sessionId"`
+	Cwd       string          `json:"cwd"`
+	Message   json.RawMessage `json:"message"`
+	Payload   struct {
+		Id      string          `json:"id"`
+		Type    string          `json:"type"`
+		Role    string          `json:"role"`
+		Cwd     string          `json:"cwd"`
+		Content json.RawMessage `json:"content"`
+	} `json:"payload"`
+}
+
+func parse(agent string, file transcript) (Session, bool) {
+	handle, err := os.Open(file.path)
+	if err != nil {
+		return Session{}, false
+	}
+	defer handle.Close()
+
+	session := Session{
+		Agent:      agent,
+		Path:       file.path,
+		LastTime:   file.info.ModTime().Local().Format(time.RFC3339),
+		Historical: true,
+	}
+	// The file name is the session id for Claude Code, and carries it for Codex;
+	// the transcript itself overrides this when it names one.
+	session.SessionKey = sessionKeyFromName(file.info.Name())
+
+	scanner := bufio.NewScanner(handle)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
+	for scanner.Scan() {
+		var entry line
+		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+			continue
+		}
+
+		if entry.SessionId != "" {
+			session.SessionKey = entry.SessionId
+		}
+		if entry.Type == "session_meta" && entry.Payload.Id != "" {
+			session.SessionKey = entry.Payload.Id
+		}
+		if session.Cwd == "" {
+			session.Cwd = firstNonEmpty(entry.Cwd, entry.Payload.Cwd)
+		}
+		if when := strings.TrimSpace(entry.Timestamp); when != "" {
+			if session.FirstTime == "" {
+				session.FirstTime = when
+			}
+			session.LastTime = when
+		}
+
+		if role, content := roleAndContent(entry); role != "" {
+			session.RecordCount++
+			if session.Title == "" && role == "user" {
+				session.Title = usableTitle(content)
+			}
+		}
+	}
+
+	if session.SessionKey == "" {
+		return Session{}, false
+	}
+	if session.FirstTime == "" {
+		session.FirstTime = session.LastTime
+	}
+	return session, true
+}
+
+// roleAndContent picks the messages out of a transcript, in either format. Only
+// the conversation counts: the tool calls and events around it are what
+// monitoring is for.
+func roleAndContent(entry line) (string, json.RawMessage) {
+	if entry.Type == "user" || entry.Type == "assistant" {
+		var message struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal(entry.Message, &message); err != nil {
+			return entry.Type, nil
+		}
+		return firstNonEmpty(message.Role, entry.Type), message.Content
+	}
+
+	if entry.Type == "response_item" && entry.Payload.Type == "message" {
+		// A Codex transcript replays the whole prompt, including the instructions
+		// the agent sends itself. Those are not part of the conversation.
+		if entry.Payload.Role == "developer" || entry.Payload.Role == "system" {
+			return "", nil
+		}
+		return entry.Payload.Role, entry.Payload.Content
+	}
+	return "", nil
+}
+
+// preambles start the context an agent injects into the first user turn. A
+// session is remembered by what was asked, so a turn opening with one of these
+// is passed over and the next one is tried.
+var preambles = []string{
+	"<",
+	"Here is a list of plugins",
+	"Caveat:",
+	"This session is being continued",
+	"<system-reminder>",
+	"<environment_details>",
+}
+
+// usableTitle returns the message only when it reads like something a person
+// typed, so that the injected context does not become every session's name.
+func usableTitle(content json.RawMessage) string {
+	text := title(content)
+	for _, preamble := range preambles {
+		if strings.HasPrefix(text, preamble) {
+			return ""
+		}
+	}
+	return text
+}
+
+// title turns a message body into one line. Both formats allow a plain string
+// or a list of typed parts, and only the text parts are worth showing.
+func title(content json.RawMessage) string {
+	if len(content) == 0 {
+		return ""
+	}
+
+	var text string
+	if err := json.Unmarshal(content, &text); err == nil {
+		return trimTitle(text)
+	}
+
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(content, &parts); err != nil {
+		return ""
+	}
+	for _, part := range parts {
+		if strings.TrimSpace(part.Text) != "" {
+			return trimTitle(part.Text)
+		}
+	}
+	return ""
+}
+
+func trimTitle(text string) string {
+	text = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(text, "\r", " "), "\n", " "))
+	// A pasted file or a command wrapper starts with a tag the reader does not
+	// need, and it would fill the whole line.
+	if strings.HasPrefix(text, "<") {
+		if end := strings.Index(text, ">"); end > 0 && end < len(text)-1 {
+			text = strings.TrimSpace(text[end+1:])
+		}
+	}
+
+	runes := []rune(text)
+	if len(runes) > maxTitleRunes {
+		return string(runes[:maxTitleRunes]) + "..."
+	}
+	return string(runes)
+}
+
+// sessionKeyFromName reads the id out of a transcript's file name:
+// "<uuid>.jsonl" for Claude Code, "rollout-<date>-<uuid>.jsonl" for Codex.
+func sessionKeyFromName(name string) string {
+	base := strings.TrimSuffix(name, ".jsonl")
+	const uuidLength = 36
+	if len(base) >= uuidLength {
+		if candidate := base[len(base)-uuidLength:]; strings.Count(candidate, "-") == 4 {
+			return candidate
+		}
+	}
+	return base
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}

@@ -178,8 +178,13 @@ export function originTitle(item: AgentConfigItem) {
   return i18next.t("agentConfig:From a plugin detail").replace("{plugin}", item.origin || "");
 }
 
+/** 2000-01-01: below this an mtime was never really set. */
+const earliestPlausibleModified = 946684800;
+
 export function formatModified(modified: number | undefined) {
-  if (!modified) {
+  // Some packaging tools unpack files with the mtime zeroed, and "1/1/1970" as
+  // the date of a skill reads as a bug rather than as "nobody recorded one".
+  if (!modified || modified < earliestPlausibleModified) {
     return "";
   }
   return new Date(modified * 1000).toLocaleString();

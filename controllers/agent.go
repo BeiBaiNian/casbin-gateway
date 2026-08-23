@@ -18,10 +18,13 @@ import (
 	"encoding/json"
 	"net"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/apache/casbin-gateway/agent"
+	"github.com/apache/casbin-gateway/agenthistory"
+	"github.com/apache/casbin-gateway/agenthome"
 	"github.com/apache/casbin-gateway/agentmonitor"
 	"github.com/apache/casbin-gateway/agentpatch"
 	"github.com/apache/casbin-gateway/agentprovider"
@@ -190,9 +193,68 @@ func (c *ApiController) GetAgentSessions() {
 	if c.RequireAdmin() {
 		return
 	}
-	c.ResponseOk(agentmonitor.ListSessions(agentmonitor.RecordQuery{
-		Agent: c.Input().Get("agent"),
-	}))
+
+	agentId := c.Input().Get("agent")
+	live := agentmonitor.ListSessions(agentmonitor.RecordQuery{Agent: agentId})
+
+	// The transcripts on disk are the sessions that already happened, so they
+	// are listed next to the monitored ones rather than only after Patch.
+	sessions := make([]agenthistory.Session, 0, len(live))
+	seen := map[string]bool{}
+	for _, session := range live {
+		seen[sessionSeenKey(session.Agent, session.SessionKey)] = true
+		sessions = append(sessions, agenthistory.Session{
+			Agent:       session.Agent,
+			SessionKey:  session.SessionKey,
+			Title:       session.Title,
+			RecordCount: session.RecordCount,
+			FirstTime:   session.FirstTime,
+			LastTime:    session.LastTime,
+		})
+	}
+	for _, session := range historicalSessions(agentId) {
+		if seen[sessionSeenKey(session.Agent, session.SessionKey)] {
+			continue
+		}
+		sessions = append(sessions, session)
+	}
+
+	sort.SliceStable(sessions, func(left, right int) bool {
+		return sessions[left].LastTime > sessions[right].LastTime
+	})
+	c.ResponseOk(sessions)
+}
+
+// sessionSeenKey identifies one session across the two sources, so a session
+// that monitoring already reported is not listed twice.
+func sessionSeenKey(agentId string, sessionKey string) string {
+	return agentId + "/" + sessionKey
+}
+
+// historicalSessions reads the transcripts of every account with an agent on
+// this machine. A home Gateway cannot open is skipped: the page lists what it
+// can read, and says nothing about the rest.
+func historicalSessions(agentId string) []agenthistory.Session {
+	installations, err := agent.Scan(false)
+	if err != nil {
+		return nil
+	}
+
+	sessions := []agenthistory.Session{}
+	scanned := map[string]bool{}
+	for _, installation := range installations {
+		home, err := agenthome.Resolve(installation.Owner)
+		if err != nil || scanned[home] {
+			continue
+		}
+		scanned[home] = true
+		for _, session := range agenthistory.Scan(home) {
+			if agentId == "" || strings.EqualFold(session.Agent, agentId) {
+				sessions = append(sessions, session)
+			}
+		}
+	}
+	return sessions
 }
 
 // AddAgentRecord accepts reports from a hook or MCP process launched locally by

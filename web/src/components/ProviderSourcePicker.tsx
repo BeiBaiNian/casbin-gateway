@@ -13,10 +13,11 @@
 // limitations under the License.
 
 import * as React from "react";
-import {KeyRound, LogIn, Search, Settings2} from "lucide-react";
+import {KeyRound, Link2, LogIn, Search, Settings2} from "lucide-react";
 import i18next from "i18next";
 
 import {ProviderIcon} from "@/components/ProviderIcon";
+import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {
   providerSources,
@@ -93,8 +94,25 @@ function SourceCard({source, onPick}: {source: ProviderSource; onPick: (source: 
  * hosting other people's, a site reselling many — because that is the thing
  * worth knowing about one, and there are too many of them to read as one list.
  */
-export function ProviderSourcePicker({onPick}: {onPick: (source: ProviderSource) => void}) {
+export function ProviderSourcePicker({
+  onPick,
+  onLink,
+}: {
+  onPick: (source: ProviderSource) => void;
+  /** A vendor's own "add this provider" link, pasted rather than typed out. */
+  onLink?: (link: string) => Promise<void>;
+}) {
   const [query, setQuery] = React.useState("");
+  const [link, setLink] = React.useState("");
+  const [importing, setImporting] = React.useState(false);
+
+  const importLink = () => {
+    if (onLink === undefined || link.trim() === "") {
+      return;
+    }
+    setImporting(true);
+    onLink(link.trim()).then(() => setImporting(false));
+  };
 
   const needle = query.trim().toLowerCase();
   const matches = (source: ProviderSource) =>
@@ -126,8 +144,37 @@ export function ProviderSourcePicker({onPick}: {onPick: (source: ProviderSource)
         </div>
       </div>
 
+      {onLink === undefined ? null : (
+        <div className="grid gap-1.5 rounded-lg border border-dashed p-3">
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <Link2 className="size-4" />
+            {i18next.t("provider:Paste a provider link")}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              value={link}
+              onChange={event => setLink(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  importLink();
+                }
+              }}
+              placeholder="ccswitch://v1/import?resource=provider&..."
+              className="min-w-0 flex-1"
+            />
+            <Button type="button" variant="outline" loading={importing} onClick={importLink}>
+              {i18next.t("provider:Read the link")}
+            </Button>
+          </div>
+          <span className="text-muted-foreground text-xs">
+            {i18next.t("provider:Paste a provider link hint")}
+          </span>
+        </div>
+      )}
+
       {leading.length === 0 ? null : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {leading.map(source => (
             <SourceCard key={source.key} source={source} onPick={onPick} />
           ))}
@@ -139,7 +186,7 @@ export function ProviderSourcePicker({onPick}: {onPick: (source: ProviderSource)
           <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
             {categoryTitle(group.category)}
           </span>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {group.sources.map(source => (
               <SourceCard key={source.key} source={source} onPick={onPick} />
             ))}

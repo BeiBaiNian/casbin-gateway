@@ -41,6 +41,11 @@ export function addProvider(provider: Provider) {
   return request("/api/add-provider", "POST", provider);
 }
 
+/** What a vendor's "add this provider" link says, without storing any of it. */
+export function parseProviderLink(link: string) {
+  return request<Provider>("/api/parse-provider-link", "POST", {link: link});
+}
+
 export function updateProvider(owner: string, name: string, provider: Provider) {
   return request(`/api/update-provider${query({id: itemId(owner, name)})}`, "POST", provider);
 }

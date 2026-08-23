@@ -136,14 +136,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <StatisticCard title={i18next.t("general:Total Request Count")} value={totalRequestCount} />
         <div className="lg:col-span-3">
           <BarChartCard title="Request Count Over Time" data={requestCountOverTime} />
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <div className="lg:col-span-3">
           <PieChartCard
             title="Sites"
@@ -153,7 +153,7 @@ export default function DashboardPage() {
         <StatisticCard title={i18next.t("general:Unique IP Count")} value={uniqueIpCount} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <DataTable
           columns={[
             {

@@ -110,7 +110,7 @@ export function DetailDialog({
                   {item.digest}
                 </Badge>
               </SimpleTooltip>
-              {item.modified ? (
+              {formatModified(item.modified) ? (
                 <span className="text-muted-foreground">
                   {`${i18next.t("agentConfig:Changed")} ${formatModified(item.modified)}`}
                 </span>

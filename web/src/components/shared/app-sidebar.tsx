@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import * as React from "react";
 import {Link} from "react-router-dom";
 import {ChevronDown, type LucideIcon} from "lucide-react";
 import i18next from "i18next";
@@ -43,6 +44,23 @@ export function persistOpenKeys(keys: string[]) {
   } catch {
     // Private-mode storage failures must not take the navigation down.
   }
+}
+
+/** Tailwind's md breakpoint, in JS, for the decisions CSS cannot make. */
+export function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = React.useState(
+    () => typeof window === "undefined" || window.matchMedia("(min-width: 768px)").matches,
+  );
+
+  React.useEffect(() => {
+    const query = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return isDesktop;
 }
 
 function NavLink({
@@ -98,6 +116,8 @@ export function AppSidebar({
   onOpenKeysChange,
   isAdmin,
   gatewayEnabled,
+  mobileOpen,
+  onMobileOpenChange,
 }: {
   collapsed: boolean;
   selectedKey: string;
@@ -105,7 +125,15 @@ export function AppSidebar({
   onOpenKeysChange: (keys: string[]) => void;
   isAdmin: boolean;
   gatewayEnabled: boolean;
+  /** On a narrow screen the rail is a drawer instead, and this is whether it is out. */
+  mobileOpen: boolean;
+  onMobileOpenChange: (open: boolean) => void;
 }) {
+  // Below md the rail is a full-width drawer, where icons without labels would
+  // be a worse menu than the one there is room for.
+  const isDesktop = useIsDesktop();
+  const railCollapsed = collapsed && isDesktop;
+
   const toggleGroup = (key: string) => {
     onOpenKeysChange(openKeys.includes(key) ? openKeys.filter(item => item !== key) : [...openKeys, key]);
   };
@@ -118,88 +146,105 @@ export function AppSidebar({
     .filter(group => !group.children || group.children.length > 0);
 
   return (
-    <aside
-      className={cn(
-        "bg-sidebar fixed inset-y-0 left-0 z-40 flex flex-col border-r transition-[width] duration-200",
-        collapsed ? "w-16" : "w-64",
-      )}
-    >
-      <div className={cn("flex h-13 shrink-0 items-center border-b", collapsed ? "justify-center px-0" : "px-5")}>
-        <Link to="/" className="flex items-center overflow-hidden">
-          <img
-            src={`${Setting.StaticBaseUrl}/img/logo_384x96.png`}
-            alt="Casbin Gateway"
-            className={cn("w-auto object-contain transition-all", collapsed ? "h-5" : "h-7 max-w-[150px]")}
-          />
-        </Link>
-      </div>
+    <>
+      {/* Below md the rail slides over the page, so it needs something to
+          dismiss it that is not one of its own links. */}
+      <div
+        className={cn(
+          "fixed inset-0 z-30 bg-black/40 md:hidden",
+          mobileOpen ? "block" : "hidden",
+        )}
+        onClick={() => onMobileOpenChange(false)}
+      />
+      {/* Slid in and out on "left" rather than a transform: the rail is a
+          tooltip anchor, and a transformed ancestor moves those with it. */}
+      <aside
+        className={cn(
+          "bg-sidebar fixed inset-y-0 z-40 flex w-64 flex-col border-r transition-[left,width] duration-200 md:left-0",
+          collapsed ? "md:w-16" : "md:w-64",
+          mobileOpen ? "left-0" : "-left-64",
+        )}
+      >
+        <div className={cn("flex h-13 shrink-0 items-center border-b px-5", railCollapsed && "justify-center px-0")}>
+          <Link to="/" className="flex items-center overflow-hidden">
+            <img
+              src={`${Setting.StaticBaseUrl}/img/logo_384x96.png`}
+              alt="Casbin Gateway"
+              className={cn("w-auto object-contain transition-all", railCollapsed ? "h-5" : "h-7 max-w-[150px]")}
+            />
+          </Link>
+        </div>
 
-      <nav className="scrollbar-thin flex-1 space-y-0.5 overflow-y-auto p-2">
-        {groups.map(group => {
-          if (!group.children) {
+        <nav
+          className="scrollbar-thin flex-1 space-y-0.5 overflow-y-auto p-2"
+          onClick={() => onMobileOpenChange(false)}
+        >
+          {groups.map(group => {
+            if (!group.children) {
+              return (
+                <NavLink
+                  key={group.key}
+                  to={group.path ?? group.key}
+                  active={selectedKey === group.key}
+                  collapsed={railCollapsed}
+                  icon={group.icon}
+                  label={i18next.t(group.label)}
+                />
+              );
+            }
+
+            const groupLabel = i18next.t(group.label);
+            const isOpen = openKeys.includes(group.key);
+            const hasActiveChild = group.children.some(child => child.key === selectedKey);
+
+            if (railCollapsed) {
+              return (
+                <NavLink
+                  key={group.key}
+                  to={group.children[0].path}
+                  active={hasActiveChild}
+                  collapsed
+                  icon={group.icon}
+                  label={groupLabel}
+                />
+              );
+            }
+
             return (
-              <NavLink
-                key={group.key}
-                to={group.path ?? group.key}
-                active={selectedKey === group.key}
-                collapsed={collapsed}
-                icon={group.icon}
-                label={i18next.t(group.label)}
-              />
+              <div key={group.key}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.key)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                    hasActiveChild ? "text-sidebar-foreground font-medium" : "text-sidebar-foreground/70",
+                    "hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                  )}
+                  aria-expanded={isOpen}
+                >
+                  {group.icon ? <group.icon className="size-4 shrink-0" /> : null}
+                  <span className="flex-1 truncate text-left">{groupLabel}</span>
+                  <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", isOpen && "rotate-180")} />
+                </button>
+                {isOpen ? (
+                  <div className="mt-0.5 space-y-0.5">
+                    {group.children.map(child => (
+                      <NavLink
+                        key={child.key}
+                        to={child.path}
+                        active={selectedKey === child.key}
+                        collapsed={false}
+                        label={i18next.t(child.label)}
+                        nested
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             );
-          }
-
-          const groupLabel = i18next.t(group.label);
-          const isOpen = openKeys.includes(group.key);
-          const hasActiveChild = group.children.some(child => child.key === selectedKey);
-
-          if (collapsed) {
-            return (
-              <NavLink
-                key={group.key}
-                to={group.children[0].path}
-                active={hasActiveChild}
-                collapsed
-                icon={group.icon}
-                label={groupLabel}
-              />
-            );
-          }
-
-          return (
-            <div key={group.key}>
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.key)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-                  hasActiveChild ? "text-sidebar-foreground font-medium" : "text-sidebar-foreground/70",
-                  "hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-                )}
-                aria-expanded={isOpen}
-              >
-                {group.icon ? <group.icon className="size-4 shrink-0" /> : null}
-                <span className="flex-1 truncate text-left">{groupLabel}</span>
-                <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", isOpen && "rotate-180")} />
-              </button>
-              {isOpen ? (
-                <div className="mt-0.5 space-y-0.5">
-                  {group.children.map(child => (
-                    <NavLink
-                      key={child.key}
-                      to={child.path}
-                      active={selectedKey === child.key}
-                      collapsed={false}
-                      label={i18next.t(child.label)}
-                      nested
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </nav>
-    </aside>
+          })}
+        </nav>
+      </aside>
+    </>
   );
 }
