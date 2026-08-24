@@ -92,6 +92,22 @@ func (c *ApiController) GetLlmRecordStats() {
 	c.ResponseOk(stats)
 }
 
+// GetLlmAgentStats totals what each agent has relayed, for the page that lists
+// every agent side by side.
+func (c *ApiController) GetLlmAgentStats() {
+	if c.RequireAdmin() {
+		return
+	}
+
+	stats, err := object.GetLlmAgentStats(c.readLlmRecordFilter())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(stats)
+}
+
 // StreamLlmRecords pushes records to the page as they are written, so what a
 // model is being sent is visible while it happens rather than on the next
 // refresh.

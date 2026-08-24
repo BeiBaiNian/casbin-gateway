@@ -115,6 +115,19 @@ type LlmProviderStat struct {
 	Cost     float64 `json:"cost"`
 }
 
+// LlmAgentStat is one agent's share of the records, with what it last asked
+// for: the page listing every agent shows the model in use, not only totals.
+type LlmAgentStat struct {
+	Agent        string  `json:"agent"`
+	Requests     int64   `json:"requests"`
+	Failed       int64   `json:"failed"`
+	Tokens       int64   `json:"tokens"`
+	Cost         float64 `json:"cost"`
+	LastTime     string  `json:"lastTime"`
+	LastModel    string  `json:"lastModel"`
+	LastProvider string  `json:"lastProvider"`
+}
+
 // LlmRecordStats totals the records a filter matches.
 type LlmRecordStats struct {
 	Requests         int64             `json:"requests"`
@@ -625,6 +638,50 @@ func GetLlmRecordStats(filter LlmRecordFilter, topModels int) (*LlmRecordStats, 
 		Find(&stats.Providers)
 	if err != nil {
 		return nil, err
+	}
+	return stats, nil
+}
+
+// GetLlmAgentStats totals every agent at once, so a page showing them side by
+// side asks once rather than once per agent.
+func GetLlmAgentStats(filter LlmRecordFilter) ([]*LlmAgentStat, error) {
+	session := llmRecordSession(filter)
+	defer session.Close()
+	stats := []*LlmAgentStat{}
+	err := session.Table("llm_record").
+		Select("agent as agent, COUNT(*) as requests, " +
+			"SUM(CASE WHEN status >= 200 AND status < 300 THEN 0 ELSE 1 END) as failed, " +
+			"SUM(total_tokens) as tokens, SUM(cost) as cost").
+		Where("agent <> ''").
+		GroupBy("agent").
+		Desc("requests").
+		Find(&stats)
+	if err != nil {
+		return nil, err
+	}
+
+	// The newest record of each agent carries the model and provider that agent
+	// is on right now, which no total can say.
+	lastSession := llmRecordSession(filter)
+	defer lastSession.Close()
+	last := []*LlmAgentStat{}
+	err = lastSession.Table("llm_record").
+		Select("agent as agent, model as last_model, provider as last_provider, created_time as last_time").
+		Where("id in (select max(id) from llm_record where agent <> '' group by agent)").
+		Find(&last)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, stat := range stats {
+		for _, item := range last {
+			if item.Agent == stat.Agent {
+				stat.LastModel = item.LastModel
+				stat.LastProvider = item.LastProvider
+				stat.LastTime = item.LastTime
+				break
+			}
+		}
 	}
 	return stats, nil
 }

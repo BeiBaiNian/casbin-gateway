@@ -14,7 +14,7 @@
 
 import {query, request} from "@/backend/request";
 import {ServerUrl} from "@/Setting";
-import type {LlmPrice, LlmRecord, LlmRecordStats, LlmRecordStatus} from "@/types";
+import type {LlmAgentStat, LlmPrice, LlmRecord, LlmRecordStats, LlmRecordStatus} from "@/types";
 
 export interface LlmRecordFilter {
   model?: string;
@@ -39,6 +39,11 @@ export function getLlmRecord(id: number) {
 
 export function getLlmRecordStats(filter: LlmRecordFilter = {}) {
   return request<LlmRecordStats>(`/api/get-llm-record-stats${query({...filter})}`);
+}
+
+/** The same totals per agent, in one request rather than one request each. */
+export function getLlmAgentStats(filter: LlmRecordFilter = {}) {
+  return request<LlmAgentStat[]>(`/api/get-llm-agent-stats${query({...filter})}`);
 }
 
 /**

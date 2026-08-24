@@ -410,6 +410,18 @@ export interface LlmRecordStats {
   providers: LlmProviderStat[];
 }
 
+/** One agent's share of the relayed requests, with what it last asked for. */
+export interface LlmAgentStat {
+  agent: string;
+  requests: number;
+  failed: number;
+  tokens: number;
+  cost: number;
+  lastTime: string;
+  lastModel: string;
+  lastProvider: string;
+}
+
 export interface MetricPoint {
   data: string;
   count: number;

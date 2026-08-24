@@ -585,6 +585,7 @@
     "Paste a provider link": "Paste a provider link",
     "Paste a provider link hint": "Vendors publish these as \"add to CC Switch\" buttons. Gateway reads the same link and fills the form in below, and stores nothing until you confirm.",
     "Path hint": "A dotted path into the answer, where a number indexes an array: balance_infos.0.total_balance.",
+    "Plan usage": "Plan usage",
     "Preset": "Preset",
     "Preset hint": "Fills in the paths for a family of sites, so they do not have to be read out of the vendor's API documentation.",
     "Priority": "Priority",
