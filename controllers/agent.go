@@ -98,7 +98,8 @@ func (c *ApiController) GetAgents() {
 // An installation whose configuration file Gateway already wrote is rewritten
 // here: in gateway mode the file does not change, which is what makes a switch
 // take effect without restarting the agent, but in direct mode the new provider
-// only reaches the agent through its own configuration.
+// only reaches the agent through its own configuration. Unbinding the agent
+// puts that configuration back the way it was found.
 func (c *ApiController) UpdateAgentRouting() {
 	if c.RequireAdmin() {
 		return
@@ -129,11 +130,14 @@ func (c *ApiController) UpdateAgentRouting() {
 		return
 	}
 
-	if form.Provider != "" {
-		if failure := reapplyAgentProvider(form.AgentId); failure != "" {
-			c.ResponseError("the routing was saved, but the agent configuration was not rewritten: " + failure)
+	if form.Provider == "" {
+		if failure := restoreAgentProvider(form.AgentId); failure != "" {
+			c.ResponseError("the routing was cleared, but the agent configuration was not restored: " + failure)
 			return
 		}
+	} else if failure := reapplyAgentProvider(form.AgentId); failure != "" {
+		c.ResponseError("the routing was saved, but the agent configuration was not rewritten: " + failure)
+		return
 	}
 	c.ResponseOk(form.Provider)
 }

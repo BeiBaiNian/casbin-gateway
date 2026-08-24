@@ -28,9 +28,15 @@ const (
 	// codexProviderName is the model provider Gateway owns in config.toml.
 	// Everything else in the file, including other providers, is left alone.
 	codexProviderName = "casbin-gateway"
-	// codexAuthKey is where Codex reads the key of a provider whose env_key is
-	// not exported in the shell.
+	// codexAuthKey is the auth.json entry an older release wrote the key to.
+	// Codex reads it only while signed in with an API key: a user signed in
+	// through ChatGPT got "Missing environment variable: OPENAI_API_KEY"
+	// instead, so the key now travels in the header below.
 	codexAuthKey = "OPENAI_API_KEY"
+	// codexAuthHeader carries the key on every request Codex sends to the
+	// provider, which is the one place Codex reads it from without an
+	// environment variable and without a sign-in of its own.
+	codexAuthHeader = "Authorization"
 )
 
 // The keys of the root table Gateway owns, remembered under these names.
@@ -38,12 +44,19 @@ const (
 	codexModelProviderKey = "model_provider"
 	codexModelKey         = "model"
 	codexAuthStateKey     = "auth." + codexAuthKey
+	// codexHeaderStateKey marks a state Gateway wrote without touching
+	// auth.json. A state without it comes from the release that did, and only
+	// that one has an auth.json entry to put back.
+	codexHeaderStateKey = "auth.inHeader"
 )
 
-var codexProviderPath = []string{"model_providers", codexProviderName}
+var (
+	codexProviderPath = []string{"model_providers", codexProviderName}
+	codexHeaderPath   = []string{"model_providers", codexProviderName, "http_headers"}
+)
 
 // errCodexNoKey rejects a provider that forwards the caller's own credentials:
-// Codex reads its key from auth.json, so there is nothing for this provider
+// Codex sends the key Gateway writes, so there is nothing for this provider
 // entry to forward.
 var errCodexNoKey = errors.New("Codex needs an API key, so it cannot use a provider that forwards the credentials of the caller")
 
@@ -83,15 +96,12 @@ func (w codexWriter) Plan(target Target, endpoint Endpoint) ([]File, error) {
 	if endpoint.Model != "" {
 		config = tomlSetRootKey(config, codexModelKey, endpoint.Model)
 	}
-	config = tomlTidy(tomlAppend(config, w.providerTable(endpoint)))
+	preview := endpoint
+	preview.ApiKey = maskSecret(endpoint.ApiKey)
+	config = tomlTidy(tomlAppend(config, w.providerTable(preview)))
 
-	auth, err := encodeJSON(map[string]any{codexAuthKey: maskSecret(endpoint.ApiKey)})
-	if err != nil {
-		return nil, err
-	}
 	return []File{
 		{Path: filepath.Join(home, "config.toml"), Format: "toml", Preview: config},
-		{Path: filepath.Join(home, "auth.json"), Format: "json", Preview: string(auth)},
 	}, nil
 }
 
@@ -100,7 +110,7 @@ func (w codexWriter) Apply(target Target, endpoint Endpoint) (map[string]string,
 		return nil, err
 	}
 
-	configPath, authPath, err := w.paths(target)
+	configPath, _, err := w.paths(target)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +124,11 @@ func (w codexWriter) Apply(target Target, endpoint Endpoint) (map[string]string,
 		return nil, err
 	}
 
-	previous := map[string]string{}
-	if value, ok := document[codexModelProviderKey].(string); ok {
+	previous := map[string]string{codexHeaderStateKey: "1"}
+	// The CLI and the VS Code integration share one ~/.codex, so the selection
+	// found here can be Gateway's own from the other one, which is not what a
+	// restore should put back.
+	if value, ok := document[codexModelProviderKey].(string); ok && value != codexProviderName {
 		previous[codexModelProviderKey] = value
 	}
 	if value, ok := document[codexModelKey].(string); ok {
@@ -129,25 +142,8 @@ func (w codexWriter) Apply(target Target, endpoint Endpoint) (map[string]string,
 	}
 	text = tomlAppend(text, w.providerTable(endpoint))
 
-	auth, _, err := readJSON(authPath)
-	if err != nil {
-		return nil, err
-	}
-	if value, ok := auth[codexAuthKey].(string); ok {
-		previous[codexAuthStateKey] = value
-	}
-	auth[codexAuthKey] = endpoint.ApiKey
-	authData, err := encodeJSON(auth)
-	if err != nil {
-		return nil, err
-	}
-
 	changes := &txn{}
 	if err := changes.write(configPath, []byte(text)); err != nil {
-		changes.abort()
-		return nil, err
-	}
-	if err := changes.write(authPath, authData); err != nil {
 		changes.abort()
 		return nil, err
 	}
@@ -169,7 +165,13 @@ func (w codexWriter) Restore(target Target, previous map[string]string) error {
 	}
 	text := tomlCutTable(string(data), codexProviderPath...)
 	for _, key := range []string{codexModelProviderKey, codexModelKey} {
-		if value, ok := previous[key]; ok {
+		value, ok := previous[key]
+		// A state that recorded Gateway's own entry, from the installation
+		// sharing this file, would leave the agent switched if it were put back.
+		if key == codexModelProviderKey && value == codexProviderName {
+			ok = false
+		}
+		if ok {
 			text = tomlSetRootKey(text, key, value)
 		} else {
 			text = tomlDeleteRootKey(text, key)
@@ -177,28 +179,34 @@ func (w codexWriter) Restore(target Target, previous map[string]string) error {
 	}
 	text = strings.TrimLeft(text, "\n")
 
-	auth, _, err := readJSON(authPath)
-	if err != nil {
-		return err
-	}
-	if value, ok := previous[codexAuthStateKey]; ok {
-		auth[codexAuthKey] = value
-	} else {
-		delete(auth, codexAuthKey)
-	}
-	authData, err := encodeJSON(auth)
-	if err != nil {
-		return err
-	}
-
 	changes := &txn{}
 	if err := changes.write(configPath, []byte(text)); err != nil {
 		changes.abort()
 		return err
 	}
-	if err := changes.write(authPath, authData); err != nil {
-		changes.abort()
-		return err
+
+	// Only a state from the release that put the key in auth.json has one to
+	// take back out; a newer one never opened the file.
+	if _, inHeader := previous[codexHeaderStateKey]; !inHeader {
+		auth, _, err := readJSON(authPath)
+		if err != nil {
+			changes.abort()
+			return err
+		}
+		if value, ok := previous[codexAuthStateKey]; ok {
+			auth[codexAuthKey] = value
+		} else {
+			delete(auth, codexAuthKey)
+		}
+		authData, err := encodeJSON(auth)
+		if err != nil {
+			changes.abort()
+			return err
+		}
+		if err := changes.write(authPath, authData); err != nil {
+			changes.abort()
+			return err
+		}
 	}
 	return changes.commit()
 }
@@ -242,17 +250,21 @@ func (codexWriter) check(endpoint Endpoint) error {
 	return nil
 }
 
-// providerTable is the [model_providers.casbin-gateway] block. The key lives in
-// auth.json under env_key, so config.toml can be read without exposing it.
+// providerTable is the [model_providers.casbin-gateway] block, followed by the
+// header sub-table carrying the key. env_key would send Codex looking for an
+// environment variable no shell exports, so the key is written here instead.
 func (codexWriter) providerTable(endpoint Endpoint) string {
-	return tomlTable(codexProviderPath,
-		[]string{"name", "base_url", "wire_api", "env_key"},
+	table := tomlTable(codexProviderPath,
+		[]string{"name", "base_url", "wire_api"},
 		map[string]string{
 			"name":     "Casbin Gateway",
 			"base_url": endpoint.BaseUrl,
 			"wire_api": "responses",
-			"env_key":  codexAuthKey,
 		})
+	headers := tomlTable(codexHeaderPath,
+		[]string{codexAuthHeader},
+		map[string]string{codexAuthHeader: "Bearer " + endpoint.ApiKey})
+	return table + "\n" + headers
 }
 
 func (codexWriter) decode(path string, data []byte) (map[string]any, error) {

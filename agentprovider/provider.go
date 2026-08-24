@@ -166,17 +166,19 @@ func Apply(target Target, endpoint Endpoint) error {
 // Restore puts back the provider settings the agent had before the first Apply
 // and forgets the installation. It is a no-op when Gateway never switched it.
 func Restore(target Target) error {
-	value, ok := writers[target.AgentId]
-	if !ok {
-		return fmt.Errorf("%s: %w", target.AgentId, ErrNotSupported)
-	}
-
 	writerMutex.Lock()
 	defer writerMutex.Unlock()
 
+	// An installation Gateway never switched has nothing to put back, whether
+	// or not its format is one Gateway can write.
 	saved, err := loadState(target)
 	if err != nil || saved == nil {
 		return err
+	}
+
+	value, ok := writers[target.AgentId]
+	if !ok {
+		return fmt.Errorf("%s: %w", target.AgentId, ErrNotSupported)
 	}
 	if err := value.Restore(target, saved.Previous); err != nil {
 		return err

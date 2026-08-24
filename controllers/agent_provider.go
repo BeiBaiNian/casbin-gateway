@@ -215,6 +215,28 @@ func reapplyAgentProvider(agentId string) string {
 	return strings.Join(failures, "; ")
 }
 
+// restoreAgentProvider puts back the configuration of every installation
+// Gateway wrote, which is what unbinding an agent means for the files it left
+// behind: they would otherwise keep pointing at a gateway URL that no longer
+// has a provider to forward to.
+func restoreAgentProvider(agentId string) string {
+	installations, err := agent.Scan(false)
+	if err != nil {
+		return err.Error()
+	}
+
+	failures := []string{}
+	for _, installation := range installations {
+		if installation.AgentId != agentId {
+			continue
+		}
+		if err := agentprovider.Restore(providerTarget(targetOf(installation))); err != nil {
+			failures = append(failures, err.Error())
+		}
+	}
+	return strings.Join(failures, "; ")
+}
+
 func providerTarget(target agentpatch.Target) agentprovider.Target {
 	return agentprovider.Target{AgentId: target.AgentId, Path: target.Path, Owner: target.Owner}
 }
