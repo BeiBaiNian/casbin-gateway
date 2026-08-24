@@ -1,0 +1,7 @@
+{
+  "id": "opencode",
+  "displayName": "opencode",
+  "execName": "opencode",
+  "npmPackage": "opencode-ai",
+  "homeDirs": [".opencode/bin"]
+}

@@ -34,6 +34,7 @@ type Fingerprint struct {
 	DesktopInstallerDir string              `json:"desktopInstallerDir,omitempty"`
 	WindowsProgramDirs  []string            `json:"windowsProgramDirs,omitempty"`
 	WindowsUserDirs     []string            `json:"windowsUserDirs,omitempty"`
+	HomeDirs            []string            `json:"homeDirs,omitempty"`
 	HomebrewCasks       []string            `json:"homebrewCasks,omitempty"`
 	SystemPackage       string              `json:"systemPackage,omitempty"`
 	BuildInfoModule     string              `json:"buildInfoModule,omitempty"`

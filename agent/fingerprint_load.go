@@ -122,7 +122,7 @@ func hasScanSource(f Fingerprint) bool {
 	}
 	return f.StateDir != "" || f.NpmPackage != "" || f.WingetPackage != "" ||
 		f.MSIXFamily != "" || f.DesktopInstallerDir != "" ||
-		len(f.WindowsProgramDirs) != 0 || len(f.WindowsUserDirs) != 0 ||
+		len(f.WindowsProgramDirs) != 0 || len(f.WindowsUserDirs) != 0 || len(f.HomeDirs) != 0 ||
 		len(f.HomebrewCasks) != 0 || f.SystemPackage != ""
 }
 

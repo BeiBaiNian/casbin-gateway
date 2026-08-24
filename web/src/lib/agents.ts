@@ -61,6 +61,9 @@ export function agentSetupNoteKey(agentId: string) {
     return "agent:Claude Code config hint";
   case "codex-cli":
     return "agent:Codex CLI config hint";
+  case "opencode":
+  case "opencode-desktop":
+    return "agent:opencode config hint";
   default:
     return "";
   }

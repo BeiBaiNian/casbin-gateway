@@ -55,6 +55,28 @@ func scanNative(fingerprint *Fingerprint, home homeDir) []Installation {
 	}}
 }
 
+// scanHomeDirs reports a launcher an agent's own installer script put in a
+// fixed directory under the home rather than in a shared bin directory.
+func scanHomeDirs(fingerprint *Fingerprint, home homeDir) []Installation {
+	if fingerprint.ExecName == "" {
+		return nil
+	}
+
+	var result []Installation
+	for _, dir := range fingerprint.HomeDirs {
+		launcher := filepath.Join(home.path, filepath.FromSlash(dir), fingerprint.ExecName)
+		info, err := os.Stat(launcher)
+		if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+			continue
+		}
+		result = append(result, Installation{
+			Name: fingerprint.DisplayName, Path: launcher,
+			InstallMethod: "native", Owner: home.owner,
+		})
+	}
+	return result
+}
+
 // userNpmPatterns are the per-user Node package manager layouts that can hold a
 // globally installed agent package, plus any bundled runtime the agent declares.
 func userNpmPatterns(fingerprint *Fingerprint, home string) []string {

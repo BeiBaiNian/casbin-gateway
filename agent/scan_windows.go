@@ -53,6 +53,7 @@ func scan(ctx context.Context) []Installation {
 			installations = append(installations, scanWindowsWinget(ctx, fingerprint, home)...)
 			installations = append(installations, scanWindowsNpm(ctx, fingerprint, home)...)
 			installations = append(installations, scanWindowsUserPrograms(ctx, fingerprint, home)...)
+			installations = append(installations, scanWindowsInstallDirs(ctx, fingerprint, home.path, fingerprint.HomeDirs, home.owner, "native")...)
 		}
 		installations = append(installations, scanWindowsDesktop(ctx, fingerprint, homes)...)
 		installations = append(installations, scanMachineWinget(ctx, fingerprint)...)

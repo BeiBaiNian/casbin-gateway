@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/apache/casbin-gateway/internal/jsonc"
 )
 
 // jsonStore holds MCP servers in a JSON object somewhere in a JSON config file.
@@ -26,6 +28,10 @@ import (
 // the first is where a new entry goes when the file has none of them yet.
 type jsonStore struct {
 	paths [][]string
+	// relaxed reads a file whose agent accepts comments and trailing commas.
+	// Rewriting such a file drops the comments, which is the price of editing
+	// it at all.
+	relaxed bool
 }
 
 func (store *jsonStore) read(file string) (map[string]map[string]any, error) {
@@ -116,6 +122,9 @@ func (store *jsonStore) load(file string) (map[string]any, os.FileMode, bool, er
 	}
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return map[string]any{}, mode, len(data) > 0, nil
+	}
+	if store.relaxed {
+		data = jsonc.Strip(data)
 	}
 
 	config := map[string]any{}

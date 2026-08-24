@@ -42,6 +42,7 @@ func scan(ctx context.Context) []Installation {
 				return installations
 			}
 			installations = append(installations, scanNative(fingerprint, home)...)
+			installations = append(installations, scanHomeDirs(fingerprint, home)...)
 			installations = append(installations, scanNpmPatterns(ctx, fingerprint, userNpmPatterns(fingerprint, home.path), home.owner, fileOwner)...)
 		}
 		for _, prefix := range []string{"/opt/homebrew", "/usr/local"} {

@@ -15,7 +15,7 @@
 package agentpatch
 
 func init() {
-	for _, id := range []string{"cursor", "cursor-agent", "windsurf"} {
+	for _, id := range []string{"cursor", "cursor-agent", "windsurf", "opencode", "opencode-desktop"} {
 		register(unimplemented{id: id})
 	}
 }

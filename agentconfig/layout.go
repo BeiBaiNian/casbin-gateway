@@ -179,6 +179,8 @@ var layouts = map[string]layout{
 			store: &jsonStore{paths: [][]string{{"mcp", "servers"}, {"mcp", "mcpServers"}, {"mcpServers"}}},
 		},
 	},
+	"opencode":         opencodeLayout,
+	"opencode-desktop": opencodeLayout,
 }
 
 var codexLayout = layout{
@@ -187,6 +189,16 @@ var codexLayout = layout{
 		pluginSkills(".codex", "plugins"),
 	}},
 	mcp: &mcpLayout{file: under(".codex", "config.toml"), store: &tomlStore{table: "mcp_servers"}},
+}
+
+// The opencode CLI and its desktop app read one ~/.config/opencode, on every
+// platform, so the two ids share a layout.
+var opencodeLayout = layout{
+	skills: &skillLayout{sources: []skillSource{
+		userSkills(".config", "opencode", "skill"),
+		userSkills(".config", "opencode", "skills"),
+	}},
+	mcp: &mcpLayout{file: opencodeConfig, store: newOpencodeStore()},
 }
 
 var cursorLayout = layout{
@@ -224,6 +236,20 @@ func under(segments ...string) func(string) string {
 	return func(home string) string {
 		return filepath.Join(append([]string{home}, segments...)...)
 	}
+}
+
+// opencodeConfig is the config file to edit. opencode reads config.json,
+// opencode.json and opencode.jsonc in that order and merges them, so they are
+// tried here in reverse: the last one present is the one whose settings win. A
+// home with none of them gets the documented name.
+func opencodeConfig(home string) string {
+	dir := filepath.Join(home, ".config", "opencode")
+	for _, name := range []string{"opencode.jsonc", "opencode.json", "config.json"} {
+		if path := filepath.Join(dir, name); exists(path) {
+			return path
+		}
+	}
+	return filepath.Join(dir, "opencode.json")
 }
 
 func claudeDesktopConfig(home string) string {

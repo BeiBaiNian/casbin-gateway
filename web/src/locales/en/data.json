@@ -153,6 +153,7 @@
     "Write confirm hint": "Gateway writes the selected provider into this agent's own configuration file, replacing the file in one step. Restart any session that is already running.",
     "Write the configuration of {agent}?": "Write the configuration of {agent}?",
     "Written by Gateway": "Written by Gateway",
+    "opencode config hint": "opencode reads no base URL from the environment: the endpoint is a \"provider\" entry in ~/.config/opencode/opencode.json, loaded through @ai-sdk/openai-compatible and selected with \"model\": \"<provider>/<model>\".",
     "{count} messages": "{count} messages"
   },
   "agentConfig": {

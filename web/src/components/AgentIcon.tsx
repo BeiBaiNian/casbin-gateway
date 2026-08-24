@@ -26,6 +26,8 @@ const agentSites: Record<string, string> = {
   "Cursor Agent": "cursor.com",
   Windsurf: "windsurf.com",
   OpenAgent: "openagentai.org",
+  opencode: "opencode.ai",
+  "opencode Desktop": "opencode.ai",
   "DeepSeek Harness": "deepseek.com",
 };
 
