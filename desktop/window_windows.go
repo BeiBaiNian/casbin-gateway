@@ -70,7 +70,10 @@ func runWindow(url string) error {
 	}
 	defer view.Destroy()
 
-	setWindowIcon(uintptr(view.Window()))
+	hwnd := uintptr(view.Window())
+	setWindowIcon(hwnd)
+	keepWindowAlive(hwnd)
+
 	view.Navigate(url)
 	view.Run()
 	return nil

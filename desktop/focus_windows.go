@@ -12,11 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package main
 
 import (
+	"sync"
 	"syscall"
 	"unsafe"
+)
+
+// webviewClass is the window class go-webview2 registers. The window is looked
+// up by class rather than by "is it visible", because the whole point is to
+// find it again once closing has hidden it.
+const webviewClass = "webview"
+
+const (
+	swHide    = 0
+	swShow    = 5
+	swRestore = 9
 )
 
 var (
@@ -26,12 +39,11 @@ var (
 	procSetAppId            = shell32.NewProc("SetCurrentProcessExplicitAppUserModelID")
 	procEnumWindows         = user32.NewProc("EnumWindows")
 	procGetWindowThreadPid  = user32.NewProc("GetWindowThreadProcessId")
-	procIsWindowVisible     = user32.NewProc("IsWindowVisible")
+	procGetClassNameW       = user32.NewProc("GetClassNameW")
+	procIsIconic            = user32.NewProc("IsIconic")
 	procShowWindow          = user32.NewProc("ShowWindow")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 )
-
-const swRestore = 9
 
 func setAppUserModelId() {
 	id, err := syscall.UTF16PtrFromString(appId)
@@ -41,30 +53,53 @@ func setAppUserModelId() {
 	_, _, _ = procSetAppId.Call(uintptr(unsafe.Pointer(id)))
 }
 
-// focusWindow raises the window process's own window, so that clicking the tray
-// while it is already open brings it to the front instead of doing nothing.
+// focusWindow shows the window process's own window and raises it, so that
+// clicking the tray brings back the window the user closed — the same one, with
+// the page still loaded — rather than starting over.
 func focusWindow(pid int) {
-	var found uintptr
-
-	callback := syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
-		visible, _, _ := procIsWindowVisible.Call(hwnd)
-		if visible == 0 {
-			return 1
-		}
-		var owner uint32
-		_, _, _ = procGetWindowThreadPid.Call(hwnd, uintptr(unsafe.Pointer(&owner)))
-		if owner != uint32(pid) {
-			return 1
-		}
-		found = hwnd
-		return 0
-	})
-
-	_, _, _ = procEnumWindows.Call(callback, 0)
-	if found == 0 {
+	hwnd := findWindow(pid)
+	if hwnd == 0 {
 		return
 	}
 
-	_, _, _ = procShowWindow.Call(found, swRestore)
-	_, _, _ = procSetForegroundWindow.Call(found)
+	show := uintptr(swShow)
+	if iconic, _, _ := procIsIconic.Call(hwnd); iconic != 0 {
+		show = swRestore
+	}
+	_, _, _ = procShowWindow.Call(hwnd, show)
+	_, _, _ = procSetForegroundWindow.Call(hwnd)
+}
+
+// search is package level because syscall.NewCallback allocates a callback that
+// is never freed, so the enumeration cannot make one per click.
+var search struct {
+	sync.Mutex
+	pid   uint32
+	found uintptr
+}
+
+var enumWindowsCallback = syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
+	var owner uint32
+	_, _, _ = procGetWindowThreadPid.Call(hwnd, uintptr(unsafe.Pointer(&owner)))
+	if owner != search.pid || windowClass(hwnd) != webviewClass {
+		return 1
+	}
+	search.found = hwnd
+	return 0
+})
+
+func findWindow(pid int) uintptr {
+	search.Lock()
+	defer search.Unlock()
+
+	search.pid = uint32(pid)
+	search.found = 0
+	_, _, _ = procEnumWindows.Call(enumWindowsCallback, 0)
+	return search.found
+}
+
+func windowClass(hwnd uintptr) string {
+	var name [64]uint16
+	n, _, _ := procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&name[0])), uintptr(len(name)))
+	return syscall.UTF16ToString(name[:n])
 }

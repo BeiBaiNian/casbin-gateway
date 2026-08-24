@@ -12,44 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package main
 
-import "syscall"
+import (
+	"syscall"
+	"unsafe"
+)
 
 const (
 	wmClose     = 0x0010
-	swHide      = 0
-	swShow      = 5
-	swRestore   = 9
 	gwlpWndProc = ^uintptr(3) // GWLP_WNDPROC, which is -4
 
 	// DWMWA_TRANSITIONS_FORCEDISABLED, which turns off the animation the window
-	// manager plays when a window is shown, hidden or restored.
+	// manager plays when a window is shown, hidden, minimized or restored.
 	dwmTransitionsForceDisabled = 3
 )
 
 var (
 	dwmapi = syscall.NewLazyDLL("dwmapi.dll")
 
-	procSetWindowLongPtrW    = user32.NewProc("SetWindowLongPtrW")
-	procSetWindowLongW       = user32.NewProc("SetWindowLongW")
-	procCallWindowProcW      = user32.NewProc("CallWindowProcW")
-	procDwmSetWindowAttrib   = dwmapi.NewProc("DwmSetWindowAttribute")
-	procIsIconic             = user32.NewProc("IsIconic")
-	procBringWindowToTop     = user32.NewProc("BringWindowToTop")
-	procAttachThreadInput    = user32.NewProc("AttachThreadInput")
-	procGetForegroundWindow  = user32.NewProc("GetForegroundWindow")
-	procGetCurrentThreadId   = kernel32.NewProc("GetCurrentThreadId")
-	kernel32                 = syscall.NewLazyDLL("kernel32.dll")
-	previousWindowProc       uintptr
-	hideOnCloseProcCallback  = syscall.NewCallback(hideOnClose)
+	procSetWindowLongPtrW  = user32.NewProc("SetWindowLongPtrW")
+	procSetWindowLongW     = user32.NewProc("SetWindowLongW")
+	procCallWindowProcW    = user32.NewProc("CallWindowProcW")
+	procDwmSetWindowAttrib = dwmapi.NewProc("DwmSetWindowAttribute")
+
+	previousWindowProc  uintptr
+	hideOnCloseCallback = syscall.NewCallback(hideOnClose)
 )
 
 // keepWindowAlive makes closing the window hide it instead of destroying it.
-// The webview's own window procedure answers WM_CLOSE with DestroyWindow, which
-// ends the run loop and the process with it — which is why reopening from the
-// tray used to reload everything from scratch. Hiding keeps the page loaded, so
-// the window comes back instantly.
+// The webview answers WM_CLOSE with DestroyWindow, which ends the run loop and
+// the process with it — which is why reopening from the tray reloaded the whole
+// UI. Hiding keeps the page loaded, so the window comes back instantly.
 func keepWindowAlive(hwnd uintptr) {
 	if hwnd == 0 {
 		return
@@ -66,7 +61,7 @@ func keepWindowAlive(hwnd uintptr) {
 		return
 	}
 
-	previousWindowProc, _, _ = setLong.Call(hwnd, gwlpWndProc, hideOnCloseProcCallback)
+	previousWindowProc, _, _ = setLong.Call(hwnd, gwlpWndProc, hideOnCloseCallback)
 }
 
 func hideOnClose(hwnd, msg, wparam, lparam uintptr) uintptr {
@@ -88,7 +83,7 @@ func disableWindowAnimations(hwnd uintptr) {
 	_, _, _ = procDwmSetWindowAttrib.Call(
 		hwnd,
 		dwmTransitionsForceDisabled,
-		uintptr(unsafePointerTo(&disabled)),
-		4,
+		uintptr(unsafe.Pointer(&disabled)),
+		unsafe.Sizeof(disabled),
 	)
 }
