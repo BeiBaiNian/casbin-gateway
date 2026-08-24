@@ -10,6 +10,8 @@
 #   INSTALL_DIR   where the executable and its data live
 #                 (default: $env:LOCALAPPDATA\casbin-gateway)
 #   NO_START      set to any value to install without starting Gateway
+#   NO_AUTOSTART  set to any value to skip the login-time startup entry
+#   NO_SHORTCUT   set to any value to skip the desktop and Start menu shortcuts
 
 $ErrorActionPreference = 'Stop'
 
@@ -59,14 +61,17 @@ try {
     Write-Info "Installing to $InstallDir"
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
-    $ExePath = Join-Path $InstallDir 'casbin-gateway.exe'
-    try {
-        Copy-Item -Path (Join-Path $Unpacked 'casbin-gateway.exe') -Destination $ExePath -Force
-    }
-    catch {
-        # Windows locks a running executable, so this is what an upgrade over a
-        # started Gateway looks like.
-        throw "cannot replace $ExePath, stop Casbin Gateway if it is running and try again ($_)"
+    $ExePath        = Join-Path $InstallDir 'casbin-gateway.exe'
+    $DesktopExePath = Join-Path $InstallDir 'casbin-gateway-desktop.exe'
+    foreach ($executable in @('casbin-gateway.exe', 'casbin-gateway-desktop.exe')) {
+        try {
+            Copy-Item -Path (Join-Path $Unpacked $executable) -Destination (Join-Path $InstallDir $executable) -Force
+        }
+        catch {
+            # Windows locks a running executable, so this is what an upgrade over
+            # a started Gateway looks like.
+            throw "cannot replace $executable in $InstallDir, quit Casbin Gateway from its tray icon and try again ($_)"
+        }
     }
 
     foreach ($legalFile in @('LICENSE', 'NOTICE', 'DISCLAIMER')) {
@@ -100,24 +105,47 @@ if ($UserPath -notlike "*$BinDir*") {
     Write-Info "Added $BinDir to your PATH, which takes effect in your next terminal"
 }
 
-# -- start with Windows -------------------------------------------------------
-# A shortcut in the Startup folder rather than a service: it needs no elevation,
-# shows up in Task Manager's Startup tab, and is undone by deleting the file.
-$StartupDir = [System.Environment]::GetFolderPath('Startup')
-$StartupLink = Join-Path $StartupDir 'Casbin Gateway.lnk'
+# ── desktop and Start menu shortcuts ──────────────────────────────────────────
+# Both point at the desktop launcher, not at the server: it is what shows the
+# window, and it starts the server itself if nothing is serving yet.
+$IconPath = & $DesktopExePath icon
+$ShortcutName = 'Casbin Gateway.lnk'
+
+function New-GatewayShortcut {
+    param([string]$Path)
+
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($Path)
+    $shortcut.TargetPath = $DesktopExePath
+    $shortcut.WorkingDirectory = $InstallDir
+    $shortcut.IconLocation = $IconPath
+    $shortcut.Description = 'Casbin Gateway'
+    $shortcut.Save()
+}
+
+if (-not $env:NO_SHORTCUT) {
+    foreach ($dir in @([System.Environment]::GetFolderPath('Desktop'), [System.Environment]::GetFolderPath('Programs'))) {
+        try {
+            New-GatewayShortcut -Path (Join-Path $dir $ShortcutName)
+        }
+        catch {
+            Write-Info "Could not create the shortcut in ${dir}: $_"
+        }
+    }
+}
+
+# ── start with Windows ────────────────────────────────────────────────────────
+# The launcher owns this entry so that the tray's "Start at Login" checkbox and
+# the installer are never out of step. An older install put a shortcut in the
+# Startup folder instead, which would now start a second copy.
+Remove-Item -Path (Join-Path ([System.Environment]::GetFolderPath('Startup')) $ShortcutName) -Force -ErrorAction SilentlyContinue
 if (-not $env:NO_AUTOSTART) {
     try {
-        $shell = New-Object -ComObject WScript.Shell
-        $shortcut = $shell.CreateShortcut($StartupLink)
-        $shortcut.TargetPath = Join-Path $InstallDir 'casbin-gateway.exe'
-        $shortcut.Arguments = 'start'
-        $shortcut.WorkingDirectory = $InstallDir
-        $shortcut.Description = 'Casbin Gateway'
-        $shortcut.Save()
+        & $DesktopExePath autostart on
         Write-Info 'Casbin Gateway will start with Windows.'
     }
     catch {
-        Write-Info "Could not add the startup shortcut: $_"
+        Write-Info "Could not add the startup entry: $_"
     }
 }
 
@@ -125,15 +153,14 @@ Write-Info ''
 Write-Info "Casbin Gateway is installed in $InstallDir"
 Write-Info 'Its database, logs and temporary files stay in that directory.'
 Write-Info 'It serves this machine only, and signs you in there as admin without a password.'
-Write-Info 'Stop it with "casbin-gateway stop", check on it with "casbin-gateway status".'
-Write-Info "Remove the startup entry by deleting $StartupLink"
+Write-Info 'Closing its window leaves it running in the tray; quit it from there.'
+Write-Info 'Without the window: "casbin-gateway start", "casbin-gateway stop", "casbin-gateway status".'
 Write-Info ''
 
 if ($env:NO_START) {
-    Write-Info 'Start it with: casbin-gateway start'
+    Write-Info 'Start it from the "Casbin Gateway" shortcut, or with: casbin-gateway start'
     return
 }
 
-# "start" detaches and returns, so installing does not occupy this terminal.
-Set-Location $InstallDir
-& (Join-Path $InstallDir 'casbin-gateway.exe') start
+# The launcher detaches on its own, so installing does not occupy this terminal.
+Start-Process -FilePath $DesktopExePath -WorkingDirectory $InstallDir

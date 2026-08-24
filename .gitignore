@@ -19,6 +19,12 @@
 
 # Built binaries
 casbin-gateway
+casbin-gateway-desktop
+
+# Written next to the binaries at run time, for the window and the shortcuts
+casbin-gateway.ico
+casbin-gateway.icns
+casbin-gateway.png
 
 # Release and nightly archives, staged here by the workflows
 dist/

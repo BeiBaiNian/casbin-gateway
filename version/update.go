@@ -268,6 +268,11 @@ func runUpdate(release *Release) error {
 		return err
 	}
 
+	// The desktop launcher ships in the same archive. It is replaced after the
+	// server, and separately, so that a failure there leaves an updated Gateway
+	// rather than an aborted update.
+	updateDesktopLauncher(archive, staging, filepath.Dir(executable))
+
 	statusLock.Lock()
 	status.Stage = StageRestarting
 	statusLock.Unlock()
@@ -361,7 +366,13 @@ func CleanupBackup() {
 
 	_ = os.RemoveAll(filepath.Join(filepath.Dir(executable), stagingDir))
 
-	backup := executable + backupSuffix
+	removeWhenUnlocked(executable + backupSuffix)
+	removeWhenUnlocked(filepath.Join(filepath.Dir(executable), desktopLauncherName()+backupSuffix))
+}
+
+// removeWhenUnlocked deletes a replaced executable once nothing runs from it,
+// which on Windows is only true after the process using it has exited.
+func removeWhenUnlocked(backup string) {
 	if _, err := os.Stat(backup); err != nil {
 		return
 	}
