@@ -68,6 +68,10 @@ func (c *ApiController) GetAgents() {
 	result := make([]*discoveredAgent, 0, len(installations))
 	for _, installation := range installations {
 		target := targetOf(installation)
+		// Monitoring is on by default, so an installation that is not monitored
+		// yet is patched here instead of waiting for the switch to be flipped.
+		// A failure is left to the status below, which says what is wrong.
+		_ = agentpatch.EnsurePatched(target)
 		item := &discoveredAgent{
 			Installation:   installation,
 			Status:         agentpatch.StatusOf(target),

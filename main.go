@@ -22,6 +22,7 @@ import (
 
 	"github.com/apache/casbin-gateway/agenthook"
 	"github.com/apache/casbin-gateway/agentmonitor"
+	"github.com/apache/casbin-gateway/agentpatch"
 	"github.com/apache/casbin-gateway/casdoor"
 	"github.com/apache/casbin-gateway/conf"
 	"github.com/apache/casbin-gateway/ip"
@@ -92,6 +93,15 @@ func main() {
 		beego.Error("agent monitor could not start:", err)
 	}
 	defer agentmonitor.Stop()
+
+	// Monitoring is on by default, so the agents already on this host are
+	// patched without anyone opening the UI. The scan walks the disk, hence the
+	// goroutine.
+	go func() {
+		if err := agentpatch.EnableAll(); err != nil {
+			beego.Error("agent monitoring could not be enabled:", err)
+		}
+	}()
 
 	// An update ends this process without unwinding main, so what the deferred
 	// calls above would have flushed has to be flushed there instead.

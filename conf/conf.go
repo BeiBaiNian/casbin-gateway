@@ -300,16 +300,16 @@ const (
 )
 
 // GetLlmRecordMode reports whether LLM requests are recorded, and whether the
-// request body is kept along with the metadata. Prompts are sensitive, so the
-// default is to keep nothing.
+// request body is kept along with the metadata. Recording is on by default, so
+// anything but an explicit "off" or "metadata" keeps the whole request.
 func GetLlmRecordMode() string {
 	switch strings.ToLower(strings.Trim(GetConfigString("llmRecordMode"), `"' `)) {
+	case LlmRecordOff:
+		return LlmRecordOff
 	case LlmRecordMetadata:
 		return LlmRecordMetadata
-	case LlmRecordFull:
-		return LlmRecordFull
 	default:
-		return LlmRecordOff
+		return LlmRecordFull
 	}
 }
 

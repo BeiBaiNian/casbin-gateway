@@ -90,15 +90,22 @@ func Patch(target Target) error {
 	if err != nil {
 		return err
 	}
-	return patcher.Patch(target)
+	if err := patcher.Patch(target); err != nil {
+		return err
+	}
+	setOptOut(target, false)
+	return nil
 }
 
-// Unpatch disables monitoring and restores files changed by Patch.
+// Unpatch disables monitoring and restores files changed by Patch. Monitoring
+// being on by default, the choice is remembered so no later scan turns it back
+// on.
 func Unpatch(target Target) error {
 	patcher, err := patcherFor(target)
 	if err != nil {
 		return err
 	}
+	setOptOut(target, true)
 	return patcher.Unpatch(target)
 }
 
