@@ -184,9 +184,11 @@ func gatewayAgentUrl(agentId string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d/v1/agents/%s", conf.GetHttpPort(), agentId)
 }
 
-// reapplyAgentProvider rewrites the configuration of every installation Gateway
-// already switched, which is what a routing change means for an agent pointed
-// straight at a provider. It reports what it could not rewrite rather than
+// reapplyAgentProvider writes the bound provider into the configuration of every
+// installation of one agent, which is what makes a routing change reach the
+// agent at all: an installation Gateway never wrote keeps talking to the
+// provider its own configuration names, and in gateway mode there is nothing
+// else to point it at the proxy. It reports what it could not write rather than
 // failing the routing change, which is already stored by then.
 func reapplyAgentProvider(agentId string) string {
 	installations, err := agent.Scan(false)
@@ -201,7 +203,9 @@ func reapplyAgentProvider(agentId string) string {
 			continue
 		}
 		target := providerTarget(targetOf(installation))
-		if !agentprovider.StatusOf(target).Applied {
+		// An agent whose configuration format Gateway cannot write is reached
+		// through the environment variables the UI shows instead.
+		if !agentprovider.StatusOf(target).Supported {
 			continue
 		}
 		if endpointErr != nil {

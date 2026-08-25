@@ -95,11 +95,10 @@ func (c *ApiController) GetAgents() {
 // to, to the providers tried when that one cannot answer, and to the way it
 // reaches them. The binding is per agent id.
 //
-// An installation whose configuration file Gateway already wrote is rewritten
-// here: in gateway mode the file does not change, which is what makes a switch
-// take effect without restarting the agent, but in direct mode the new provider
-// only reaches the agent through its own configuration. Unbinding the agent
-// puts that configuration back the way it was found.
+// The configuration file of every installation Gateway can write is written
+// here, since a binding an agent never reads is one that does nothing: it keeps
+// calling the provider its own configuration names. Unbinding the agent puts
+// that configuration back the way it was found.
 func (c *ApiController) UpdateAgentRouting() {
 	if c.RequireAdmin() {
 		return
